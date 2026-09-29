@@ -534,4 +534,135 @@ TEST(Close, WaitsForDrainedQueue) {
   delete db;
 }
 
+
+// A22：混合同批 —— 只要组内有一个人要求 sync，整批就必须 fsync（D3：sync 取组内 OR）。
+// 用确定性屏障把「队首是 sync=false、组内混有 sync=true」这个最坏情形钉死：
+// 若实现只看队首（LevelDB 的行为），本批不会 fsync ⇒ sync_calls()==0、durable_seq()==0 ⇒ 用例红。
+TEST(GroupCommit, MixedSyncPropagates) {
+  MemEnv env;
+  class BarrierHook : public CommitHook {
+   public:
+    void OnBeforeGroupAssemble() override {
+      if (!entered.exchange(true)) {
+        while (!released.load()) std::this_thread::yield();
+      }
+    }
+    std::atomic<bool> entered{false};
+    std::atomic<bool> released{false};
+  } hook;
+  Options options;
+  options.env = &env;
+  options.commit_hook = &hook;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+
+  const int kWriters = 64;
+  std::atomic<int> ok_count{0};
+  std::atomic<int> failed{0};
+  std::vector<std::thread> ts;
+  auto spawn = [&](int w) {
+    ts.emplace_back([&, w]() {
+      WriteOptions wo;
+      wo.sync = (w % 4 == 0);          // 局面：队首 sync=false，组内混有 sync=true
+      const Status s = db->Put(wo, Key(w + 1), Val(w + 1));
+      if (s.ok()) ++ok_count; else ++failed;
+    });
+  };
+  spawn(0);                            // 队首 = sync=false（最坏情形）
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  for (int w = 1; w < kWriters; ++w) spawn(w);
+  for (int spin = 0; spin < 200000; ++spin) {
+    if (static_cast<PersistentDBImpl*>(db)->pending_writers() >= static_cast<size_t>(kWriters)) break;
+    std::this_thread::yield();
+  }
+  hook.released.store(true);
+  for (std::thread& t : ts) t.join();
+
+  EXPECT_EQ(kWriters, ok_count.load());
+  EXPECT_EQ(0, failed.load());
+  EXPECT_EQ(1, env.sync_calls())
+      << "混合同批必须（且只）做一次 fsync：sync 取组内 OR，不能只看队首";
+  EXPECT_EQ(static_cast<SequenceNumber>(kWriters), static_cast<PersistentDBImpl*>(db)->durable_seq())
+      << "sync=true 的写者返回后，durable 水位必须覆盖整批末尾";
+  db->Close();
+  delete db;
+}
+
+
+// A25：I17「持锁零 IO」的探针式验证 —— 包一层 Env，在 Append/Sync 时断言此刻未持 DB 互斥锁
+namespace {
+class SpyFile : public WritableFile {
+ public:
+  SpyFile(WritableFile* inner, std::atomic<int>* violations)
+      : inner_(inner), violations_(violations) {}
+  ~SpyFile() override { delete inner_; }
+  Status Append(const Slice& data) override {
+    if (DbMutexHeldOnThisThread()) ++(*violations_);
+    return inner_->Append(data);
+  }
+  Status Flush() override { return inner_->Flush(); }
+  Status Sync() override {
+    if (DbMutexHeldOnThisThread()) ++(*violations_);
+    return inner_->Sync();
+  }
+  Status Close() override { return inner_->Close(); }
+
+ private:
+  WritableFile* inner_;
+  std::atomic<int>* violations_;
+};
+
+class SpyEnv : public MemEnv {
+ public:
+  Status NewWritableFile(const std::string& f, WritableFile** r) override {
+    WritableFile* inner = nullptr;
+    const Status s = MemEnv::NewWritableFile(f, &inner);
+    if (s.ok()) *r = new SpyFile(inner, &violations);
+    return s;
+  }
+  Status NewAppendableFile(const std::string& f, WritableFile** r) override {
+    WritableFile* inner = nullptr;
+    const Status s = MemEnv::NewAppendableFile(f, &inner);
+    if (s.ok()) *r = new SpyFile(inner, &violations);
+    return s;
+  }
+  std::atomic<int> violations{0};
+};
+}  // namespace
+
+TEST(Locks, ZeroIoWhileHoldingDbMutex) {
+  SpyEnv env;
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  const int kWriters = 8;
+  const int kPerWriter = 200;
+  std::vector<std::thread> ts;
+  std::atomic<int> ok_count{0};
+  for (int w = 0; w < kWriters; ++w) {
+    ts.emplace_back([&, w]() {
+      for (int i = 0; i < kPerWriter; ++i) {
+        WriteOptions wo;
+        wo.sync = (i % 10 == 0);
+        if (db->Put(wo, Key(w * kPerWriter + i + 1), Val(w * kPerWriter + i + 1)).ok()) {
+          ++ok_count;
+        }
+        std::string v;
+        db->Get(Key(w * kPerWriter + i + 1), &v);   // 顺带压一下读路径
+        if (i % 50 == 0) {
+          std::unique_ptr<Iterator> it(db->NewIterator());
+          it->SeekToFirst();
+        }
+      }
+    });
+  }
+  for (std::thread& t : ts) t.join();
+  EXPECT_EQ(kWriters * kPerWriter, ok_count.load());
+  EXPECT_EQ(0, env.violations.load())
+      << "I17：持 DB 互斥锁期间发生了 WAL 的 write/fsync（" << env.violations.load() << " 次）";
+  db->Close();
+  delete db;
+}
+
 }  // namespace lsm

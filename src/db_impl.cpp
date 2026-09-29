@@ -12,6 +12,17 @@
 namespace lsm {
 namespace {
 
+namespace {
+// A25 探针（I17 持锁零 IO 的可验证化）：持有 DB 互斥锁的线程置位该标记。
+// 只做诊断，不改变加锁语义（内部仍是 std::lock_guard）。
+thread_local bool g_db_mutex_held = false;
+struct DbMutexGuard {
+  explicit DbMutexGuard(std::mutex& m) : lk(m) { g_db_mutex_held = true; }
+  ~DbMutexGuard() { g_db_mutex_held = false; }
+  std::lock_guard<std::mutex> lk;
+};
+}  // namespace
+
 constexpr size_t kRecoverySlack = 1u * 1024 * 1024;      // D12：恢复容量的余量
 constexpr uint32_t kMaxBatchCount = 1u << 20;            // §9.4：防畸形 count 撑爆
 constexpr size_t kMaxGroupBytes = 1u * 1024 * 1024;      // D3：一批的字节上限（1 MiB）
@@ -274,7 +285,7 @@ Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, cons
     // L11/A31：**入队前**就拒绝关闭后的新写。若只在 RunFlusher 里判 closed_，
     // 关闭期间源源不断的新写者会不断把 flusher_active_ 置回 true，Close 等待 !flusher_active_
     // 就会活锁（实测：Close.RejectsNewWriters 挂住）。顺序必须是"先拒绝新写 → 再等在途批"。
-    std::lock_guard<std::mutex> ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
+    DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
     if (closed_) return Status::IOError("Put/Delete: DB is closed", dbname_);
   }
   queue_.push_back(&w);
@@ -350,7 +361,7 @@ Status PersistentDBImpl::RunFlusher() {
   {
     std::lock_guard<std::mutex> ql(commit_mu_);
     if (queue_.empty()) return Status::OK();               // 已被别的 flusher 处理
-    std::lock_guard<std::mutex> ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
+    DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
     // **先取批，再决定拒绝**：无论后面是否拒绝，都必须把成员从队列摘出来并在下面结算。
     // 否则被拒的队首会永远留在队列里，后面的写者永远等不到自己成为队首（实测：A31 挂住）。
     size_t bytes = 0;
@@ -409,12 +420,12 @@ Status PersistentDBImpl::RunFlusher() {
       durable_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
     }
   } else {
-    std::lock_guard<std::mutex> ml(mutex_);
+    DbMutexGuard ml(mutex_);
     bg_error_ = s;                                         // 粘性：偏移已不可信（D11）；I16 传播给整批
   }
 
   if (s.ok()) {
-    std::lock_guard<std::mutex> ml(mutex_);
+    DbMutexGuard ml(mutex_);
     for (Pending* p : members) {
       const Status a = memtable_->Add(p->begin, p->type, p->key, p->value);
       if (!a.ok()) {
@@ -447,7 +458,7 @@ Status PersistentDBImpl::Delete(const WriteOptions& options, const Slice& key) {
 Status PersistentDBImpl::Get(const Slice& key, std::string* value) {
   if (value == nullptr) return Status::InvalidArgument("PersistentDBImpl::Get: null value pointer");
   value->clear();
-  std::lock_guard<std::mutex> l(mutex_);
+  DbMutexGuard l(mutex_);
   const std::string lookup_key = BuildLookupKey(key, last_sequence_);
   switch (memtable_->Get(Slice(lookup_key), value)) {
     case MemTable::GetResult::kFound:
@@ -462,9 +473,12 @@ Status PersistentDBImpl::Get(const Slice& key, std::string* value) {
 }
 
 Iterator* PersistentDBImpl::NewIterator() {
-  std::lock_guard<std::mutex> l(mutex_);
+  DbMutexGuard l(mutex_);
   return NewMemTableUserIterator(memtable_.get(), internal_comparator_);
 }
+
+// A25 探针的访问器：必须定义在 namespace lsm 正体（外部链接），与 db_impl.h 的声明匹配
+bool DbMutexHeldOnThisThread() { return g_db_mutex_held; }
 
 size_t PersistentDBImpl::pending_writers() {
   std::lock_guard<std::mutex> ql(commit_mu_);
@@ -478,7 +492,7 @@ Status PersistentDBImpl::Sync() {
   if (!bg_error_.ok()) return bg_error_;
   const Status s = log_->Sync();
   if (s.ok()) {
-    std::lock_guard<std::mutex> ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
+    DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
     durable_seq_ = last_sequence_;
   }
   return s;
@@ -488,7 +502,7 @@ Status PersistentDBImpl::Close() {
   std::unique_lock<std::mutex> ql(commit_mu_);
   bool already_closed = false;
   {
-    std::lock_guard<std::mutex> l(mutex_);
+    DbMutexGuard l(mutex_);
     already_closed = closed_;
     closed_ = true;                                        // 幂等（A30）
   }

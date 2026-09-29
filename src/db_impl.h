@@ -19,6 +19,10 @@
 
 namespace lsm {
 
+// A25 探针（I17「持锁零 IO」的可验证化）：本线程当前是否持有 DB 互斥锁。
+// 只做诊断，不改变加锁语义；测试用它包一层 Env，在 Append/Sync 时断言此刻未持锁。
+bool DbMutexHeldOnThisThread();
+
 // M2 的恢复报告（design §8.2 明写"这个接口 M2 就要有"；A13 的判据含"可读"）。
 // 它同时承载 §5.3/§5.4 承诺的"截断量与被跳过的 record 必须**计数上报**，不得静默"。
 struct RecoveryStats {
