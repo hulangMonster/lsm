@@ -155,3 +155,28 @@ cmake --build build-tsan -j8 && setarch $(uname -m) -R ./build-tsan/bin/lsm_test
   `docs/m1-evidence.md`。这不是「为了通过而改测试」：实现侧未因此放宽任何校验，
   protocol §6「type ∉ {0,1} 视为畸形」的行为保持不变。
 - **影响面**：仅该用例；`ParseInternalKey` 的接口、语义与其它用例不受影响。
+
+### 9.2 `InternalKey.LookupKeySemantics` 尾部两条断言互斥
+
+- 断言 A（原文 1132 行）：`Compare(BuildLookupKey("k",4), BuildInternalKey("k",4,kTypeValue)) == 0`
+- 断言 B（原文 1134 行）：`Compare(BuildLookupKey("k",3), BuildInternalKey("k",3,kTypeValue)) < 0`
+- 二者结构完全相同（只是 seq 不同）：`kValueTypeForSeek == kTypeValue` 时 `BuildLookupKey(k,s)` 与
+  `BuildInternalKey(k,s,kTypeValue)` **逐字节相同**，同一比较器不可能对 s=4 返回 0、对 s=3 返回负数。
+- **处理**：把 B 改为 `EXPECT_EQ(0, ...)`（protocol §6.2 的定义），保留覆盖、不削弱其它断言。
+  注意 A 与 1133 行（对 `kTypeDeletion` 的 `< 0`）才是 protocol §6.2 真正依赖的性质：同 seq 时
+  `kTypeValue` 排在 `kTypeDeletion` 之前，所以 lookup 键会落在删除标记上 → Get 返回 kDeleted。**这两条未改动。**
+
+### 9.3 `MemTable.IteratorStateMachine` 对 seq=0 目标键的落点期望与降序规则互斥
+
+- 断言（原文 660 行）：`Seek(BuildInternalKey("d", 0, kTypeDeletion))` 之后期望落在 `'d'`。
+- 但 trailer 是**降序**比较（同一文件 `MultiVersionOrderInInternalIterator` 与
+  `InternalKey.CompareOrder` 都用 `a5 < a3` 钉死）：seq=0 是最小 trailer，`("d",0,del)` 排在
+  `d` 的**全部版本之后**。按「Seek 落在第一个 ≥ target 的条目」，落点必然是 `'e'`。
+  同理 `Seek(BuildInternalKey("b",2,kTypeValue))` 落在 seq=2 的 b 上（该用例另一处断言，说明 Seek
+  确实按 internal key 定位，不是按 user key）。
+- **处理**：把期望改为 `'e'`，与该行原有注释「Seek 未命中 → 落在下一个更大的条目」的字面含义一致。
+
+### 9.4 小结（#2 测试集的系统性偏差）
+
+三处缺陷同源：写测试时把内部 key trailer 的**降序**当成了升序。实现侧未因此放宽任何校验；
+三处修订都单独成提交并附证明，任何一处都可用 `git show` 复核。

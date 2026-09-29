@@ -278,7 +278,12 @@ class Arena {
   理由：本项目不用异常做控制流；OOM 属不可恢复环境错误，fail-fast 优于把 `nullptr` 检查扩散到整条跳表插入路径
   （LevelDB 的 `new` 抛 `std::bad_alloc` 同样以终止收场）。备选方案（`Allocate` 返回 `nullptr` + `Status` 逐层上抛）
   记录在此，若评审判定为阻断项则回 `#0` 修订。
-- 统计口径：`MemoryUsage()` 在 `Reset()` 之前**单调不减**；`Reset` 后归零。
+- 统计口径：`MemoryUsage()`（已申请**块**字节）与 `BytesAllocated()`（累计交出的**载荷**字节，
+  不含块内未用尾部与对齐 slop）在 `Reset()` 之前**单调不减**；`Reset` 后归零。
+  **修订（#3 回退 #0）**：M1.2 实现时发现 MemTable 若按块口径计费，光跳表 head 节点就会吃掉一个 4 KiB 块，
+  使 `write_buffer_size = 4096` 这种小预算连一次写入都接受不了（冻结测试要求 `accepted > 0`）。
+  故 MemTable 的容量判据改用 `BytesAllocated()`，与指令原文「Arena **已用**字节 + 条目数」一致；
+  `MemoryUsage()` 保留为块级诊断口径（Arena 自身测试用它）。
 - 线程安全：M1 不做线程安全 Arena（单写者，L1/L2）。
 
 ## 7. 跳表（src/skiplist.h）
@@ -411,7 +416,8 @@ class MemTable {
 - `Freeze()`：`frozen_.store(true, std::memory_order_release)`；幂等；已冻结返回 `false`。
 - `IsFrozen()`：`frozen_.load(std::memory_order_acquire)`。
 - **冻结后查询与迭代照常可用**（不可写、可读）。
-- `ApproximateMemoryUsage()` = `arena_.MemoryUsage() + sizeof(MemTable)`；MemTable 生命周期内**单调不减**。
+- `ApproximateMemoryUsage()` = `arena_.BytesAllocated() + sizeof(MemTable)`（口径修订见 §6）；
+  MemTable 生命周期内**单调不减**。
 - `NumEntries()` = 成功 `Add` 的条目数（含 tombstone）；单调不减。
 - 不提供「user key 去重计数」：需要额外结构，M1 不引入（避免未实现语义的统计字段）。
 
@@ -554,7 +560,8 @@ class Env {
   `tests/util_test.cpp` 原样抽取（`awk` 截到 `TEST(InternalKey, LookupKeySemantics)` 之前，断言一字不改），
   配 `#2` 的 `test_harness.h` 中不依赖 M1.2 头的部分，18 例。子集偏漏的两个用例随 M1.2 一起验。
   证据（含抽取命令与原始输出）落 `docs/m1-evidence.md`。
-- **M1.2**：`lsm` 补齐 `src/**`；门禁 = `bash scripts/lsm_build.sh` 干净重建 0 warning + **A 组 43 例全绿**（首次可运行）。
+- **M1.2**：`lsm` 补齐 `src/**`；门禁 = `bash scripts/lsm_build.sh` 干净重建 0 warning + **A 组 41 例全绿**
+  （全量 45 例 = 41 个 A 组 + 4 个 B 组 Stress），这是首次可运行的测试二进制。
 - **M1.3**：B 组压力 + ASan + TSan。
 - `#2` 的 RED 证据不受影响（那一版 CMakeLists 两个测试文件都在，原始输出已留档）。
 
