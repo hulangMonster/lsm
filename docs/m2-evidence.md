@@ -213,3 +213,15 @@ MIDDLE_LOCATABLE 1
 退出码: 0
 
 构建产物：lsm_tests / lsm_crash_writer / lsm_crash_recover / lsm_damage_test / fsbench_commit_latency
+
+## B05 —— 恢复代价基线（WAL 大小 → Open 耗时，供 M3 对照）
+
+执行时间：2026-09-29T20:28:18+08:00
+$ bash scripts/lsm_recovery_stats.sh
+== lsm_recovery_stats: dir=/tmp/lsm_stats_EFo4aE ==
+SIZE_BYTES 5936 KEYS 45 OPEN_MS 0 MISSING 0
+SIZE_BYTES 7736 KEYS 90 OPEN_MS 0 MISSING 0
+SIZE_BYTES 14456 KEYS 258 OPEN_MS 1 MISSING 0
+NOTE 本表是「只有 WAL」时的恢复下界；M3 引入 SSTable 后必须重测并对照。
+NOTE 本量级（十几 KB WAL、几百条记录）的恢复低于 OPEN_MS 的 1ms 分辨率 ⇒ 该列显示 0 属正常；
+     M3 对照时必须用更大的 WAL（并考虑把耗时口径细化到微秒），否则该列没有分辨力。
