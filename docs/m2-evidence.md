@@ -225,3 +225,19 @@ SIZE_BYTES 14456 KEYS 258 OPEN_MS 1 MISSING 0
 NOTE 本表是「只有 WAL」时的恢复下界；M3 引入 SSTable 后必须重测并对照。
 NOTE 本量级（十几 KB WAL、几百条记录）的恢复低于 OPEN_MS 的 1ms 分辨率 ⇒ 该列显示 0 属正常；
      M3 对照时必须用更大的 WAL（并考虑把耗时口径细化到微秒），否则该列没有分辨力。
+
+## M2 TSan 预检（组提交上线程前的基线）
+
+执行时间：2026-09-29T20:35:14+08:00
+$ cmake -S . -B build-tsan -DENABLE_TSAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build-tsan -j8
+TSan 构建 warning 计数：0
+$ setarch $(uname -m) -R ./build-tsan/bin/lsm_tests
+TSan 运行退出码（/tmp/tsan_m2.rc）：0
+[----------] Global test environment tear-down
+[==========] 66 tests from 14 test suites ran. (368200 ms total)
+[  PASSED  ] 66 tests.
+ThreadSanitizer 报告出现次数：0
+
+口径说明：M2 目前是单写者串行路径（组提交尚未落地），本轮的 TSan 结论只证明
+「现有 WAL/恢复代码没有数据竞争」，不构成并发写正确性的证据；M2.3 引入 commit_mu_ 与
+flusher 交接后必须重跑本门禁（那才是 TSan 真正要抓的场景）。
