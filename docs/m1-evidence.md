@@ -132,3 +132,43 @@ $ bash scripts/lsm_build.sh
 [   INFO   ] Stress.SameKey100kTimes: versions=100000 elapsed_ms=250 memtable_bytes=14389159
 [   INFO   ] Stress.AlignmentUnderSanitizers: build=plain（ASan/UBSan 结论见 build-asan 门禁）
 [   INFO   ] Stress.AlignmentUnderSanitizers: allocations=2000 alignof(max_align_t)=16
+
+## M1.3 —— 压力边界与门禁收口（干净重建 / ASan / TSan）
+
+执行时间：2026-09-29T19:05:34+08:00
+
+命令 1：bash scripts/lsm_build.sh（干净重建 + 0 warning 断言 + 全量 45 例）
+$ bash scripts/lsm_build.sh
+[       OK ] Stress.AlignmentUnderSanitizers (23 ms)
+[----------] 4 tests from Stress (21826 ms total)
+
+[----------] Global test environment tear-down
+[==========] 45 tests from 12 test suites ran. (23196 ms total)
+[  PASSED  ] 45 tests.
+[CHECK] 用例计数：
+[==========] 45 tests from 12 test suites ran. (23196 ms total)
+[  PASSED  ] 45 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+命令 2：ASan 独立目录构建 + 全量运行
+$ cmake -S . -B build-asan -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build-asan -j8 && ./build-asan/bin/lsm_tests
+ASan 构建 warning 计数：0
+ASan 运行退出码：0
+
+[----------] Global test environment tear-down
+[==========] 45 tests from 12 test suites ran. (68159 ms total)
+[  PASSED  ] 45 tests.
+AddressSanitizer/LeakSanitizer 报告出现次数：0
+
+命令 3：TSan 独立目录构建 + 全量运行（setarch 关 ASLR）
+$ cmake -S . -B build-tsan -DENABLE_TSAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build-tsan -j8
+$ setarch $(uname -m) -R ./build-tsan/bin/lsm_tests
+TSan 构建 warning 计数：0
+TSan 运行退出码（/tmp/tsan_rc）：0
+
+[----------] Global test environment tear-down
+[==========] 45 tests from 12 test suites ran. (345683 ms total)
+[  PASSED  ] 45 tests.
+ThreadSanitizer 报告出现次数：0
+[==========] 45 tests from 12 test suites ran. (345683 ms total)
+[  PASSED  ] 45 tests.
