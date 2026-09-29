@@ -461,21 +461,25 @@ TEST(Flush, OrderDurableRenameSyncDirRegister) {
       }
     }
   }
-  // M3.3：注册 = 写 META 成功（§8.1/L17）：META.tmp → fsync → rename(META) → SyncDir。
-  // 这是 M3.2 过渡断言（"不写 META"）按契约的收窄，不是放宽：断言的是**更强**的顺序链。
+  // M4：注册 = 活动元数据的原子发布（CURRENT + MANIFEST；对象=活动元数据实现）。
+  // 断言的是**更强**的顺序链：SSTable rename → OnBeforeRegister → 元数据 tmp 写 → fsync → rename → SyncDir。
   const auto meta_sync = std::find_if(events.begin(), events.end(), [](const std::string& e) {
-    return e.compare(0, 5, "sync:") == 0 && e.find("META.tmp") != std::string::npos;
+    return e.compare(0, 5, "sync:") == 0 && e.find("MANIFEST-") != std::string::npos &&
+           e.find(".tmp") != std::string::npos;
   });
-  const auto meta_rename = find_event("rename:/db/META.tmp->/db/META");
-  ASSERT_NE(events.end(), meta_sync) << "META.tmp 必须先 fsync（L17）";
-  ASSERT_NE(events.end(), meta_rename) << "META 必须原子 rename（L17）";
-  EXPECT_LT(rename, meta_sync) << "SSTable rename 必须早于 META 的写";
-  EXPECT_LT(reg, meta_sync) << "META 的写必须晚于「注册前」注入点";
-  EXPECT_LT(meta_sync, meta_rename) << "META.tmp 必须 fsync 后才 rename";
+  const auto meta_rename = std::find_if(events.begin(), events.end(), [](const std::string& e) {
+    return e.compare(0, 7, "rename:") == 0 && e.find("MANIFEST-") != std::string::npos &&
+           e.find(".tmp") != std::string::npos;
+  });
+  ASSERT_NE(events.end(), meta_sync) << "MANIFEST-<n>.tmp 必须先 fsync（L17）";
+  ASSERT_NE(events.end(), meta_rename) << "MANIFEST 必须原子 rename（L17）";
+  EXPECT_LT(rename, meta_sync) << "SSTable rename 必须早于 MANIFEST 的写";
+  EXPECT_LT(reg, meta_sync) << "MANIFEST 的写必须晚于「注册前」注入点";
+  EXPECT_LT(meta_sync, meta_rename) << "MANIFEST-<n>.tmp 必须 fsync 后才 rename";
   const auto meta_syncdir = std::find_if(meta_rename, events.end(), [](const std::string& e) {
     return e.compare(0, 8, "syncdir:") == 0;
   });
-  ASSERT_NE(events.end(), meta_syncdir) << "META rename 之后必须 SyncDir";
+  ASSERT_NE(events.end(), meta_syncdir) << "MANIFEST rename 之后必须 SyncDir";
   // M3.3：后台线程在注册成功后会做 WAL 回收（RecycleObsoleteLogs）并访问 Env；
   // 本用例必须显式 Close/delete，否则 Env 先析构而后台线程仍在使用它（TSan 实测 data race）。
   ASSERT_TRUE(db->Close().ok());

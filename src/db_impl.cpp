@@ -843,6 +843,7 @@ void PersistentDBImpl::FlushImmutable(const std::shared_ptr<Immutable>& imm) {
 
   // ⑦a 内存版本替换（§6.3 步骤 ⑦ 的前半）：min_log_number_to_keep 由单一真相源重算（I34）。
   std::shared_ptr<const Version> snapshot;
+  uint64_t roll_new_manifest = 0;
   {
     DbMutexGuard l(mutex_);
     if (!bg_error_.ok() || closed_) return;   // 与 Close/失败的竞态：不注册，数据仍在 WAL+内存
@@ -853,12 +854,39 @@ void PersistentDBImpl::FlushImmutable(const std::shared_ptr<Immutable>& imm) {
     const uint64_t min_keep = RecomputeMinLogNumberToKeepLocked(imm.get());
     version_ = VersionSet::RegisterFile(*version_, meta, log_number_, min_keep, next_file_number_);
     snapshot = version_;
+    if (manifest_number_ == 0 || manifest_bytes_ > options_.manifest_roll_bytes) {
+      roll_new_manifest = next_file_number_++;   // 模式 (a)：分配新 MANIFEST 编号
+    }
   }
 
   // ⑦b META 持久化：META.tmp → fsync → rename(META) → SyncDir（§6.3 步骤 ⑦/L17）。
   // 这是 IO，必须在 DB 锁外做（L18）。
   VersionEdit edit;
-  const Status ms = VersionSet::Persist(EnvOf(), dbname_, options_, *snapshot, &edit);
+  Status ms;
+  edit.SetComparatorName(options_.comparator->Name());
+  edit.SetLogNumber(snapshot->log_number());
+  edit.SetMinLogNumberToKeep(snapshot->min_log_number_to_keep());
+  edit.SetNextFileNumber(snapshot->next_file_number());
+  edit.AddFile(0, meta);
+  if (roll_new_manifest != 0) {
+    const uint64_t old = manifest_number_;
+    ms = VersionSet::WriteSnapshotManifest(EnvOf(), dbname_, roll_new_manifest, *snapshot, options_);
+    if (ms.ok()) ms = VersionSet::WriteCurrentAtomic(EnvOf(), dbname_, roll_new_manifest);
+    if (ms.ok()) {
+      manifest_number_ = roll_new_manifest;
+      manifest_edits_ = 1;
+      ++manifest_rolls_;
+      uint64_t size = 0;
+      EnvOf()->GetFileSize(ManifestFileName(dbname_, manifest_number_), &size);
+      manifest_bytes_ = size;
+      if (old != 0 && old != manifest_number_) {
+        EnvOf()->DeleteFile(ManifestFileName(dbname_, old));   // 旧 MANIFEST 只在切换后删
+      }
+    }
+  } else {
+    ms = VersionSet::AppendEdit(EnvOf(), dbname_, manifest_number_, edit, &manifest_bytes_);
+    if (ms.ok()) ++manifest_edits_;
+  }
   if (!ms.ok()) {
     DbMutexGuard l(mutex_);
     bg_error_ = ms;              // 粘性 fail-stop（§6.4 的"写/rename META"行）
@@ -942,6 +970,19 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
     return Status::InvalidArgument("DB::Open: max_open_files 越界",
                                    std::to_string(options.max_open_files));
   }
+  // M4（§5.6）：6 个新字段的合法性校验，非法 ⇒ kInvalidArgument（**不** fail-stop）。
+  if (options.level0_file_num_compaction_trigger < 1) {
+    return Status::InvalidArgument("DB::Open: level0_file_num_compaction_trigger < 1");
+  }
+  if (options.max_bytes_for_level_base == 0) {
+    return Status::InvalidArgument("DB::Open: max_bytes_for_level_base == 0");
+  }
+  if (options.max_bytes_for_level_multiplier < 2) {
+    return Status::InvalidArgument("DB::Open: max_bytes_for_level_multiplier < 2");
+  }
+  if (options.max_file_size == 0 || options.max_file_size < options.block_size) {
+    return Status::InvalidArgument("DB::Open: max_file_size 非法（0 或 < block_size）");
+  }
 
   // 注入的 Env（掉电语义测试用 MemEnv）；nullptr 时用真实 POSIX Env
   Env* env = options.env != nullptr ? options.env : Env::Default();
@@ -969,28 +1010,56 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   if (!s.ok()) return s;
 
   std::shared_ptr<const Version> version;
-  VersionSet::RecoveryResult meta_info;
-  s = VersionSet::Recover(env, name, options, children, &version, &meta_info);
-  if (!s.ok()) return s;
-
   RecoveryStats stats;
-  stats.meta_present = meta_info.meta_present;
-  stats.sst_files_registered = meta_info.sst_files_registered;
-  stats.sst_bytes_registered = meta_info.sst_bytes_registered;
-  stats.max_sequence_in_files = meta_info.max_sequence_in_files;
-  stats.unknown_metaindex_entries = meta_info.unknown_metaindex_entries;
+  VersionSet::ManifestReplayResult manifest_result;
+  // M4（§3.6）：稳态元数据 = CURRENT + MANIFEST；
+  // 只有"没有 CURRENT/MANIFEST、只有旧 META"时才做一次兼容读入 + 迁移（META 绝不作为稳态写入目标）。
+  s = VersionSet::RecoverManifest(env, name, options, &version, &manifest_result);
+  if (!s.ok()) return s;
+  stats.manifest_present = manifest_result.manifest_present;
+  stats.migrated_from_meta = manifest_result.migrated_from_meta;
+  stats.manifest_number = manifest_result.manifest_number;
+  stats.manifest_bytes = manifest_result.manifest_bytes;
+  stats.manifest_edits_replayed = manifest_result.edits_replayed;
+  stats.manifest_tail_truncated_bytes = manifest_result.tail_truncated_bytes;
+  stats.unknown_manifest_record_types = manifest_result.unknown_record_types;
+  stats.manifest_truncation_note = manifest_result.truncation_note;
+  stats.meta_migrated = manifest_result.migrated_from_meta ? 1 : 0;
+  stats.meta_delete_failed = manifest_result.meta_delete_failed;
+  // meta_present 的语义（M2/M3 字段名保留）= "活动版本元数据存在"（M4 起即 manifest_present）。
+  stats.meta_present = manifest_result.manifest_present;
+  {
+    // 活动元数据的语义校验（保留 M3-A38 的覆盖）：注册文件必须存在、file_size 与磁盘一致、
+    // max_sequence 与全量扫描一致；不符 ⇒ kCorruption（不自动修复）。
+    VersionSet::RecoveryResult vr;
+    s = VersionSet::VerifyRegisteredFiles(env, name, options, *version, &vr);
+    if (!s.ok()) return s;
+    stats.sst_files_registered = vr.sst_files_registered;
+    stats.sst_bytes_registered = vr.sst_bytes_registered;
+    stats.max_sequence_in_files = vr.max_sequence_in_files;
+    stats.unknown_metaindex_entries = vr.unknown_metaindex_entries;
+  }
 
   // ---- §8.3 ⑥：孤儿清理（只清理可证明未被引用的；失败只计数不阻断）----
   // 判据全部写在**语义层**（*.sst.tmp / 未注册 *.sst / 编号 < min_log_to_keep 的 *.log），
   // 不绑定任何具体元数据文件名（M4 换 MANIFEST+CURRENT 时本段不变）。
   {
     std::set<uint64_t> registered;
-    for (const FileMetaData& f : version->files()) registered.insert(f.number);
+    for (const FileMetaData& f : version->AllFiles()) registered.insert(f.number);
     const uint64_t min_keep = version->min_log_number_to_keep();
     const uint64_t cur_log = version->log_number();
     // 元数据临时文件永不权威：残留即删（它可能来自"写 META.tmp 之后、rename 之前"的崩溃）。
-    const std::string meta_tmp = VersionSet::MetaTempFileName(name);
-    if (env->FileExists(meta_tmp)) env->RemoveFile(meta_tmp);
+    // ⑥f：CURRENT/MANIFEST 已是权威 ⇒ 残留的 META / META.tmp 是迁移残片，删除并计数。
+    if (env->FileExists(VersionSet::MetaTempFileName(name))) {
+      if (env->RemoveFile(VersionSet::MetaTempFileName(name)).ok()) {
+        ++stats.meta_delete_failed;   // 兼容字段：META 系删除计数（M4 语义 = 迁移残片清理）
+      }
+    }
+    if (env->FileExists(VersionSet::MetaFileName(name))) {
+      if (env->RemoveFile(VersionSet::MetaFileName(name)).ok()) {
+        ++stats.meta_delete_failed;
+      }
+    }
     const auto remove_orphan = [&](const std::string& path, bool tmp_kind) {
       uint64_t size = 0;
       env->GetFileSize(path, &size);
@@ -1005,8 +1074,32 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
         ++stats.orphan_remove_failed;
       }
     };
+    const auto remove_counted = [&](const std::string& path, uint64_t* counter) {
+      uint64_t size = 0;
+      env->GetFileSize(path, &size);
+      if (env->RemoveFile(path).ok()) {
+        ++(*counter);
+        stats.orphan_bytes_removed += size;
+      } else {
+        ++stats.orphan_remove_failed;
+      }
+    };
     for (const std::string& c : children) {
       uint64_t n = 0;
+      if (ParseManifestTempFileName(c, &n)) {
+        remove_counted(name + "/" + c, &stats.manifest_tmp_removed);   // ⑥c：模式 (a) 残片
+        continue;
+      }
+      if (ParseManifestFileName(c, &n)) {
+        if (n != manifest_result.manifest_number) {
+          remove_counted(name + "/" + c, &stats.manifest_orphan_removed);   // ⑥e：被切换掉的旧 MANIFEST
+        }
+        continue;
+      }
+      if (c == "CURRENT.tmp") {
+        remove_counted(name + "/" + c, &stats.current_tmp_removed);   // ⑥g：CURRENT 已存在 ⇒ 残片可删
+        continue;
+      }
       if (ParseTempFileName(c, &n)) {
         remove_orphan(name + "/" + c, true);        // ⑥a：*.sst.tmp 构造上永不注册
         continue;
@@ -1221,9 +1314,11 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
       std::max<uint64_t>(1, std::max<uint64_t>(version->next_file_number(), log_number + 1));
   // 当前 log 是"元数据没有编号"时的分配结果 ⇒ 用一个带显式 log_number 的新 Version 替换
   // （Version 不可变，只能整体重建；M4 换 MANIFEST 后这一步由 VersionSet 内部完成）。
-  db->version_ = std::make_shared<const Version>(version->files(), log_number,
+  db->version_ = std::make_shared<const Version>(version->level_files_all(), log_number,
                                                  version->min_log_number_to_keep(),
                                                  db->next_file_number_);
+  db->manifest_number_ = manifest_result.manifest_number;
+  db->manifest_bytes_ = manifest_result.manifest_bytes;
   db->recovery_stats_ = stats;
   db->file_lock_.reset(lock_guard.release());   // 所有权交给 DB（Close/析构时释放）
   db->closed_ = false;

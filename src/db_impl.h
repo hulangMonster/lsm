@@ -37,7 +37,7 @@ struct RecoveryStats {
   SequenceNumber last_sequence = 0;     // 恢复后的 last_sequence_
   std::string truncation_note;          // 截断原因（可定位）
   // ---- M3.3 新增（§8.4）----
-  bool meta_present = false;            // 步骤 ⑤：版本元数据是否存在
+  bool meta_present = false;            // 步骤 ⑤：**活动**版本元数据是否存在（M4 起 = manifest_present；字段名保留）
   uint64_t sst_files_registered = 0;    // 步骤 ⑤：版本里的文件数
   uint64_t sst_bytes_registered = 0;    // 步骤 ⑤：版本里各文件 file_size 之和
   uint64_t orphan_tmp_removed = 0;      // 步骤 ⑥a
@@ -49,6 +49,20 @@ struct RecoveryStats {
   SequenceNumber max_sequence_in_files = 0;   // 步骤 ⑧（M3-A38 的比对对象）
   uint64_t current_log_recreated = 0;   // 步骤 ⑨：当前 log 缺失而重建（正常情况下不该发生）
   uint64_t unknown_metaindex_entries = 0;  // 读 .sst 时的未知 metaindex 条目（§3.4）
+  // ---- M4.1/M4.2 新增（docs/m4-design.md §8.6）：活动元数据 = CURRENT + MANIFEST ----
+  bool manifest_present = false;
+  bool migrated_from_meta = false;
+  uint64_t manifest_number = 0;
+  uint64_t manifest_bytes = 0;
+  uint64_t manifest_edits_replayed = 0;
+  uint64_t manifest_tail_truncated_bytes = 0;
+  uint64_t unknown_manifest_record_types = 0;
+  uint64_t meta_migrated = 0;
+  uint64_t meta_delete_failed = 0;
+  uint64_t manifest_orphan_removed = 0;
+  uint64_t manifest_tmp_removed = 0;
+  uint64_t current_tmp_removed = 0;
+  std::string manifest_truncation_note;
 };
 
 // M3 的 flush 统计（docs/m3-design.md §8.4；"丢弃/失败必须计数"的单一落点）。
@@ -124,6 +138,23 @@ class PersistentDBImpl : public DB {
   uint64_t next_file_number() const {
     std::lock_guard<std::mutex> l(mutex_);
     return next_file_number_;
+  }
+  // M4.1 诊断：取代路径的 MANIFEST 编号/字节数/编辑数/重建次数（受 mutex_ 保护）。
+  uint64_t manifest_number() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return manifest_number_;
+  }
+  uint64_t manifest_bytes() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return manifest_bytes_;
+  }
+  uint64_t manifest_edits() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return manifest_edits_;
+  }
+  uint64_t manifest_rolls() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return manifest_rolls_;
   }
   // 诊断：当前版本里的 min_log_number_to_keep（§6.6.2 的 I34 判据值）
   uint64_t min_log_number_to_keep() const {
@@ -217,6 +248,12 @@ class PersistentDBImpl : public DB {
   // §6.6.2 / §8.3 步骤 ⑩：当前 memtable 的**最早写入所在 log**。恢复时 = 被重放 log 的最小编号；
   // 冻结时旧表保留它自己的值，新表取当时的 log_number_（轮转后不更新 ⇒ 保守，绝不漏删）。
   uint64_t memtable_log_number_ = 1;
+
+  // ---- M4.1/M4.2：MANIFEST/CURRENT（稳态元数据）----
+  uint64_t manifest_number_ = 0;   // 0 = 尚无 MANIFEST（首次 flush 走模式 (a)）
+  uint64_t manifest_bytes_ = 0;
+  uint64_t manifest_edits_ = 0;
+  uint64_t manifest_rolls_ = 0;
 
   // M3：单后台 flush 线程（§6.5/L21：它只取 mutex_，永不碰 commit_mu_）
   std::thread bg_thread_;

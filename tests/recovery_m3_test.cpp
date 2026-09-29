@@ -398,16 +398,35 @@ TEST(Recover, MetaMaxSequenceVerifiedAgainstFullScan) {
   ASSERT_TRUE(db->Close().ok());
   delete db;
 
-  const std::string meta_path = VersionSet::MetaFileName("/db");
-  std::string contents = env.Contents(meta_path);
+  // 活动元数据 = CURRENT → MANIFEST-<n>（M4 语义：对象是"活动元数据实现"，不绑 META 文件名）。
+  uint64_t manifest_number = 0;
+  ASSERT_TRUE(VersionSet::ReadCurrent(&env, "/db", &manifest_number).ok());
+  const std::string manifest_path = ManifestFileName("/db", manifest_number);
+  const std::string contents = env.Contents(manifest_path);
   ASSERT_FALSE(contents.empty());
   VersionEdit edit;
-  std::string why;
-  ASSERT_TRUE(edit.DecodeFrom(Slice(contents), &why)) << why;
-  ASSERT_GE(edit.files().size(), 1u);
-  // 全量扫描：打开每个注册文件算真实 max_sequence，与元数据比对（正常必须相等）。
+  {
+    size_t off = 0;
+    std::string why;
+    std::shared_ptr<const Version> vv = VersionSet::Empty(0, 1);
+    while (off < contents.size()) {
+      VersionEdit one;
+      const ManifestReadStatus st = ReadManifestRecord(Slice(contents), &off, &one, &why);
+      ASSERT_EQ(ManifestReadStatus::kOk, st) << why;
+      std::shared_ptr<const Version> next;
+      ASSERT_TRUE(VersionSet::ApplyEdit(*vv, one, &next, &why)) << why;
+      vv = next;
+    }
+    edit = VersionSet::MakeSnapshotEdit(*vv, options);
+  }
+  ASSERT_GE(edit.added_files().size(), 1u);
+  for (const auto& a : edit.added_files()) {
+    EXPECT_LE(a.second.max_sequence, static_cast<SequenceNumber>(kN));
+    EXPECT_GE(a.second.max_sequence, 1u);
+  }
   SequenceNumber scanned = 0;
-  for (const FileMetaData& f : edit.files()) {
+  for (const auto& a : edit.added_files()) {
+    const FileMetaData& f = a.second;
     std::shared_ptr<Table> t;
     ASSERT_TRUE(Table::Open(options, &env, TableFileName("/db", f.number), &t, &f.smallest,
                             &f.largest)
@@ -426,28 +445,25 @@ TEST(Recover, MetaMaxSequenceVerifiedAgainstFullScan) {
   // 手工拼字节参照（§12.5 第 7 条：不能只用同一个解码器自证）。
   const std::string manual = test::ManualInternalKey(Slice("manual-ref"), 42, kTypeValue);
   EXPECT_EQ(42u, DecodeTrailerLE(manual.data() + manual.size() - kInternalKeyTrailerSize) >> 8);
-  for (const FileMetaData& f : edit.files()) {
-    EXPECT_LE(f.max_sequence, static_cast<SequenceNumber>(kN));
-    EXPECT_GE(f.max_sequence, 1u);
-  }
-  // 篡改第一条文件的 max_sequence ⇒ Open 必须 kCorruption（"统计写错"不得静默）。
-  VersionEdit tampered;
-  tampered.SetComparatorName(edit.comparator_name());
-  tampered.SetLogNumber(edit.log_number());
-  tampered.SetMinLogNumberToKeep(edit.min_log_number_to_keep());
-  tampered.SetNextFileNumber(edit.next_file_number());
+  // 篡改活动元数据里第一条文件的 max_sequence（重新编码 + CRC 自洽）⇒ 全量扫描复核必须拒绝启动。
+  VersionEdit tampered = edit;
+  VersionEdit tampered2;
+  tampered2.SetComparatorName(tampered.comparator_name());
+  tampered2.SetLogNumber(tampered.log_number());
+  tampered2.SetMinLogNumberToKeep(tampered.min_log_number_to_keep());
+  tampered2.SetNextFileNumber(tampered.next_file_number());
   bool first = true;
-  for (const FileMetaData& f : edit.files()) {
-    FileMetaData f2 = f;
+  for (const auto& a : tampered.added_files()) {
+    FileMetaData f2 = a.second;
     if (first) {
       f2.max_sequence += 1000000;
       first = false;
     }
-    tampered.AddFile(f2);
+    tampered2.AddFile(a.first, f2);
   }
   std::string tampered_bytes;
-  ASSERT_TRUE(tampered.EncodeTo(&tampered_bytes));
-  env.SetContents(meta_path, tampered_bytes);
+  ASSERT_TRUE(EncodeManifestRecord(tampered2, &tampered_bytes));
+  env.SetContents(manifest_path, tampered_bytes);
   DB* db2 = nullptr;
   const Status s = DB::Open(options, "/db", &db2);
   EXPECT_TRUE(s.IsCorruption()) << "max_sequence 与全量扫描不符必须拒绝启动：" << s.ToString();
@@ -458,6 +474,7 @@ TEST(Recover, MetaMaxSequenceVerifiedAgainstFullScan) {
 }
 
 // ===================== M3-A39（I27/§1.2 边界 4）：语义层 =====================
+// 对象 = **活动元数据实现**（CURRENT → MANIFEST-<n>）；判据 = 损坏必须拒绝启动且不自动修复。
 TEST(Recover, MetaCorruptRefused) {
   MemEnv env;
   Options options;
@@ -468,45 +485,77 @@ TEST(Recover, MetaCorruptRefused) {
   PersistentDBImpl* impl = static_cast<PersistentDBImpl*>(db);
   PutRange(db, 1, 400);
   WaitFlushIdle(impl, 1);
+  PutRange(db, 401, 800);
+  WaitFlushIdle(impl, 2);
   ASSERT_TRUE(db->Close().ok());
   delete db;
 
-  const std::string meta_path = VersionSet::MetaFileName("/db");
+  uint64_t manifest_number = 0;
+  ASSERT_TRUE(VersionSet::ReadCurrent(&env, "/db", &manifest_number).ok());
+  const std::string meta_path = ManifestFileName("/db", manifest_number);
   const std::string good = env.Contents(meta_path);
   ASSERT_FALSE(good.empty());
-  const auto expect_refused_without_repair = [&](const std::string& mutated, const char* what) {
+  // 必须有多条 record，才有一条的"中间损坏"可测（单条 record 的尾部 CRC 坏按 §8.4 允许截断）。
+  size_t rec_count = 0, first_len = 0;
+  {
+    size_t off = 0;
+    std::string why;
+    while (off < good.size()) {
+      VersionEdit one;
+      const ManifestReadStatus st = ReadManifestRecord(Slice(good), &off, &one, &why);
+      ASSERT_EQ(ManifestReadStatus::kOk, st) << why;
+      if (rec_count == 0) first_len = off;
+      ++rec_count;
+    }
+  }
+  ASSERT_GE(rec_count, 2u) << "本用例要求活动元数据至少有 2 条 record（否则中间损坏不可构造）";
+  const auto expect_refused_without_repair = [&](const std::string& mutated, const char* what,
+                                                 bool expect_corruption) {
     env.SetContents(meta_path, mutated);
     DB* reopened = nullptr;
     const Status s = DB::Open(options, "/db", &reopened);
-    EXPECT_TRUE(s.IsCorruption()) << what << "：元数据损坏必须 kCorruption：" << s.ToString();
+    EXPECT_FALSE(s.ok()) << what << "：活动元数据损坏必须拒绝启动：" << s.ToString();
+    if (expect_corruption) {
+      EXPECT_TRUE(s.IsCorruption()) << what << "：必须是 kCorruption：" << s.ToString();
+    } else {
+      EXPECT_TRUE(s.IsNotSupported()) << what << "：未知 record type 必须是 kNotSupported："
+                                      << s.ToString();
+    }
     if (reopened != nullptr) {
       reopened->Close();
       delete reopened;
     }
     EXPECT_EQ(mutated, env.Contents(meta_path)) << what << "：不得自动修复/重建元数据";
   };
-  // ① magic 坏
+  // ① length 字段置 0
   {
     std::string m = good;
-    m[0] = 'X';
-    expect_refused_without_repair(m, "magic");
+    m[0] = m[1] = m[2] = m[3] = static_cast<char>(0);
+    expect_refused_without_repair(m, "length_zero", true);
   }
-  // ② format_version 坏
+  // ② record type 未知（kNotSupported，仍必须拒绝）
   {
     std::string m = good;
-    m[5] = static_cast<char>(7);
-    expect_refused_without_repair(m, "format_version");
+    m[4] = static_cast<char>(0x7e);
+    expect_refused_without_repair(m, "unknown_type", false);
   }
-  // ③ tail CRC 坏
+  // ③ 第一条 record 的 CRC 坏，且其后仍有完整 record ⇒ 中间损坏
   {
     std::string m = good;
-    m[m.size() - 1] = static_cast<char>(m[m.size() - 1] ^ 0x5a);
-    expect_refused_without_repair(m, "tail_crc");
+    m[first_len - 1] = static_cast<char>(m[first_len - 1] ^ 0x5a);
+    expect_refused_without_repair(m, "middle_crc", true);
   }
-  // ④ 字段长度截断
+  // ④ CURRENT 内容非法
   {
-    std::string m = good.substr(0, good.size() - 1);
-    expect_refused_without_repair(m, "truncated");
+    env.SetContents(CurrentFileName("/db"), "not-a-number");
+    DB* reopened = nullptr;
+    const Status s = DB::Open(options, "/db", &reopened);
+    EXPECT_TRUE(s.IsCorruption()) << s.ToString();
+    if (reopened != nullptr) {
+      reopened->Close();
+      delete reopened;
+    }
+    env.SetContents(CurrentFileName("/db"), std::to_string(manifest_number) + "\n");
   }
   // 收尾：恢复原文件后必须能正常打开（证明失败只是"坏文件被拒"，不是把库搞坏）。
   env.SetContents(meta_path, good);
@@ -583,7 +632,7 @@ TEST(Recover, OrphanHandledPerInvariant27) {
 
 // ===================== M3-A41（§10.9 安全阀）：语义层 =====================
 TEST(Recover, MetaMissingWithSstRefused) {
-  // ① 元数据缺失但目录里有 *.sst ⇒ kCorruption
+  // ① 活动元数据缺失但目录里有 *.sst ⇒ kCorruption
   {
     MemEnv env;
     Options options;
@@ -596,7 +645,10 @@ TEST(Recover, MetaMissingWithSstRefused) {
     WaitFlushIdle(impl, 1);
     ASSERT_TRUE(db->Close().ok());
     delete db;
-    ASSERT_TRUE(env.RemoveFile(VersionSet::MetaFileName("/db")).ok());
+    uint64_t n = 0;
+    ASSERT_TRUE(VersionSet::ReadCurrent(&env, "/db", &n).ok());
+    ASSERT_TRUE(env.RemoveFile(CurrentFileName("/db")).ok());
+    ASSERT_TRUE(env.RemoveFile(ManifestFileName("/db", n)).ok());
     DB* db2 = nullptr;
     const Status s = DB::Open(options, "/db", &db2);
     EXPECT_TRUE(s.IsCorruption()) << "元数据缺失但目录非空必须显式拒绝：" << s.ToString();
@@ -606,7 +658,7 @@ TEST(Recover, MetaMissingWithSstRefused) {
       delete db2;
     }
   }
-  // ② 元数据缺失且只有 .log ⇒ 兼容打开（M2 老库路径）
+  // ② 活动元数据缺失且只有 .log ⇒ 兼容打开（M2 老库路径）
   {
     MemEnv env;
     Options options;
@@ -618,8 +670,8 @@ TEST(Recover, MetaMissingWithSstRefused) {
     ASSERT_TRUE(db->Sync().ok());
     ASSERT_TRUE(db->Close().ok());
     delete db;
-    // 元数据本来就不存在；显式删除一次（语义：元数据缺失）。
-    env.RemoveFile(VersionSet::MetaFileName("/db"));
+    // 大 buffer 下本来就没有消费过 flush ⇒ 也没有活动元数据；显式删一次（语义：元数据缺失）。
+    env.RemoveFile(CurrentFileName("/db"));
     DB* db2 = nullptr;
     ASSERT_TRUE(DB::Open(options, "/db", &db2).ok()) << "只有 .log 的老库必须能打开";
     PersistentDBImpl* impl2 = static_cast<PersistentDBImpl*>(db2);
@@ -871,11 +923,13 @@ TEST(WalReclaim, DeleteOnlyAfterMetaDurable) {
     }
   }
   ASSERT_LT(remove_idx, events.size()) << "本用例必须真的发生 WAL 回收（否则空绿）";
-  // 该删除之前必须有元数据的 rename(META.tmp->META)，且 rename 之后、删除之前有 SyncDir。
+  // 该删除之前必须有活动元数据的原子发布（MANIFEST-<n>.tmp / CURRENT.tmp 的 rename），
+  // 且 rename 之后、删除之前有 SyncDir（I34/L17；对象=活动元数据实现）。
   size_t meta_rename = events.size();
   for (size_t i = 0; i < remove_idx; ++i) {
-    if (events[i].find("META.tmp") != std::string::npos &&
-        events[i].compare(0, 7, "rename:") == 0) {
+    if (events[i].compare(0, 7, "rename:") == 0 &&
+        events[i].find("MANIFEST-") != std::string::npos &&
+        events[i].find(".tmp") != std::string::npos) {
       meta_rename = i;
     }
   }
@@ -1002,7 +1056,7 @@ TEST(Close, AbandonsImmutablesWithCounter) {
   // immutable；重开时它是孤儿（被清理），数据从 WAL 重放。
   PutRange(db, 1, 400);
   WaitFlushIdle(impl, 1);
-  ASSERT_TRUE(env.FileExists(VersionSet::MetaFileName("/db"))) << "必须先有一次成功注册";
+  ASSERT_TRUE(env.FileExists(CurrentFileName("/db"))) << "必须先有一次成功注册（活动元数据 = CURRENT）";
   hook.Arm();
   // 写者放独立线程：后台线程被 hook 卡住后，写者会停在 WaitForImmutableCapacity 上，
   // 这正是 A51 要覆盖的"Close 时有未落盘 immutable"形态。

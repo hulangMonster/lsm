@@ -375,3 +375,95 @@ tail   := crc32c(4B LE)      // 覆盖 header ‖ file* 的全部字节
 ````
 
 ---
+
+## 11. MANIFEST / VersionEdit 编码（M4 定稿）
+
+> 追加章节。§1~§10 为 M1/M2/M3 冻结内容，本节不得反向修改它们。
+> 本节与 §9/§10 共用同一条 CRC 纪律：**CRC 覆盖面必须包含长度字段**（§9.3 的"有意差异"在此复用）。
+> **`META`（§10.8）自本节起为兼容读入格式**：M4 起稳态元数据是 `CURRENT` + `MANIFEST-<n>`；
+> `META` 仅在"首次打开 M3 旧库"时被读一次，随后立即迁移并删除（§11.6）。§10.8/§10.9 的字节布局与
+> 拒绝口径**不变**，只追加"M4 不再写它"这一条事实。
+
+### 11.1 文件命名与文件号空间（追加）
+
+```
+<dbname>/CURRENT              指向当前 MANIFEST 的原子指针（ASCII 十进制编号 + '\n'）
+<dbname>/CURRENT.tmp          CURRENT 的写临时文件（**永不**被当作 CURRENT 读）
+<dbname>/MANIFEST-<n>         VersionEdit 追加日志（恢复的权威源）
+<dbname>/MANIFEST-<n>.tmp     MANIFEST 的写临时文件（**永不注册**）
+```
+
+- `.log`、`.sst`、`MANIFEST-<n>` **共享**一个单调递增的 `next_file_number`（沿用 §10.1 的规则）。
+  ⇒ `Open` 时权威值 = `max(MANIFEST 里的 next_file_number, max(目录中所有族的编号) + 1)`；
+  **目录扫描必须包含 `MANIFEST-<n>` 的 `n`**，否则会重用 MANIFEST 编号、覆盖 CURRENT 指向的文件。
+- `CURRENT` 的内容 = `^[0-9]{1,20}\n$`（纯十进制编号 + 恰好一个换行）。读侧**严格校验**，
+  不符 ⇒ `kCorruption`。`CURRENT` **不**参与编号分配。
+- 正则：`MANIFEST` 用 `^MANIFEST-[0-9]{6}$`；临时文件 `^MANIFEST-[0-9]{6}\.tmp$`。
+  `ParseManifestFileName` **必须拒绝** `MANIFEST-<n>.tmp`（后缀匹配精确，禁止前缀匹配，同 §10.1）。
+
+### 11.2 MANIFEST record 帧格式
+
+```
+manifest_on_disk := record*
+record           := length(4B LE) ‖ type(1B) ‖ payload ‖ crc32c(4B LE)
+  length  = payload 字节数（不含 length/type/crc 自身）
+  type    = 记录类型；0x01 = kManifestRecordTypeVersionEdit（M4 只定义此一个值）
+  crc     = crc32c( length(4B LE) ‖ type(1B) ‖ payload )        // **含长度**
+```
+
+| 字段 | 字节数 | 字节序 | 取值 / 约束 |
+|---|---|---|---|
+| `length` | 4 | LE | `1 .. 67108864`（64 MiB 软上界）；越界 ⇒ `kCorruption` |
+| `type` | 1 | — | `0x01`；其他值 ⇒ `kNotSupported`（不是 `kCorruption`） |
+| `payload` | `length` | — | §11.3 的 VersionEdit 编码 |
+| `crc32c` | 4 | LE | 覆盖 `length ‖ type ‖ payload` |
+
+- record 之间**没有**填充与对齐，reader 是无状态的"顺序读 + 每条自定界"循环。
+- **每条 record 的解码必须"全或无"**：先校验 `length`/`type`/`crc`，再整体解码到临时 `VersionEdit`，
+  成功后才应用。禁止边解边应用（半个 edit 生效 = §9 的"半条 record 永不生效"在元数据侧的对应物）。
+
+### 11.3 VersionEdit 字段表
+
+```
+version_edit_payload := field*
+field                := tag(varint32) ‖ value(tag 依赖)
+
+1 kComparator          : len_prefixed_string
+2 kLogNumber           : varint64
+3 kNextFileNumber      : varint64
+4 kMinLogNumberToKeep  : varint64
+5 kDeletedFile         : level(varint32) ‖ number(varint64)
+6 kNewFile             : level(varint32) ‖ number(varint64) ‖ file_size(varint64)
+                         ‖ max_sequence(varint64) ‖ smallest(len_prefixed) ‖ largest(len_prefixed)
+```
+
+- `level ∈ [0, kNumLevels)`，`kNumLevels = 7`（编译期常量，不入 `Options`）。
+- `smallest` / `largest` 是 **internal key**（§6），`smallest <= largest`（按 §6.1 的比较器）。
+- **不定义** `last_sequence` 字段：唯一合法的恢复水位口径是 §9 的
+  `max(WAL 重放最大值, 各已注册文件的 max_sequence)`（§10.8 的 `max_sequence` 字段语义不变）。
+- **不定义** `compact_pointer` 字段：M4 的选文件轮转指针只在内存（重启后从各层最左重新开始）。
+- 同一 edit 内**允许** `kDeletedFile` 与 `kNewFile` 混合（flush 的 edit 只有 `kNewFile`；
+  compaction 的 edit 两者都有）。
+
+### 11.4 全量快照 edit
+
+```
+全量快照 edit := kComparator ‖ kLogNumber ‖ kNextFileNumber ‖ kMinLogNumberToKeep ‖ kNewFile*
+```
+恢复 = 从**空版本**开始按顺序应用所有 record。⇒ 不需要"这是快照"的标志位：
+新建/重建 MANIFEST 的首条 record 就是"相对空版本的全量增量"。
+
+### 11.5 层内布局不变式（安装期校验）
+
+- **L0**：允许 key range 重叠；文件按 `number` **降序**（新→旧）。读路径逐个检查，命中即返回。
+- **L1..L6**：层内按 `smallest` 的 **user key 升序**；相邻两文件必须 `largest.user_key <
+  smallest.user_key`（**严格**，不得共享任何 user key）。违反 ⇒ **拒绝安装该 Version**。
+- 安装期校验必须覆盖**全部**安装路径：恢复回放的收尾、每一次 `LogAndApply`、`META` 迁移。
+
+### 11.6 `META` 的迁移（一次性）
+
+`Open` 的优先级：`CURRENT` 存在 ⇒ 走 MANIFEST；否则 `META` 存在 ⇒ 兼容读入（§10.8/§10.9 逐字解码），
+随后**立即**写 `MANIFEST-<n>`（首条 = 全量快照 edit）→ `fsync` → 写 `CURRENT.tmp` → `fsync` →
+`rename(CURRENT.tmp, CURRENT)` → `SyncDir`，然后删除 `META` / `META.tmp`。
+两者都不存在时：目录中若有 `*.sst` 或 `MANIFEST-*` ⇒ `kCorruption`（"元数据丢失但目录非空"），
+否则按空库处理。**稳态只写 MANIFEST + CURRENT，永不写 `META`。**

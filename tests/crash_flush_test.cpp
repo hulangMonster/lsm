@@ -22,6 +22,7 @@
 
 #include "db_impl.h"
 #include "memenv.h"
+#include "filename.h"
 #include "version_set.h"
 
 namespace lsm {
@@ -96,10 +97,15 @@ class CrashEnv : public MemEnv {
         env_->sst_sync_failures.fetch_add(1, std::memory_order_relaxed);
         return Status::IOError("CrashEnv: injected SST fsync failure", name_);
       }
+      // M4：活动元数据 = CURRENT + MANIFEST；稳态追加写的是 MANIFEST-<n>（无 .tmp），
+      // 重建写的是 MANIFEST-<n>.tmp / CURRENT.tmp。三者都算"元数据的 fsync"。
+      const bool is_active_meta =
+          name_.find("MANIFEST-") != std::string::npos ||
+          (name_.size() >= 11 && name_.compare(name_.size() - 11, 11, "CURRENT.tmp") == 0);
       if (env_->armed.load(std::memory_order_acquire) &&
-          p == static_cast<int>(Point::kBeforeRegister) && EndsWith(name_, "META.tmp")) {
+          p == static_cast<int>(Point::kBeforeRegister) && is_active_meta) {
         env_->meta_sync_failures.fetch_add(1, std::memory_order_relaxed);
-        return Status::IOError("CrashEnv: injected META fsync failure", name_);
+        return Status::IOError("CrashEnv: injected active-metadata fsync failure", name_);
       }
       return inner_->Sync();
     }
@@ -162,7 +168,7 @@ void RunCase(CrashEnv::Point point, const char* what, bool expect_sst_orphan, Cr
     if (fs.flushes_completed >= 1 && impl->immutables_size() == 0) break;
     std::this_thread::yield();
   }
-  ASSERT_TRUE(env.FileExists(VersionSet::MetaFileName("/db"))) << what;
+  ASSERT_TRUE(env.FileExists(CurrentFileName("/db"))) << what << "：活动元数据必须先存在";
 
   hook.Arm();
   int last_ok = 200;

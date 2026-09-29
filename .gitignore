@@ -9,3 +9,7 @@ core.*
 # 因此要在 *.log 之后显式取反，否则 git add -A 会把它一起忽略掉。
 !docs/*-tdd-red.log
 .cache/
+
+# M4：MANIFEST/CURRENT 的写临时文件（永不注册；docs/m4-design.md §3.1）
+MANIFEST-*.tmp
+CURRENT.tmp

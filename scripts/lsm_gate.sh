@@ -137,6 +137,11 @@ run_gate_m3_marked "M3-B04 SSTable 损坏扫描（零静默错值）" scripts/ls
 run_gate_m3_marked "M3-B05 句柄计数不增长" scripts/lsm_fd_leak_test.sh \
   'FD_GROWTH [0-9]+'
 
+# ---------------- M4 腿（docs/m4-design.md §10.2 M4-B11）----------------
+# M4.1 的正向标记腿：A 组 M4.1 用例全绿 + lsm_version 零越权依赖（缺脚本 ⇒ SKIP + [PARTIAL]）。
+run_gate_m3_marked "M4-B11 MANIFEST/VersionEdit A 组 + 零依赖" scripts/lsm_manifest_test.sh \
+  'M4_TESTS_RAN [1-9][0-9]*@@M4_TESTS_FAILED 0@@LSM_VERSION_FORBIDDEN 0@@\[MANIFEST_OK\]'
+
 echo
 echo "==== lsm_gate 汇总 ===="
 for line in "${RESULTS[@]}"; do echo "$line"; done

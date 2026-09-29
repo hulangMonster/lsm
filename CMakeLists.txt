@@ -65,6 +65,8 @@ add_library(lsm STATIC
   # M3.2：版本/缓存 + 归并 + 用户视图迭代器（docs/m3-design.md §11.2 的「新增」列）
   src/version_edit.cpp
   src/version_set.cpp
+  # M4.2：选层/选文件/闭包/丢弃判据（docs/m4-design.md §5.4/§5.5）
+  src/compaction.cpp
   src/merging_iterator.cpp
   src/db_iter.cpp
 )
@@ -85,6 +87,19 @@ add_library(lsm_sstable STATIC
 )
 target_include_directories(lsm_sstable PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(lsm_sstable PUBLIC Threads::Threads)
+
+# M4.1 的依赖纪律机制（docs/m4-design.md §1.4）：version_edit/version_set 只能依赖 util，
+# 不得反向依赖 db_impl/wal/memtable。判据：nm -C build/liblsm_version.a | grep -cE 'db_impl|wal|memtable' ⇒ 0。
+add_library(lsm_version STATIC
+  src/version_edit.cpp
+  src/version_set.cpp
+  src/filename.cpp
+  src/util/status.cpp
+  src/util/coding.cpp
+  src/util/crc32c.cpp
+)
+target_include_directories(lsm_version PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(lsm_version PUBLIC Threads::Threads)
 
 # GTest 是测试专用依赖：用 /usr/local 的既有安装，不做 FetchContent、不 vendor。
 # 找不到必须硬失败：静默跳过测试目标等于把「没跑」伪装成「通过」（docs/roadmap.md §3.4）。
@@ -119,6 +134,10 @@ add_executable(lsm_tests
   # M3.3：恢复/元数据/WAL 回收（A35~A54）+ 崩溃脚本用的 flush 探针
   tests/recovery_m3_test.cpp
   tests/crash_flush_test.cpp
+  # M4.1：VersionEdit / MANIFEST / CURRENT（A01~A10/A39/A40/A42）
+  tests/version_test.cpp
+  # M4.2：选层/选文件/闭包/丢弃判据（A11~A16/A23/A26 的确定性部分）
+  tests/compaction_test.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}

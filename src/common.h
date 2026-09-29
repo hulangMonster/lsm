@@ -252,6 +252,29 @@ class FlushHook {
 };
 
 // ---------------------------------------------------------------------------
+// M4：层级与 compaction 的编译期常量 / 注入点（docs/m4-design.md §3.3/§5.6）
+// ---------------------------------------------------------------------------
+// 层数固定为 7（L0..L6）。按 §3.3 的纪律**不入 Options**：可配就能配出非法值。
+// 放在 common.h 是为了让 version_edit / version_set / Options 共享同一个定义。
+constexpr int kNumLevels = 7;
+
+// M4：选文件策略（§5.4 的完整定义落在 M4.2 的 src/compaction.h）。
+// 这里只作**前置声明**（opaque enum 声明后即为完整类型），使 Options 能承载该字段，
+// 同时不引入 common.h → compaction.h 的反向依赖（§1.4 的依赖方向）。
+enum class PickStrategy : int;
+
+// M4：compaction 的注入点（§5.6）。与 CommitHook / FlushHook 同纪律：
+// 只做观察，不含任何生产逻辑；生产恒 nullptr。
+class CompactionHook {
+ public:
+  virtual ~CompactionHook() = default;
+  virtual void OnInputsSelected(int /*level*/, size_t /*num_inputs*/) {}
+  virtual void OnOutputWritten(uint64_t /*file_number*/) {}
+  virtual void OnOutputRenamed(uint64_t /*file_number*/) {}
+  virtual void OnBeforeInstall() {}
+};
+
+// ---------------------------------------------------------------------------
 // Options（M1 定义 + M2/M3 只增不改；docs/m3-design.md §8.5/§8.7、M3.2 交付表）
 //   * block_size / verify_checksums 是 SSTable 读写的格式层参数（M3.1 曾以 TableOptions
 //     承载；M3.2 按设计统一回 Options，TableOptions 保留为别名以免动 M3.1 既有用例）。
@@ -278,6 +301,16 @@ struct Options {
   // M3.3 增补（§1.2 边界 5 / D6）：WAL 回收开关。默认开启；关闭时一个 *.log 都不删
   // （M3-A48 的对照）。判据本身仍是 I34 的单一真相源（§6.6.2）。
   bool recycle_log_files = true;
+  // ---- M4 增补（docs/m4-design.md §5.6 的 6 个字段；校验在 Open 第一步，非法 ⇒ kInvalidArgument）----
+  int level0_file_num_compaction_trigger = 4;          // < 1 非法（0 会让 L0 永不触发）
+  uint64_t max_bytes_for_level_base = 10u << 20;       // 10 MB；== 0 非法
+  int max_bytes_for_level_multiplier = 10;             // < 2 非法
+  uint64_t max_file_size = 2u << 20;                   // 2 MB；== 0 或 < block_size 非法
+  PickStrategy compaction_pick_strategy{};             // 0 = kRoundRobin（见 compaction.h）
+  CompactionHook* compaction_hook = nullptr;
+  // ---- M4.1/M4.2：MANIFEST 重建阈值（不是 §5.6 的 6 个字段）----
+  // manifest_bytes_ 超过它 ⇒ 模式 (a) 重建 MANIFEST（§8.1）；测试用小值触发。
+  uint64_t manifest_roll_bytes = 1u << 20;             // 1 MiB
 };
 
 // ---------------------------------------------------------------------------
