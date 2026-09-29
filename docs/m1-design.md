@@ -140,7 +140,9 @@ M1 可产生性（防止「声明了但没人产生」的悬空码）：
 | `kIOError` | `Env` 文件操作失败（`util_test` 覆盖） |
 | `kCorruption` | M1 不产生：预留给 M2/M3 的 CRC 与格式校验（枚举一次冻结，避免后续改枚举） |
 
-### 4.3 `Comparator` / `Options`
+### 4.3 `Comparator` / `Options` / 命名空间
+
+**全部对外符号位于 `namespace lsm`**（`tests/test_harness.h` 已按此 include 与限定名书写，属 #2 冻结的事实契约）。
 
 ```cpp
 class Comparator {
@@ -539,6 +541,16 @@ class Env {
 
 文档提交：`docs(m1): 冻结 M1 设计（design/protocol/roadmap/prerequisites）`（#0+#1 产物一个提交）。
 每个提交 push 到 `origin`（`git@github.com:hulangMonster/lsm.git`），M1 收口后 `git tag m1-memtable && git push origin m1-memtable`。
+
+**修订记录（#1 回退 #0，2026-09-29）—— M1.1 的验证口径**：本表初稿写「M1.1 判据 = `util_test` 全绿 + 干净重建 0 warning」，
+但 `lsm_tests` 是**单一可执行文件**，不存在「部分链接」：M1.1 只有 util 层时若把 `tests/memtable_test.cpp` 一并编入，
+整个二进制都链接失败，`util_test` 也跑不起来（该失败正是 `docs/m1-tdd-red.log` 记录的现象）。
+落地口径（不改指令要求的「lsm 静态库 + lsm_tests 测试可执行文件」目标布局）：
+
+- **M1.1**：`CMakeLists.txt` 里 `lsm_tests` 只含 `tests/util_test.cpp`（CMakeLists 注释写明 M1.2 会加回），
+  因此 `lsm` 改成 STATIC 并只列 `src/util/*.cpp`；门禁 = `bash scripts/lsm_build.sh` 干净重建 0 warning + `util_test` 全绿。
+- **M1.2**：`lsm_tests` 加回 `tests/memtable_test.cpp`，`lsm` 列全 `src/**`；门禁 = A 组全绿。
+- `#2` 的 RED 证据不受影响（那一版 CMakeLists 两个测试文件都在，原始输出已留档）。
 
 ## 13. #2 阶段 RED 策略（为什么这样能拿到真实 RED）
 
