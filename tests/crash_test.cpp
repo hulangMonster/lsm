@@ -449,4 +449,89 @@ TEST(GroupCommit, NWritersOneFsyncDeterministic) {
   delete db;
 }
 
+
+// ==== 评审回归（阻断项 1/2/6）====
+
+// 阻断项 1：被 kFrozen 拒绝的写**不得**进 WAL；同配置重开必须成功（评审给的判据）
+TEST(DB, PutAfterFreezeIsNotPersisted) {
+  MemEnv env;
+  Options options;
+  options.env = &env;   // 用默认 write_buffer_size（4 MiB）——小容量会被 kRecoverySlack 掩盖后果
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  int accepted = 0;
+  Status last;
+  const int kMaxAttempts = 200000;
+  for (int i = 1; i <= kMaxAttempts; ++i) {
+    last = db->Put(WriteOptions(), Key(i), Val(i));
+    if (!last.ok()) {
+      EXPECT_TRUE(last.IsFrozen()) << last.ToString();
+      break;
+    }
+    ++accepted;
+  }
+  ASSERT_GT(accepted, 0);
+  ASSERT_TRUE(last.IsFrozen()) << "必须真的撞到容量上限（否则本用例没意义）";
+  const std::string rejected_key = Key(accepted + 1);
+  EXPECT_TRUE(db->Close().ok());
+  delete db;
+
+  // 同配置重开：必须成功（修复前是 Corruption: 重放 Add 失败: Frozen）
+  DB* db2 = nullptr;
+  const Status reopened = DB::Open(options, kDBName, &db2);
+  ASSERT_TRUE(reopened.ok()) << "同配置重开必须成功：" << reopened.ToString();
+  std::string v;
+  EXPECT_TRUE(db2->Get(rejected_key, &v).IsNotFound())
+      << "被 kFrozen 拒绝的写绝不能进 WAL（否则重启后复活）";
+  ASSERT_TRUE(db2->Get(Key(accepted), &v).ok()) << "最后一条被接受的写必须还在";
+  EXPECT_EQ(Val(accepted), v);
+  db2->Close();
+  delete db2;
+}
+
+// 阻断项 2：没有 fsync 时 durable 水位不得前进（design §7.1 的结构证据）
+TEST(GroupCommit, DurableSeqOnlyAdvancesOnSync) {
+  MemEnv env;
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  WriteOptions unsynced;                      // sync = false
+  for (int i = 1; i <= 8; ++i) ASSERT_TRUE(db->Put(unsynced, Key(i), Val(i)).ok());
+  EXPECT_EQ(0u, static_cast<PersistentDBImpl*>(db)->durable_seq())
+      << "只写不 fsync 时 durable 水位必须留在 0";
+  WriteOptions synced;
+  synced.sync = true;
+  ASSERT_TRUE(db->Put(synced, Key(9), Val(9)).ok());
+  EXPECT_GE(static_cast<PersistentDBImpl*>(db)->durable_seq(), 9u)
+      << "有 fsync 的批必须把水位推上去";
+  db->Close();
+  delete db;
+}
+
+// 阻断项 6：Close 必须等到队列排空（>kMaxGroupRecs 才可能把写者留在批边界之外）
+TEST(Close, WaitsForDrainedQueue) {
+  MemEnv env;
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  const int kWriters = 100;                   // > kMaxGroupRecs(64) ⇒ 必然有写者被留在队列里
+  std::vector<std::thread> ts;
+  std::atomic<int> done{0};
+  for (int w = 0; w < kWriters; ++w) {
+    ts.emplace_back([&, w]() {
+      db->Put(WriteOptions(), Key(w + 1), Val(w + 1));
+      ++done;
+    });
+  }
+  // 等到所有写者都返回（Close 之前不得留下未结算成员）
+  while (done.load() < kWriters) std::this_thread::yield();
+  ASSERT_TRUE(db->Close().ok());
+  EXPECT_EQ(0u, static_cast<PersistentDBImpl*>(db)->pending_writers())
+      << "Close 返回时队列必须已排空（否则 Close 后仍可能有写者进 RunFlusher）";
+  for (std::thread& t : ts) t.join();
+  delete db;
+}
+
 }  // namespace lsm

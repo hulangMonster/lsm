@@ -535,6 +535,7 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   };
   std::vector<Plan> plans;
   uint64_t total_payload = 0;
+  uint64_t total_entries = 0;
 
   for (uint64_t n : logs) {
     const std::string path = LogFileName(name, n);
@@ -568,7 +569,22 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
         p.truncate_at = r.last_good_end;
         break;
     }
-    for (const std::string& rec : p.records) total_payload += rec.size();
+    // 评审优化项（硬伤）：容量公式原来只按 WAL payload 估，漏了 MemTable 的每条目开销
+    // （条目编码 + 跳表节点 ≈ +128~190 B/条，小 value 下放大可达 4.5×）——
+    // 后果实测：用 64 MiB 写满、再用 1 MiB 重开 ⇒ 重放中途 kFrozen ⇒ Open 返回 Corruption。
+    // 因此在扫描阶段就把每条 batch 解一遍、统计条目数（顺带把畸形 batch 提前判掉）。
+    uint64_t entries = 0;
+    for (const std::string& rec : p.records) {
+      SequenceNumber rec_seq = 0;
+      std::vector<BatchEntry> es;
+      std::string why;
+      if (!ParseBatch(Slice(rec), &rec_seq, &es, &why)) {
+        return Status::Corruption("RecoverAndOpen: batch 解析失败", why);
+      }
+      entries += es.size();
+      total_payload += rec.size();
+    }
+    total_entries += entries;
     plans.push_back(std::move(p));
   }
 
@@ -581,8 +597,11 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   }
 
   // ---- 第二遍：按 D12 放大容量后重放 ----
-  const size_t cap = std::max(options.write_buffer_size,
-                              static_cast<size_t>(total_payload) + kRecoverySlack);
+  // 保守估计 MemTable 实际占用：编码字节 ×2（长度前缀/对齐/分配 slop）+ 每条节点开销 ×2 + 余量
+  const size_t cap = std::max(
+      options.write_buffer_size,
+      static_cast<size_t>(total_payload) * 2 +
+          static_cast<size_t>(total_entries) * kMemTableNodeOverhead * 2 + kRecoverySlack);
   std::unique_ptr<PersistentDBImpl> db(
       new PersistentDBImpl(options, InternalKeyComparator(options.comparator), name, cap));
   SequenceNumber last = 0;
