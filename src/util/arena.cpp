@@ -21,6 +21,7 @@ char* Arena::Allocate(size_t bytes) {
 
 char* Arena::AllocateAligned(size_t bytes, size_t align) {
   if (bytes == 0) bytes = 1;
+  bytes_allocated_ += bytes;
   // 结果必须同时满足请求对齐与 alignof(std::max_align_t)（I9；Arena.AlignmentAndUsage 对两者都断言）。
   if (align < kMaxAlign) align = kMaxAlign;
   // 大块**恒**单独分配：不吃当前小块的剩余空间（design §6 的原话）。
@@ -67,6 +68,7 @@ void Arena::Reset() {
   alloc_ptr_ = nullptr;
   alloc_bytes_remaining_ = 0;
   memory_usage_ = 0;
+  bytes_allocated_ = 0;
 }
 
 }  // namespace lsm

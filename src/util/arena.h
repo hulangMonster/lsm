@@ -33,6 +33,10 @@ class Arena {
   // 已申请块字节总和（含块内未用尾部与每块的 vector 指针开销）。Reset 前单调不减。
   size_t MemoryUsage() const { return memory_usage_; }
 
+  // 累计交出的载荷字节（不含块内未用尾部、不含对齐 slop）：小容量预算下比 MemoryUsage() 更贴近
+  // 「表里到底装了多少」，MemTable 的容量判据用它（design §6/§8.3 修订）。Reset 前单调不减。
+  size_t BytesAllocated() const { return bytes_allocated_; }
+
   // 丢弃全部块（design §6）；调用后 MemoryUsage() == 0，可继续分配。Reset 前交出的指针全部失效。
   void Reset();
 
@@ -45,6 +49,7 @@ class Arena {
   size_t alloc_bytes_remaining_ = 0;
   std::vector<char*> blocks_;
   size_t memory_usage_ = 0;
+  size_t bytes_allocated_ = 0;
 };
 
 }  // namespace lsm

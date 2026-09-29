@@ -49,6 +49,9 @@ add_library(lsm STATIC
   src/util/crc32c.cpp
   src/util/arena.cpp
   src/util/env_posix.cpp
+  # M1.2：跳表是 header-only（src/skiplist.h），此处只列 .cpp
+  src/memtable.cpp
+  src/db.cpp
 )
 target_include_directories(lsm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(lsm PUBLIC Threads::Threads)

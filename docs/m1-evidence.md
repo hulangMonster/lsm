@@ -96,3 +96,39 @@ coding.cpp.o
 crc32c.cpp.o
 arena.cpp.o
 env_posix.cpp.o
+
+## M1.2 —— 跳表 + MemTable + 内部 key 迭代器 + DB 内存实现
+
+执行时间：2026-09-29T18:43:08+08:00
+
+命令 1：bash scripts/lsm_build.sh（干净重建 + 0 warning 断言 + 全量用例）
+$ bash scripts/lsm_build.sh
+[ RUN      ] Stress.OneMillionKeysReconcile
+[   INFO   ] Stress.OneMillionKeysReconcile: n=1000000 write_ms=16105 reconcile_ms=1295 ApproximateMemoryUsage=155998029 bytes
+[       OK ] Stress.OneMillionKeysReconcile (19170 ms)
+[ RUN      ] Stress.DeleteThirtyPercentReconcile
+[   INFO   ] Stress.DeleteThirtyPercentReconcile: entries=390000 visible=210000 deleted=90000 elapsed_ms=5463 memtable_bytes=61318518
+[       OK ] Stress.DeleteThirtyPercentReconcile (6049 ms)
+[ RUN      ] Stress.SameKey100kTimes
+[   INFO   ] Stress.SameKey100kTimes: versions=100000 elapsed_ms=250 memtable_bytes=14389159
+[       OK ] Stress.SameKey100kTimes (251 ms)
+[ RUN      ] Stress.AlignmentUnderSanitizers
+[   INFO   ] Stress.AlignmentUnderSanitizers: build=plain（ASan/UBSan 结论见 build-asan 门禁）
+[   INFO   ] Stress.AlignmentUnderSanitizers: allocations=2000 alignof(max_align_t)=16
+[       OK ] Stress.AlignmentUnderSanitizers (26 ms)
+[----------] 4 tests from Stress (25498 ms total)
+
+[----------] Global test environment tear-down
+[==========] 45 tests from 12 test suites ran. (26940 ms total)
+[  PASSED  ] 45 tests.
+[CHECK] 用例计数：
+[==========] 45 tests from 12 test suites ran. (26940 ms total)
+[  PASSED  ] 45 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+命令 2：B 组（压力）实测数字
+[   INFO   ] Stress.OneMillionKeysReconcile: n=1000000 write_ms=16105 reconcile_ms=1295 ApproximateMemoryUsage=155998029 bytes
+[   INFO   ] Stress.DeleteThirtyPercentReconcile: entries=390000 visible=210000 deleted=90000 elapsed_ms=5463 memtable_bytes=61318518
+[   INFO   ] Stress.SameKey100kTimes: versions=100000 elapsed_ms=250 memtable_bytes=14389159
+[   INFO   ] Stress.AlignmentUnderSanitizers: build=plain（ASan/UBSan 结论见 build-asan 门禁）
+[   INFO   ] Stress.AlignmentUnderSanitizers: allocations=2000 alignof(max_align_t)=16
