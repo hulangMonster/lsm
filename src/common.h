@@ -27,6 +27,9 @@ class Env;   // M2：Options::env 注入（定义见 util/env.h；此处只前�
 class CommitHook {
  public:
   virtual ~CommitHook() = default;
+  // 队首当选 flusher 之后、**取批之前**调用（此时不持任何锁 ⇒ 其他写者可自由入队）。
+  // A20 用它造确定性屏障：让 N 个写者全部入队后再放行组装，从而断言"本批确实含 N 个写者"。
+  virtual void OnBeforeGroupAssemble() {}
   virtual void OnGroupTaken() {}
   virtual void OnAfterSyncBeforePublish() {}
 };

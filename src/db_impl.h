@@ -37,6 +37,8 @@ class PersistentDBImpl : public DB {
 
   // 诊断（测试与证据用）：已 fsync 覆盖到的最大 sequence
   SequenceNumber durable_seq() const { return durable_seq_; }
+  // 诊断：当前等待结算的写者数（A20 的确定性屏障靠轮询它来等"整批就位"）
+  size_t pending_writers();
 
  private:
   friend Status DB::Open(const Options&, const std::string&, DB**);

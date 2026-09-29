@@ -342,3 +342,27 @@ $ bash scripts/lsm_build.sh
   这不是组提交无效，而是 MemEnv 的 fsync 瞬时完成、写者之间没有重叠窗口，故 ratio≈1.0 是预期结果。
   真实合并效果必须由真实磁盘（B 组，fsync 中位 2.6ms）或确定性屏障构造（设计 9.1 的 A20）证明。
   该用例已按修订精神改为只登记不设门禁（不作赌调度的硬断言）。
+
+## M2.3(c) —— A20 确定性屏障版（组提交合并的真证明）
+
+背景：用 MemEnv 跑并发时 fsync 瞬时完成、写者无重叠窗口 ⇒ 统计比值恒为 1.000，无法证明合并。
+因此按 #1 阶段对 A20 判据的修订，改用 CommitHook 的 OnBeforeGroupAssemble 造确定性屏障：
+让 64 个写者全部入队后再放行组装，然后断言「本批含全部 64 个」且「本批只做 1 次 fsync」。
+
+$ ./build/bin/lsm_tests --gtest_filter=GroupCommit.NWritersOneFsyncDeterministic
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (25 ms total)
+[  PASSED  ] 1 test.
+  -> 断言通过：首批 depth == 64、sync_calls == 1、durable_seq 一步跳到 64
+
+命令 2：组提交全部专项用例 + 全量
+$ ./build/bin/lsm_tests --gtest_filter=GroupCommit.* ; bash scripts/lsm_build.sh
+
+[----------] Global test environment tear-down
+[==========] 5 tests from 1 test suite ran. (54 ms total)
+[  PASSED  ] 5 tests.
+[CHECK] 用例计数：
+[==========] 76 tests from 18 test suites ran. (27471 ms total)
+[  PASSED  ] 76 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）

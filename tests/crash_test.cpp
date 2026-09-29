@@ -396,4 +396,57 @@ TEST(GroupCommit, BatchingReducesFsyncCount) {
   delete db;
 }
 
+
+// A20（确定性版，按 #1 阶段对原判据的修订）：用 CommitHook 屏障让 N 个写者全部入队后再放行组装 ——
+// 断言「本批确实含 N 个写者」且「本批只做 1 次 fsync」。这不依赖调度，因此不是赌 flaky。
+TEST(GroupCommit, NWritersOneFsyncDeterministic) {
+  MemEnv env;
+  class BarrierHook : public CommitHook {
+   public:
+    void OnBeforeGroupAssemble() override {
+      if (!entered.exchange(true)) {                  // 只有首个 flusher 需要等整批就位
+        while (!released.load()) std::this_thread::yield();
+        first_depth.store(db->pending_writers());     // 放行瞬间队里有多少写者 ⇒ 本批成员数
+      }
+    }
+    std::atomic<bool> entered{false};
+    std::atomic<size_t> first_depth{0};
+    std::atomic<bool> released{false};
+    PersistentDBImpl* db = nullptr;
+  } hook;
+  Options options;
+  options.env = &env;
+  options.commit_hook = &hook;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  hook.db = static_cast<PersistentDBImpl*>(db);
+
+  const int kWriters = 64;
+  std::vector<std::thread> ts;
+  std::atomic<int> ok_count{0};
+  for (int w = 0; w < kWriters; ++w) {
+    ts.emplace_back([&, w]() {
+      WriteOptions wo;
+      wo.sync = true;
+      if (db->Put(wo, Key(w + 1), Val(w + 1)).ok()) ++ok_count;
+    });
+  }
+  // 轮询队列深度等整批就位（有上限，避免实现坏掉时挂死）：此刻 flusher 正卡在屏障里、不持锁
+  for (int spin = 0; spin < 200000; ++spin) {
+    if (static_cast<PersistentDBImpl*>(db)->pending_writers() >= static_cast<size_t>(kWriters)) break;
+    std::this_thread::yield();
+  }
+  hook.released.store(true);
+  for (std::thread& t : ts) t.join();
+
+  EXPECT_EQ(static_cast<size_t>(kWriters), hook.first_depth.load())
+      << "确定性屏障下首批必须含全部写者（实测首批 " << hook.first_depth.load() << " 个）";
+  EXPECT_EQ(kWriters, ok_count.load());
+  EXPECT_EQ(1, env.sync_calls()) << "整批只应做一次 fsync（实测 " << env.sync_calls() << " 次）";
+  // 一次 fsync 覆盖整批 ⇒ 水位必须一步跳到 kWriters
+  EXPECT_EQ(static_cast<SequenceNumber>(kWriters), static_cast<PersistentDBImpl*>(db)->durable_seq());
+  db->Close();
+  delete db;
+}
+
 }  // namespace lsm

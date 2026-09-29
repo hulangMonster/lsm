@@ -310,6 +310,9 @@ Status PersistentDBImpl::RunFlusher() {
   SequenceNumber begin = 0;
   Status reject;
 
+  // 取批**之前**的观察点：此处不持锁，其他写者仍可入队（A20 的确定性屏障）
+  if (options_.commit_hook != nullptr) options_.commit_hook->OnBeforeGroupAssemble();
+
   {
     std::lock_guard<std::mutex> ql(commit_mu_);
     if (queue_.empty()) return Status::OK();               // 已被别的 flusher 处理
@@ -416,6 +419,11 @@ Status PersistentDBImpl::Get(const Slice& key, std::string* value) {
 Iterator* PersistentDBImpl::NewIterator() {
   std::lock_guard<std::mutex> l(mutex_);
   return NewMemTableUserIterator(memtable_.get(), internal_comparator_);
+}
+
+size_t PersistentDBImpl::pending_writers() {
+  std::lock_guard<std::mutex> ql(commit_mu_);
+  return queue_.size();
 }
 
 Status PersistentDBImpl::Sync() {
