@@ -46,9 +46,11 @@ class BlockBuilder {
  private:
   int restart_interval_;
   std::string buffer_;               // entry 区
-  std::vector<uint32_t> restarts_;   // restart 点（entry 起始偏移）
-  int counter_;                      // 距下一个 restart 点还差几条
+  std::vector<uint32_t> restarts_;   // restart 点（entry 起始偏移），空块恒为 {0}
+  std::string last_key_;             // 上一条 key（**已完整复原**，不是 delta）
+  int counter_;                      // 本组已写几条
   bool finished_;
+  std::string finished_payload_;     // Finish() 的结果（幂等）
 };
 
 // ---- §3.2 只读访问器 ----
@@ -73,9 +75,23 @@ class BlockReader {
   uint32_t RestartOffset(size_t i) const;
 
  private:
+  // 解出 off 处的一条 entry。group_start==true 表示该处是 restart 点（previous key 视为空，
+  // 且要求 shared == 0）。prev_key 仅在 group_start==false 时使用。任何违规 ⇒ kCorruption。
+  Status DecodeEntry(size_t off, bool group_start, const std::string& prev_key, std::string* key,
+                     Slice* value, size_t* next) const;
+  bool IsRestartOffset(size_t off) const;
+  // 从 target 所在 restart 组起点顺序解码到 target（组内 prefix 状态由此恢复）。
+  Status DecodeFromGroupStart(size_t target, std::string* key, Slice* value) const;
+  // 解出 off 处 entry 并置为当前位置（off 必须是合法 entry 起点）。
+  Status SetTo(size_t off);
+  // cur 之前那条 entry 的起始偏移；cur 之前没有 entry 时返回 kNoEntry。
+  static const size_t kNoEntry = static_cast<size_t>(-1);
+  size_t PrevOffset(size_t cur) const;
+
   Slice payload_;
   std::vector<uint32_t> restarts_;
-  size_t entry_offset_;      // 当前 entry 的起始偏移（restart 点或 delta 起点）
+  size_t entry_area_end_;    // entry 区的结束偏移（restart 数组起点）
+  size_t entry_offset_;      // 当前 entry 的起始偏移
   std::string key_;          // 已复原的当前 key
   Slice value_;
   bool valid_;
