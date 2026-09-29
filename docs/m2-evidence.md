@@ -150,3 +150,15 @@ MIDDLE_LOCATABLE 1
 退出码: 0
   判据：必须返回 kCorruption（拒绝启动）、错误信息含文件名与字节偏移（可定位）——
   这正是「尾部残骸可安全截断」与「中间损坏必须拒绝」的分界线（design §5.3）。
+
+## M2.3 前置 —— ASan 门禁复跑（覆盖 M2.2 新增的 9 条恢复用例）
+
+执行时间：2026-09-29T20:21:36+08:00
+
+$ cmake -S . -B build-asan -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build-asan -j8 && ./build-asan/bin/lsm_tests
+ASan 构建 warning 计数：0
+ASan 运行退出码：0
+[----------] Global test environment tear-down
+[==========] 66 tests from 14 test suites ran. (81366 ms total)
+[  PASSED  ] 66 tests.
+AddressSanitizer/LeakSanitizer/runtime error 报告出现次数：0

@@ -165,6 +165,22 @@ bash scripts/lsm_crash_test.sh --rounds 30 --mode nosync  # 只断言无半写/�
 | 实测口径 | §9.1 的 A09「write 每次只写 1 字节 ⇒ Append 仍成功」需要 WAL 层知道写入字节数 | M1 冻结的 `WritableFile::Append` 只返回 `Status`，调用方拿不到字节数 | M2.1 用「信封式 FaultyEnv 把写切成 N 字节块」实现该注入（数据仍完整），并在测试注释里写明这一点 |
 | **观察项（待 #4 评审裁决）** | D7「重放时 `batch.sequence <= last_sequence_` 则跳过」把「sequence 回退」**静默**吞掉 | 写 A12 时实测到：只要文件编号与 sequence 反序，数据会被无声丢弃且 `Open` 返回 `kOk` —— 这正是"写入串行化被破坏"的 bug 该被暴露的场景（§5.2 自己也写了"不得重排序，乱序应报 kCorruption 暴露"） | 本阶段**按设计实现**（静默跳过，不算偏离），但登记为观察项：建议 M2.3 或 #4 评审时改为「跳过并打 WARN」或「判 kCorruption」，二选一须与 D7 一起拍板 |
 
+## 11. M2 进度与接续点（滚动更新：任何时刻中断，从这里接着做）
+
+| 子里程碑 | 状态 | 证据锚点 |
+|---|---|---|
+| M2.1 WAL record 格式与跨块切分 | ✅ | A01~A10 全绿；\`docs/m2-evidence.md\` 的 M2.1 小节 |
+| M2.2 DB::Open 恢复 + 崩溃对账 | ✅ | \`TOTAL_ROUNDS 100 MISSING_TOTAL 0 MISMATCH_TOTAL 0\`；A11~A19 全绿 |
+| M2.2c 损坏注入端到端 | ✅ | B03 \`TAIL_CASES 1401 TAIL_OK 1401 TAIL_FAIL 0\`；B04 中间损坏拒绝启动且可定位 |
+| 门禁 | ✅ | 干净重建 0 warning + **66/66**；ASan 66/66 退出码 0 报告 0 条 |
+| M2.2d \`MemEnv\` + A27~A31（掉电语义/固定种子撕裂/崩溃回滚） | ⏳ 未做 | 设计 §9.1 的 CrashSim 组；按 §4 的裁决 \`MemEnv\` 落在 M2.2 |
+| M2.3 组提交 + \`sync\` 语义（A20~A26）+ \`fsbench_commit_latency\` | ⏳ 未做 | 设计 §6.3/§6.4/§7 与 §9.3 的固定输出格式 |
+| #4 独立评审 + 阻断项修复 + tag \`m2-wal\` | ⏳ 未做 | 评审重点见 M2 指令 §4 的 9 条 |
+
+**接续时先做的事**：① \`bash scripts/lsm_build.sh\` 确认 66/66；② 读本文件 §9 的 5 处修订 + 1 条观察项；
+③ 从 M2.2d 开始（\`tests/memenv.{h,cpp}\` 的内存 FS + fsync 水位 + 固定种子撕裂 + 崩溃回滚），
+它同时也是 M2.3 组提交测试（A20~A26）的 seam。
+
 另有两处**指令未覆盖、由设计补齐**的必要项（已在设计门获批，登记备查）：
 - **D12**：M2 无 flush ⇒ 恢复期必须按 WAL 实测字节数放大 MemTable 容量，否则 100 MiB WAL 会在 `write_buffer_size` 处 `kFrozen` 导致恢复失败。
 - **D10**：`LOCK` 文件进程级独占（超出指令明确要求，已由用户裁决纳入）。
