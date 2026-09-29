@@ -366,3 +366,25 @@ $ ./build/bin/lsm_tests --gtest_filter=GroupCommit.* ; bash scripts/lsm_build.sh
 [==========] 76 tests from 18 test suites ran. (27471 ms total)
 [  PASSED  ] 76 tests.
 [OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+## M2 收口 —— 修复评审 6 条阻断项后的完整门禁
+
+执行时间：2026-09-29T23:29:02+08:00
+
+$ bash scripts/lsm_gate.sh --rounds 100
+  PASS  clean rebuild + 0 warning + full suite (79/79)
+  PASS  ASan full suite
+  PASS  crash reconciliation kill -9 x 100 (sync mode)
+  PASS  byte-by-byte truncation scan (B03, 1401/1401)
+  PASS  middle corruption refused (B04)
+  [OK] all gates passed
+
+$ setarch $(uname -m) -R ./build-tsan/bin/lsm_tests   （修复后的最终代码）
+TSan 构建 warning 计数：0
+TSan 运行退出码：0
+[----------] Global test environment tear-down
+[==========] 79 tests from 18 test suites ran. (388450 ms total)
+[  PASSED  ] 79 tests.
+ThreadSanitizer 报告出现次数：0
+
+注：本轮修复触及 db_impl.cpp / memtable.cpp / scripts/lsm_crash_test.sh，故 TSan 全量为修复后重跑。
