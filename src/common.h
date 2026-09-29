@@ -275,6 +275,9 @@ struct Options {
   size_t max_open_files = 64;
   // M3 增补（§8.7 E8）：flush 路径观察点。
   FlushHook* flush_hook = nullptr;
+  // M3.3 增补（§1.2 边界 5 / D6）：WAL 回收开关。默认开启；关闭时一个 *.log 都不删
+  // （M3-A48 的对照）。判据本身仍是 I34 的单一真相源（§6.6.2）。
+  bool recycle_log_files = true;
 };
 
 // ---------------------------------------------------------------------------

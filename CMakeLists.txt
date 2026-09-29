@@ -116,6 +116,9 @@ add_executable(lsm_tests
   # M3.2：flush / 读路径（A20~A30）与迭代器（A31~A34）
   tests/flush_test.cpp
   tests/iterator_test.cpp
+  # M3.3：恢复/元数据/WAL 回收（A35~A54）+ 崩溃脚本用的 flush 探针
+  tests/recovery_m3_test.cpp
+  tests/crash_flush_test.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}
@@ -143,3 +146,7 @@ target_link_libraries(lsm_damage_test PRIVATE lsm)
 
 # B07：单次提交延迟微基准（docs/m2-design.md §9.2/§9.3；M5 的性能分母）
 add_executable(fsbench_commit_latency scripts/fsbench_commit_latency.cpp)
+
+# M3.3：四个门禁脚本（B01/B03/B04/B05）共用的探针
+add_executable(lsm_m3_probe scripts/m3_probe.cpp)
+target_link_libraries(lsm_m3_probe PRIVATE lsm)

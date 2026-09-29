@@ -1,11 +1,11 @@
-// src/db_impl.h —— 持久化实现（docs/m2-design.md §5/§6/§7 + docs/m3-design.md §6/§7）
+// src/db_impl.h —— 持久化实现（docs/m2-design.md §5/§6/§7 + docs/m3-design.md §6/§7/§8）
 //
-// M3.2 的过渡形态（design §11.2）：flush 路径 + 读路径串联 + MergingIterator/DBIter +
-// 单后台线程；版本注册**只在内存**（不写不读 META），Open 时若目录里存在 *.sst 一律拒绝。
+// M3.3：完整启动恢复（元数据持久化 + 孤儿清理 + WAL 轮转/回收），删除 M3.2 的 5 行 *.sst guard。
 #ifndef LSM_DB_IMPL_H_
 #define LSM_DB_IMPL_H_
 
 #include <condition_variable>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -27,6 +27,7 @@ namespace lsm {
 bool DbMutexHeldOnThisThread();
 
 // M2 的恢复报告（design §8.2 明写"这个接口 M2 就要有"；A13 的判据含"可读"）。
+// M3.3 只增不改（§8.4 的计数纪律：任何丢弃/跳过/截断/删除都必须有一个计数落点）。
 struct RecoveryStats {
   uint64_t log_files = 0;               // 扫描到的 *.log 数
   uint64_t records_replayed = 0;        // 实际重放的 batch 数
@@ -35,6 +36,19 @@ struct RecoveryStats {
   uint64_t tail_truncated_bytes = 0;    // 尾部截断掉的字节数（>0 表示发生过残骸截断）
   SequenceNumber last_sequence = 0;     // 恢复后的 last_sequence_
   std::string truncation_note;          // 截断原因（可定位）
+  // ---- M3.3 新增（§8.4）----
+  bool meta_present = false;            // 步骤 ⑤：版本元数据是否存在
+  uint64_t sst_files_registered = 0;    // 步骤 ⑤：版本里的文件数
+  uint64_t sst_bytes_registered = 0;    // 步骤 ⑤：版本里各文件 file_size 之和
+  uint64_t orphan_tmp_removed = 0;      // 步骤 ⑥a
+  uint64_t orphan_sst_removed = 0;      // 步骤 ⑥b
+  uint64_t orphan_bytes_removed = 0;    // 步骤 ⑥a+b 删掉的字节数
+  uint64_t obsolete_logs_removed = 0;   // 步骤 ⑥c（受 recycle_log_files 控制）
+  uint64_t obsolete_log_bytes_removed = 0;
+  uint64_t orphan_remove_failed = 0;    // 步骤 ⑥ 任一删除失败（只计数不阻断）
+  SequenceNumber max_sequence_in_files = 0;   // 步骤 ⑧（M3-A38 的比对对象）
+  uint64_t current_log_recreated = 0;   // 步骤 ⑨：当前 log 缺失而重建（正常情况下不该发生）
+  uint64_t unknown_metaindex_entries = 0;  // 读 .sst 时的未知 metaindex 条目（§3.4）
 };
 
 // M3 的 flush 统计（docs/m3-design.md §8.4；"丢弃/失败必须计数"的单一落点）。
@@ -45,6 +59,10 @@ struct FlushStats {
   uint64_t immutables_abandoned = 0;   // Close() 时仍未落盘的 immutable 数（§6.5）
   uint64_t stall_events = 0;           // 写者因 kMaxImmutableMemTables 停等的次数
   uint64_t stall_micros = 0;
+  uint64_t rotations = 0;              // WAL 轮转成功次数（§6.6.1）
+  uint64_t rotate_failed = 0;          // WAL 轮转失败次数（整批拒绝，不置 bg_error_）
+  uint64_t log_files_deleted = 0;      // WAL 回收实际删掉的文件数（§6.6.2）
+  uint64_t log_bytes_deleted = 0;      // WAL 回收实际删掉的字节数
   uint64_t index_size_warn = 0;        // TableBuilder 的索引超阈值计数（§3.3）
   std::string last_error;              // 最近一次 flush 失败的可读 Status
 };
@@ -70,7 +88,7 @@ struct DbReadStats {
 // 返回值所有权归调用方。
 Iterator* NewMemTableUserIterator(const MemTable* mem, const InternalKeyComparator& icmp);
 
-// 持久化 DB：WAL + MemTable + 内存 Version（M3.2 过渡形态：注册不落 META）
+// 持久化 DB：WAL + MemTable + 内存 Version（M3.3：注册写 META，恢复从 META 重建）
 class PersistentDBImpl : public DB {
  public:
   ~PersistentDBImpl() override;
@@ -82,10 +100,52 @@ class PersistentDBImpl : public DB {
   Status Sync() override;
   Status Close() override;
 
-  // 诊断（测试与证据用）：已 fsync 覆盖到的最大 sequence
+  // 诊断（测试与证据用）：已 fsync 覆盖到的最大 sequence（受 commit_mu_ 保护，M2 起如此）
   SequenceNumber durable_seq() const { return durable_seq_; }
+  // 诊断：已真正 Append 进**当前 log** 的最大 sequence（I32 的 per-log 边界，§15 R1）
+  SequenceNumber log_last_appended_seq() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return log_last_appended_seq_;
+  }
+  // 诊断：恢复/写入后的 last_sequence_（I31 的唯一口径）
+  SequenceNumber last_sequence() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return last_sequence_;
+  }
+  // 诊断：当前 WAL 编号 / 当前 memtable 的 log_number（I34 回收判据的输入）
+  uint64_t log_number() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return log_number_;
+  }
+  uint64_t memtable_log_number() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return memtable_log_number_;
+  }
+  uint64_t next_file_number() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return next_file_number_;
+  }
+  // 诊断：当前版本里的 min_log_number_to_keep（§6.6.2 的 I34 判据值）
+  uint64_t min_log_number_to_keep() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return version_ == nullptr ? 1 : version_->min_log_number_to_keep();
+  }
+  // 诊断：当前版本注册的文件号（降序）
+  std::vector<uint64_t> registered_file_numbers() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    std::vector<uint64_t> out;
+    if (version_ != nullptr) {
+      for (const FileMetaData& f : version_->files()) out.push_back(f.number);
+    }
+    return out;
+  }
   // 诊断：当前等待结算的写者数（A20 的确定性屏障靠轮询它来等"整批就位"）
   size_t pending_writers();
+  // 诊断：Close 是否已置 closed_（M3-A51 用它把"Close 已开始"与"放行被阻的 flush"定序）
+  bool closed_for_test() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return closed_;
+  }
   // 恢复报告（只读；由 RecoverAndOpen 在恢复期间填好）
   RecoveryStats GetRecoveryStats() const { return recovery_stats_; }
 
@@ -98,13 +158,20 @@ class PersistentDBImpl : public DB {
   // 用于证明 SpyEnv 的「持锁零 IO」探针真的会报警（M3-A23 的防空绿要求，docs/m3-prerequisites §9.2）。
   void RunHoldingDbMutexForTest(const std::function<void()>& fn);
 
+  // 仅测试的 flush seam（M3-A35/A36 的"关库时当前 log 为空、老 log 已回收"契约）：
+  // 把当前 memtable 冻结并等待后台注册完成，再把当前 log 轮转成**空**文件。
+  // 设计 §8.7 E4 不新增公共 DB::Flush()；小 write_buffer_size 也无法冲刷"最后一个 memtable"
+  // （触发冻结的那一批必然落进新 memtable/新 log），所以这条契约需要这个最小 seam。
+  // 生产路径不调用它；它不写任何用户数据。
+  Status ForceFlushForTest();
+
  private:
   friend Status DB::Open(const Options&, const std::string&, DB**);
 
   PersistentDBImpl(const Options& options, const InternalKeyComparator& icmp, std::string dbname,
                    size_t memtable_capacity);
 
-  // design §5.2：两遍扫描（先规划 + 截断，再按 D12 的容量重放）
+  // design §5.2/§8.3：两遍扫描（先规划 + 截断，再按 D12 的容量重放）
   static Status RecoverAndOpen(const Options& options, const std::string& name, DB** dbptr);
 
   Status Write(ValueType type, const WriteOptions& options, const Slice& key, const Slice& value);
@@ -114,13 +181,23 @@ class PersistentDBImpl : public DB {
   Status RunFlusher();                                   // 队首：组批 → 冻结 → 写 WAL → 结算
   static std::string EncodeGroup(SequenceNumber begin, const std::vector<Pending*>& members);
 
-  // M3.2 flush 状态机（§6.2/§6.3 去掉 META 步骤）与读路径串联（§7.1）。
+  // M3.2 flush 状态机（§6.2/§6.3）与读路径串联（§7.1）。
   void StartBackgroundThread();
   void BackgroundLoop();
   void FlushImmutable(const std::shared_ptr<struct Immutable>& imm);
   void WaitForImmutableCapacity();
   Status GetInternal(const Slice& key, std::string* value, DbReadStats* delta);
   void MergeReadStats(const DbReadStats& delta);
+
+  // ---- M3.3（§6.3 步骤 ⑦/⑨、§6.6）----
+  // 需要 mutex_：min({memtable_} ∪ immutables_ 中除 exclude 之外的表)（§6.6.2 的单一真相源）。
+  uint64_t RecomputeMinLogNumberToKeepLocked(const struct Immutable* exclude) const;
+  // 删除编号 < min_log_to_keep 的 *.log（在 META durable 之后调用；锁外做 IO）。
+  void RecycleObsoleteLogs();
+  // 轮转：创建编号 number 的空 log 文件（NewWritableFile + Close + SyncDir）。
+  Status CreateEmptyLogFile(uint64_t number);
+  // 轮转：fsync 旧 log → 发布 durable → 建新 log（编号 +1）→ 原子换 log_/log_number_。
+  Status RotateLog();
 
   const Options options_;
   const InternalKeyComparator internal_comparator_;
@@ -132,10 +209,14 @@ class PersistentDBImpl : public DB {
   std::unique_ptr<WALWriter> log_;
   std::unique_ptr<FileLock> file_lock_;
 
-  // M3：文件号空间与当前 log（M3.2 不轮转，log_number_ 不变；log_sealed_ 仅为对齐 §6.1 锁表）
+  // M3：文件号空间与当前 log（§6.1 的状态表；log_number_ 只由当前 flusher 修改，L20）
   uint64_t log_number_ = 0;
   uint64_t next_file_number_ = 1;
-  bool log_sealed_ = false;
+  bool log_sealed_ = false;       // 当前 log 已封口（冻结时置位，轮转完成后清）
+  bool need_rotate_ = false;      // 待轮转（阶段 A 置位，阶段 A' 做 IO）
+  // §6.6.2 / §8.3 步骤 ⑩：当前 memtable 的**最早写入所在 log**。恢复时 = 被重放 log 的最小编号；
+  // 冻结时旧表保留它自己的值，新表取当时的 log_number_（轮转后不更新 ⇒ 保守，绝不漏删）。
+  uint64_t memtable_log_number_ = 1;
 
   // M3：单后台 flush 线程（§6.5/L21：它只取 mutex_，永不碰 commit_mu_）
   std::thread bg_thread_;
@@ -169,9 +250,10 @@ class PersistentDBImpl : public DB {
   SequenceNumber last_sequence_ = 0;  // 受 mutex_ 保护
   RecoveryStats recovery_stats_;      // 恢复期填好，之后只读
   SequenceNumber durable_seq_ = 0;    // 已 fsync 覆盖到的最大 sequence（受 commit_mu_ 保护）
-  // I32 修复：**已真正 Append 进 log 的**最大 sequence（受 mutex_ 保护）。水位只按它发布，
-  // 不按 last_sequence_ —— 后者在锁内取批时就推进了，而 Append 是锁外做的。
-  SequenceNumber appended_seq_ = 0;
+  // I32 修复（§15 R1）：**已真正 Append 进当前 log** 的最大 sequence（受 mutex_ 保护）。
+  // 水位只按它发布，不按 last_sequence_ —— 后者在锁内取批时就推进了，而 Append 是锁外做的。
+  // per-log 语义：轮转前先 fsync 旧 log 并发布水位，再换文件，故它是"当前 log 的已追加边界"。
+  SequenceNumber log_last_appended_seq_ = 0;
   Status bg_error_;
   // 初始为 true：恢复中途失败时对象会被 unique_ptr 析构，此时 log_ 尚未打开 ——
   // 若不这样，析构会走到 Close() 里对 nullptr 的 log_ 取 Sync（实测段错误，见 docs/m2-evidence.md）

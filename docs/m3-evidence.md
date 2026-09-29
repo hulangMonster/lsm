@@ -113,3 +113,67 @@ M2 的 5 条腿在 M3.1 后全部仍 `PASS`（见 §2 最后一行）；M2 的 8
 - 删除过渡妥协②的 5 行 guard，并以 `M3-A35`/`A36` 恢复"重开后仍在"的覆盖。
 - 补一条**带 snapshot 的块内 Seek** 回归（针对 §4 的缺陷类：键序必须走 `InternalKeyComparator`）。
 - `recycle_log_files` 必须真正接线（本步为无效开关，M3.3 生效并有专属用例 `M3-A48`）。
+
+---
+
+## M3.3 —— 版本元数据持久化 + 启动恢复 + WAL 轮转/回收 + 崩溃脚本 + 全部门禁
+
+### 1. 交付
+新增：`tests/recovery_m3_test.cpp`（`M3-A35`~`A54`）、`tests/crash_flush_test.cpp`、
+`scripts/lsm_flush_crash_test.sh`、`scripts/lsm_flush_restart_test.sh`、`scripts/lsm_sst_damage_test.sh`、
+`scripts/lsm_fd_leak_test.sh`、`scripts/m3_probe.cpp`（前两者的驱动）。
+必改：`src/version_set.{h,cpp}`（`META` 的 `Persist`/`Recover`）、`src/version_edit.{h,cpp}`（`META` 编码）、
+`src/db_impl.{h,cpp}`（§8.3 完整恢复、**删除 M3.2 的 5 行 `*.sst` guard**、WAL 轮转 §6.6.1、
+`min_log_to_keep` §6.6.2、孤儿清理、`RecoveryStats`/`FlushStats` 新字段）、`src/common.h`
+（`Options::recycle_log_files`，§12.4 点名）、`CMakeLists.txt`、`tests/flush_test.cpp`（A22 契约推进）、
+`tests/sstable_table_test.cpp`（新增 snapshot-Seek 回归）。
+
+### 2. 判据实测（**本节全部由我在提交前独立复现**）
+| 判据 | 命令 | 结果 |
+|---|---|---|
+| **门禁（`--require-m3`：缺脚本即硬失败）** | `bash scripts/lsm_gate.sh --rounds 100 --no-asan --require-m3` | **8/8 PASS**，末行 `[OK] 全部门禁通过` |
+| ↳ M2 四腿 | 同上 | `干净重建 + 0 warning + 全量用例` / `崩溃对账（kill -9 x 100）` / `逐字节截断扫描` / `中间损坏拒绝启动` 全 PASS |
+| ↳ M3 四腿（正向标记） | 同上 | `M3-B01 flush 崩溃对账` / `M3-B03 落盘重启` / `M3-B04 SST 损坏扫描` / `M3-B05 句柄不增长` 全 PASS |
+| ASan 全量 | `./build-asan/bin/lsm_tests` | `[  PASSED  ] 141 tests.`（无 ASan/LSan 报告） |
+| TSan 全量 | `setarch $(uname -m) -R ./build-tsan/bin/lsm_tests` | `[  PASSED  ] 141 tests.`；`WARNING: ThreadSanitizer` 计数 = **0** |
+| 用例数 | — | **117 → 141**（+24：`M3-A35`~`A54` 与 snapshot-Seek 回归等） |
+
+四个脚本的**收尾标记行**（设计 §11.3 要求的"正向标记"，跑通即为验收）：
+```
+SST_FILES_TOTAL 105        LOGS_DELETED_TOTAL 100      MISSING_TOTAL 0     ROUNDS_OK 100   [FLUSH_CRASH_OK]
+RECORDS_REPLAYED 0         RESTART_KEYS_OK 2000/2000    SST_FILES_REGISTERED 2   [FLUSH_RESTART_OK]
+SST_DAMAGE_CASES 1007      SILENT_WRONG 0
+FD_GROWTH 0                FD_BASELINE 8               FLUSHES_COMPLETED 452
+```
+> `SST_FILES_TOTAL > 0` 与 `LOGS_DELETED_TOTAL > 0` 是门禁 v2 的**硬标记**：它们证明"真的发生过 flush 与回收"，
+> 而不是"脚本退出码为 0 却什么都没测"（D9.6 的空绿）。
+
+### 3. 反"空绿"与断言完整性
+- 整个 `tests/` 目录在 M3.3 里**只删除了 1 行断言**：`EXPECT_EQ(npos, e.find("META"))`（M3.2 的
+  "M3.2 不写 META"过渡断言）——M3.3 起按 §11.3 本来就要写 `META`，属**授权的契约推进**；
+  它被替换成更强的 `M3-A22` 顺序链：6 条存在性断言 + `fsync(.sst.tmp) → OnBeforeRename → rename → SyncDir
+  → OnBeforeRegister` 的 6 条 `EXPECT_LT` 顺序断言。
+- 零断言 TEST = **0**；`DISABLED_`/`GTEST_SKIP`/`|| true` = **0**；三构建 `error|warning` 计数 = **0**。
+
+### 4. 本阶段登记的设计修订（详见 `docs/m3-design.md` §15）
+- **R7**：`M3-A46` 判据重述（设计字面自相矛盾：FIFO 保证下"注册后 log 1/2 未删"不可能成立）⇒ 改为直接断言
+  §8.3 步骤 ⑩（`memtable_log_number() == 1`）+ 回收后数据仍可读；**目的不变、不降强度**。
+- **R8**：§6.6.2 的 `min_log_to_keep` 由"保守"改为**精确**（新 memtable 的 `log_number` 随轮转更新），
+  否则刚被 flush 覆盖的 log 永不回收、重开必重放（`A35`/`B03` 红）。
+- **R9**：新增**仅测试** seam `PersistentDBImpl::ForceFlushForTest()`（小 buffer 无法冲刷最后一个 memtable；
+  与既有 `RunHoldingDbMutexForTest()` 同纪律）。
+
+### 5. 未验证 / 未做（诚实清单，不得计入验收）
+1. **`M3-B02` 的进程级三注入点**（写文件后 / rename 前 / 注册前各一次真实 `kill -9`）：未做；
+   目前 `lsm_flush_crash_test.sh` 仍是**随机时刻** kill -9；`crash_flush_test.cpp` 只在 `MemEnv` 下做了三个注入点的**确定性**覆盖 ⇒ 登记为部分覆盖。
+2. **`B03` 的"物理删除当前 log 后仍全部可读"**（纯 SSTable 的强证据）：未做。
+3. **`B04` 的 `verify_checksums=false` 对照**（证明开关有效）：未做。
+4. **`B08` 读放大基线**（100 万 key 的固定格式行 p50/p90）：未跑。
+5. **`B09` 真实磁盘 `du`/有界 log 数**：未单独跑；其**正确性**由 `B01` 的 `LOGS_DELETED_TOTAL > 0` 与
+   `A45`/`A47`/`A48` 覆盖。
+6. **`A54` 的 `index_size_warn` 未在用例内造数**（阈值 > 65536 块）：该计数由 `M3-A11` 在 `TableBuilder` 层覆盖，
+   `FlushStats` 只做逐字段转发，`A54` 仅断言转发默认值 0。
+7. **`A38` 没有"完全独立解码器"参照**：只做了手工 trailer 拼字节 + 已知写入条数。
+8. **`Open` 现在是 O(总数据量)**（逐个全量扫描已注册 `.sst` 以复核 `META.max_sequence`，`A38`）：
+   M3 规模可接受，登记为 M4 的优化项。
+9. **所有 `SyncDir` 结论仅"调用顺序"断言**（`MemEnv` 不建模 dirent，§15 R4）：不宣称掉电安全。

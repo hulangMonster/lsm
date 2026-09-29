@@ -2262,3 +2262,33 @@ CURRENT / Bloom filter 内容 / `WriteBatch` 公共 API / 块缓存 / 压缩算�
   而隔离实验证明现在就换会让 `M3-A19` 的"计数 seam 真被用上"断言（`sequential_files_opened >= 1`）
   失效 —— 该断言的意图是防空绿，值本身要随 API 一起改。⇒ 与 `TableCache` 的引入**同批**在 M3.2
   完成（一次把"随机读 API + 缓存 + 计数 seam"三件事改到位），M3.2 必须更新该计数器的语义。
+
+### R7 —— `M3-A46` 的判据重述（设计字面自相矛盾，实测暴露）
+
+- **设计原文（§10.1）**：恢复后立刻 flush + 注册 ⇒ 断言「log 1 与 log 2 **未被删**」（因为恢复出的
+  memtable 的 `log_number == 1`）。
+- **实测矛盾**：§6.6.2 的 FIFO 保证 + 注册时该表已从 pending 移除 ⇒ 上述两条断言**不可能同时成立**
+  （表落盘后 log 1/2 就满足了可删条件）。
+- **落地（M3.3）**：A46 改为断言两件**直接事实** —— ① §8.3 步骤 ⑩ 的落地结果
+  `memtable_log_number() == 1`（漏掉步骤 ⑩ 必红）；② 老 log 被回收后数据仍可读（由已注册的 SSTable 覆盖）。
+- **影响面**：A46 的**目的**（防止漏掉步骤 ⑩ 导致数据丢失，I34 的必要性形态）不变，断言从"间接后果"
+  改为"直接事实"；不降低强度。
+
+### R8 —— §6.6.2 的 `min_log_to_keep` 由「保守」改为「精确」
+
+- **设计原文**：新 memtable 的 `log_number` **不**随轮转更新。
+- **实测后果**：刚被 flush 覆盖的 log 恒 `>= min_log_to_keep` ⇒ **永不回收**、重开必重放
+  （A35/B03 红，设计 §1 的 G7"纯 SSTable 启动"落空）。
+- **落地（M3.3）**：轮转成功后新 memtable 的 `log_number` 更新为新 log；
+  `min_log_to_keep = min({pending 表的 log_number})`（精确口径，按 §6.6.2 的五步证明取值）。
+- **证据**：`M3-A45`（判据本身）、`M3-A48`（开关双向有效）、`M3-B01` 的 `LOGS_DELETED_TOTAL 100 > 0`、
+  `M3-B03` 的 `RECORDS_REPLAYED 0`。
+- **附带纪律**：轮转取号必须走共享分配器 `next_file_number`（§3.1），**不得**写死 `log_number_ + 1`
+  —— 恢复后 `next` 可能更大，写死会跨 `.log`/`.sst` 重用编号；轮转前 fsync 旧 log 并发布 durable（I32 的 per-log 边界，A50）。
+
+### R9 —— 新增仅测试 seam `PersistentDBImpl::ForceFlushForTest()`
+
+- **为什么必须有**：小 `write_buffer_size` **无法**冲刷"最后一个 memtable"——触发冻结的那一批必然落进
+  新的 memtable / 新的 log。而 `M3-A35`/`M3-B03` 的契约是"关库时当前 log 为空、老 log 已被回收"。
+- **纪律**：与既有 `RunHoldingDbMutexForTest()` 同级别（**仅测试用**，不参与生产路径；`db_impl.h` 内有用途注释）。
+- **影响面**：无契约变化；`#4` 评审可核对它不被任何生产路径调用。

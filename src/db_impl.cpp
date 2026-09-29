@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -258,6 +259,7 @@ Status PersistentDBImpl::RunFlusher() {
   // commit_mu_ 置 closed_ 并 notify bg_cv_，不会与停等形成死锁（A25 的 ③/④）。
   WaitForImmutableCapacity();
 
+  bool rotate_needed = false;
   {
     std::lock_guard<std::mutex> ql(commit_mu_);
     if (queue_.empty()) return Status::OK();               // 已被别的 flusher 处理
@@ -284,28 +286,28 @@ Status PersistentDBImpl::RunFlusher() {
     } else if (!bg_error_.ok()) {
       reject = bg_error_;
     } else {
-      // §6.2：容量不足**不再**是写的失败原因。旧表冻结进 immutables_（所有权事实代替 frozen_），
-      // 新表容量由 NewTableCapacity 保证「本批的 Add 在结构上不可能返回 kFrozen」。
+      // §6.2：容量不足**不再**是写的失败原因。冻结在锁内、纯内存；旧表进 immutables_ 时
+      // **保留它自己的 log_number**（§6.6.2），新表容量由 NewTableCapacity 保证本批不可能 kFrozen。
+      const size_t new_cap =
+          std::max(options_.write_buffer_size, footprint + kMemTableNodeOverhead);
       if (memtable_->WouldReject(footprint)) {
         if (memtable_->NumEntries() > 0) {
           std::shared_ptr<Immutable> imm(new Immutable());
           imm->mem = memtable_;
-          imm->log_number = log_number_;
+          imm->log_number = memtable_log_number_;
           immutables_.push_back(imm);
-          memtable_ = std::make_shared<MemTable>(
-              internal_comparator_,
-              std::max(options_.write_buffer_size, footprint + kMemTableNodeOverhead));
-          log_sealed_ = true;   // M3.2 不轮转（§11.2 的过渡妥协③），仅为对齐 §6.1 的状态位
+          memtable_ = std::make_shared<MemTable>(internal_comparator_, new_cap);
+          memtable_log_number_ = log_number_;   // 轮转前暂记；A' 轮转成功后更新为新 log（§6.6.2）
+          log_sealed_ = true;                   // 当前 log 封口，本批起必须轮转
+          need_rotate_ = true;
+          bg_cv_.notify_all();                  // 唤醒后台线程（L13）
         } else {
-          // 空表：不必制造空 SSTable，直接换一个容量足够的新表。
-          memtable_ = std::make_shared<MemTable>(
-              internal_comparator_,
-              std::max(options_.write_buffer_size, footprint + kMemTableNodeOverhead));
+          // 空表：不必制造空 SSTable，直接换一个容量足够的新表（当前 log 未封口，无需轮转）。
+          memtable_ = std::make_shared<MemTable>(internal_comparator_, new_cap);
+          memtable_log_number_ = log_number_;
         }
-        bg_cv_.notify_all();    // 唤醒后台线程（L13）
       }
-      last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
-      payload = EncodeGroup(begin, members);
+      rotate_needed = log_sealed_ || need_rotate_;
     }
   }
 
@@ -321,13 +323,44 @@ Status PersistentDBImpl::RunFlusher() {
 
   if (options_.commit_hook != nullptr) options_.commit_hook->OnGroupTaken();
 
-  // ---- 锁外做 IO（I17/L7）：Append 永远做，fsync 只在组内有人要求时做（I11/D3）----
+  // ---- 阶段 A'（§6.6.1）：轮转在**分配 sequence 之前**；失败 ⇒ 整批拒绝、不置 bg_error_（I33）----
+  if (rotate_needed) {
+    const Status rs = RotateLog();
+    if (!rs.ok()) {
+      {
+        DbMutexGuard ml(mutex_);
+        ++flush_stats_.rotate_failed;
+        flush_stats_.last_error = rs.ToString();
+      }
+      std::lock_guard<std::mutex> ql(commit_mu_);
+      for (Pending* p : members) {
+        p->status = rs;                                     // 整批同一个 Status（I16/I33）
+        p->done = true;
+      }
+      commit_cv_.notify_all();
+      return rs;
+    }
+  }
+
+  // ---- 阶段 B（持 commit_mu_ → mutex_）：分配 sequence + 组 payload（§6.6.1）----
+  {
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    DbMutexGuard ml(mutex_);
+    begin = last_sequence_ + 1;
+    for (size_t i = 0; i < members.size(); ++i) {
+      members[i]->begin = begin + static_cast<SequenceNumber>(i);
+    }
+    last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+    payload = EncodeGroup(begin, members);
+  }
+
+  // ---- 阶段 C（锁外做 IO，I17/L7）：Append 永远做，fsync 只在组内有人要求时做（I11/D3）----
   Status s = log_->Append(Slice(payload));
   if (s.ok()) {
     // I32 修复：Append 返回 kOk 即字节已交给文件（fsync 只决定是否落到介质），所以这个边界
     // 只取决于 Append 的结果，与本次是否 fsync 无关。
     DbMutexGuard ml(mutex_);
-    appended_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+    log_last_appended_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
   }
   if (s.ok() && need_sync) s = log_->Sync();
   if (s.ok()) {
@@ -544,6 +577,46 @@ void PersistentDBImpl::RunHoldingDbMutexForTest(const std::function<void()>& fn)
   fn();
 }
 
+Status PersistentDBImpl::ForceFlushForTest() {
+  uint64_t target = 0;
+  bool enqueued = false;
+  {
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    DbMutexGuard ml(mutex_);
+    if (!bg_error_.ok()) return bg_error_;
+    if (closed_) return Status::IOError("ForceFlushForTest: DB is closed", dbname_);
+    target = flush_stats_.flushes_completed + 1;
+    if (memtable_->NumEntries() > 0) {
+      std::shared_ptr<Immutable> imm(new Immutable());
+      imm->mem = memtable_;
+      imm->log_number = memtable_log_number_;
+      immutables_.push_back(imm);
+      memtable_ = std::make_shared<MemTable>(internal_comparator_, options_.write_buffer_size);
+      memtable_log_number_ = log_number_;
+      log_sealed_ = true;
+      need_rotate_ = true;
+      enqueued = true;
+      bg_cv_.notify_all();
+    } else if (!log_sealed_) {
+      // 空表：仍要把当前 log 轮转成空文件（"关库时当前 log 为空"的契约）。
+      log_sealed_ = true;
+      need_rotate_ = true;
+    }
+  }
+  const Status rs = RotateLog();
+  if (!rs.ok()) return rs;
+  if (!enqueued) return Status::OK();
+  for (int i = 0; i < 8000000; ++i) {
+    {
+      DbMutexGuard ml(mutex_);
+      if (!bg_error_.ok()) return bg_error_;
+      if (flush_stats_.flushes_completed >= target && immutables_.empty()) return Status::OK();
+    }
+    std::this_thread::yield();
+  }
+  return Status::IOError("ForceFlushForTest: timeout waiting for flush");
+}
+
 // A25 探针的访问器：必须定义在 namespace lsm 正体（外部链接），与 db_impl.h 的声明匹配
 bool DbMutexHeldOnThisThread() { return g_db_mutex_held; }
 
@@ -567,7 +640,7 @@ Status PersistentDBImpl::Sync() {
   SequenceNumber appended_before_fsync = 0;
   {
     DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）；持锁期间不做 IO（I17）
-    appended_before_fsync = appended_seq_;
+    appended_before_fsync = log_last_appended_seq_;
   }
   const Status s = log_->Sync();
   if (s.ok()) {
@@ -605,6 +678,105 @@ void PersistentDBImpl::BackgroundLoop() {
       bg_cv_.wait(l, [this] { return bg_stop_; });
       break;
     }
+  }
+}
+
+uint64_t PersistentDBImpl::RecomputeMinLogNumberToKeepLocked(const Immutable* exclude) const {
+  // §6.6.2 的单一真相源：pending = {memtable_} ∪ immutables_（exclude = 正在注册的那张表）。
+  uint64_t m = memtable_log_number_;
+  for (const std::shared_ptr<Immutable>& im : immutables_) {
+    if (im.get() == exclude) continue;
+    if (im->log_number < m) m = im->log_number;
+  }
+  return m == 0 ? 1 : m;
+}
+
+Status PersistentDBImpl::CreateEmptyLogFile(uint64_t number) {
+  const std::string path = LogFileName(dbname_, number);
+  WritableFile* raw = nullptr;
+  Status s = EnvOf()->NewWritableFile(path, &raw);
+  if (!s.ok()) return s;
+  {
+    std::unique_ptr<WritableFile> file(raw);
+    s = file->Close();
+  }
+  if (!s.ok()) return s;
+  return EnvOf()->SyncDir(dbname_);   // §6.6.1 阶段 A'：目录项 durable（R4：只证明调用顺序）
+}
+
+Status PersistentDBImpl::RotateLog() {
+  // 前置：只有当前 flusher 会走到这里（L20），且它已把当前 log 封口（log_sealed_）。
+  uint64_t new_number = 0;
+  {
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    SequenceNumber appended = 0;
+    {
+      DbMutexGuard ml(mutex_);
+      appended = log_last_appended_seq_;
+      // §3.1：`.log` 与 `.sst` **共享**一个单调递增的 next_file_number ⇒ 轮转也必须从
+      // 这个分配器取号（不能写死 log_number_+1：恢复后 next 可能已经更大，写死会重用编号）。
+      new_number = next_file_number_;
+      if (new_number <= log_number_) new_number = log_number_ + 1;
+      next_file_number_ = new_number + 1;
+    }
+    // I32 的 per-log 边界（M3-A50）：先把旧 log 的已 Append 字节落盘，再发布水位、再换文件。
+    // 否则 Sync() 在新 log 上无法覆盖旧 log 的未 fsync 字节，就会多报 durable。
+    const Status s = log_->Sync();
+    if (!s.ok()) return s;
+    if (appended > durable_seq_) durable_seq_ = appended;
+  }
+  // 锁外建文件（§6.6.1 阶段 A' 的 IO 窗口）。
+  Status s = CreateEmptyLogFile(new_number);
+  if (!s.ok()) return s;
+  std::unique_ptr<WALWriter> fresh(new WALWriter(EnvOf(), LogFileName(dbname_, new_number)));
+  s = fresh->Open(false);
+  if (!s.ok()) return s;
+  {
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    log_ = std::move(fresh);
+    DbMutexGuard ml(mutex_);
+    log_number_ = new_number;
+    // §6.6.2 的**精确**口径：当前 memtable 尚未写过任何字节（封口时已把旧表移入 immutables_），
+    // 它的第一批写入必然落在新 log ⇒ 记录的"最早写入所在 log"必须更新为新编号。
+    // 旧实现保留轮转前的编号（设计原文的"保守"说法）会让"刚被 flush 覆盖的那个 log"
+    // 永远 >= min_log_to_keep ⇒ 永远删不掉 ⇒ 重开必然重放（M3-A35 红、WAL 永不回收）。
+    memtable_log_number_ = new_number;
+    log_sealed_ = false;
+    need_rotate_ = false;
+    ++flush_stats_.rotations;
+  }
+  return Status::OK();
+}
+
+void PersistentDBImpl::RecycleObsoleteLogs() {
+  if (!options_.recycle_log_files) return;   // M3-A48：关闭时一个 *.log 都不删
+  uint64_t min_keep = 1;
+  uint64_t current = 0;
+  {
+    DbMutexGuard l(mutex_);
+    min_keep = version_ == nullptr ? 1 : version_->min_log_number_to_keep();
+    current = log_number_;
+  }
+  std::vector<std::string> children;
+  if (!EnvOf()->GetChildren(dbname_, &children).ok()) return;
+  uint64_t removed = 0;
+  uint64_t bytes = 0;
+  for (const std::string& c : children) {
+    uint64_t n = 0;
+    if (!ParseLogFileName(c, &n)) continue;
+    if (n == 0 || n >= min_keep || n == current) continue;   // 严格小于才可删；当前 log 永不删
+    const std::string path = LogFileName(dbname_, n);
+    uint64_t size = 0;
+    EnvOf()->GetFileSize(path, &size);
+    if (EnvOf()->RemoveFile(path).ok()) {
+      ++removed;
+      bytes += size;
+    }
+  }
+  if (removed > 0) {
+    DbMutexGuard l(mutex_);
+    flush_stats_.log_files_deleted += removed;
+    flush_stats_.log_bytes_deleted += bytes;
   }
 }
 
@@ -668,18 +840,45 @@ void PersistentDBImpl::FlushImmutable(const std::shared_ptr<Immutable>& imm) {
   }
 
   if (options_.flush_hook != nullptr) options_.flush_hook->OnBeforeRegister();
+
+  // ⑦a 内存版本替换（§6.3 步骤 ⑦ 的前半）：min_log_number_to_keep 由单一真相源重算（I34）。
+  std::shared_ptr<const Version> snapshot;
   {
     DbMutexGuard l(mutex_);
     if (!bg_error_.ok() || closed_) return;   // 与 Close/失败的竞态：不注册，数据仍在 WAL+内存
     if (version_ == nullptr) {
-      version_ = VersionSet::Empty(log_number_, next_file_number_);
+      version_ = VersionSet::Empty(log_number_ == 0 ? memtable_log_number_ : log_number_,
+                                   next_file_number_);
     }
-    version_ = VersionSet::RegisterFile(*version_, meta, log_number_, next_file_number_);
-    immutables_.pop_front();
+    const uint64_t min_keep = RecomputeMinLogNumberToKeepLocked(imm.get());
+    version_ = VersionSet::RegisterFile(*version_, meta, log_number_, min_keep, next_file_number_);
+    snapshot = version_;
+  }
+
+  // ⑦b META 持久化：META.tmp → fsync → rename(META) → SyncDir（§6.3 步骤 ⑦/L17）。
+  // 这是 IO，必须在 DB 锁外做（L18）。
+  VersionEdit edit;
+  const Status ms = VersionSet::Persist(EnvOf(), dbname_, options_, *snapshot, &edit);
+  if (!ms.ok()) {
+    DbMutexGuard l(mutex_);
+    bg_error_ = ms;              // 粘性 fail-stop（§6.4 的"写/rename META"行）
+    ++flush_stats_.flushes_failed;
+    flush_stats_.last_error = ms.ToString();
+    bg_cv_.notify_all();
+    return;   // imm 留在 immutables_；内存版本已含该文件 ⇒ 本轮可读；WAL **未删**（I34）
+  }
+
+  // ⑦c 注册完成（META 已 durable）：弹出 imm + 计数。
+  {
+    DbMutexGuard l(mutex_);
+    if (!immutables_.empty() && immutables_.front() == imm) immutables_.pop_front();
     ++flush_stats_.flushes_completed;
     flush_stats_.index_size_warn += index_warn;
     bg_cv_.notify_all();
   }
+
+  // ⑨ WAL 回收（§6.3/§6.6.2）：**只在 META 的 rename + SyncDir 之后**执行（I34）。
+  RecycleObsoleteLogs();
 }
 
 Status PersistentDBImpl::Close() {
@@ -729,11 +928,32 @@ Status PersistentDBImpl::Close() {
 }
 
 Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::string& name, DB** dbptr) {
-  // 注入的 Env（A27~A31 的掉电语义测试用 MemEnv）；nullptr 时用真实 POSIX Env
+  // ---- §8.5 ①：Options 合法性校验。全部 kInvalidArgument，**不**置 bg_error_（M2 教训 4）----
+  if (options.comparator == nullptr) {
+    return Status::InvalidArgument("DB::Open: comparator == nullptr");
+  }
+  if (options.write_buffer_size == 0) {
+    return Status::InvalidArgument("DB::Open: write_buffer_size == 0");
+  }
+  if (options.block_size < 512 || options.block_size > 1024 * 1024) {
+    return Status::InvalidArgument("DB::Open: block_size 越界", std::to_string(options.block_size));
+  }
+  if (options.max_open_files == 0 || options.max_open_files > 1000000) {
+    return Status::InvalidArgument("DB::Open: max_open_files 越界",
+                                   std::to_string(options.max_open_files));
+  }
+
+  // 注入的 Env（掉电语义测试用 MemEnv）；nullptr 时用真实 POSIX Env
   Env* env = options.env != nullptr ? options.env : Env::Default();
   if (!env->FileExists(name)) {
     const Status s = env->CreateDir(name);
     if (!s.ok()) return s;
+    // §8.3 ②：新建目录后 SyncDir 其父目录（目录项 durable；R4：只证明调用顺序，不宣称掉电安全）。
+    const size_t slash = name.find_last_of('/');
+    std::string parent = ".";
+    if (slash == 0) parent = "/";
+    else if (slash != std::string::npos) parent = name.substr(0, slash);
+    (void)env->SyncDir(parent);   // 失败只影响掉电语义（MemEnv 不建模目录项），不阻断 Open
   }
 
   // D10：进程级独占（评审阻断项 4 —— 用户已裁决纳入，但此前完全没接线）。
@@ -743,19 +963,78 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   if (!lock_status.ok()) return lock_status;      // 已被别的进程持有 ⇒ kIOError
   ScopedFileLock lock_guard(env, raw_lock);
 
-  // ---- 第一遍：只扫描并规划（§5.2）----
+  // ---- §8.3 ④⑤：版本元数据（META 或 §10.9 的兼容规则）----
   std::vector<std::string> children;
   Status s = env->GetChildren(name, &children);
   if (!s.ok()) return s;
-  // M3.2 的显式过渡妥协②（docs/m3-design.md §11.2）：本子里程碑尚未实现 SSTable 恢复，
-  // 目录里若存在 *.sst 一律拒绝启动（不许静默忽略）。5 行 guard，M3.3 删除。
-  for (const std::string& c : children) {
-    uint64_t ignored_number = 0;
-    if (ParseTableFileName(c, &ignored_number)) {
-      return Status::Corruption(
-          "RecoverAndOpen: 本子里程碑尚未实现 SSTable 恢复（目录里存在已落盘的 SSTable）", c);
+
+  std::shared_ptr<const Version> version;
+  VersionSet::RecoveryResult meta_info;
+  s = VersionSet::Recover(env, name, options, children, &version, &meta_info);
+  if (!s.ok()) return s;
+
+  RecoveryStats stats;
+  stats.meta_present = meta_info.meta_present;
+  stats.sst_files_registered = meta_info.sst_files_registered;
+  stats.sst_bytes_registered = meta_info.sst_bytes_registered;
+  stats.max_sequence_in_files = meta_info.max_sequence_in_files;
+  stats.unknown_metaindex_entries = meta_info.unknown_metaindex_entries;
+
+  // ---- §8.3 ⑥：孤儿清理（只清理可证明未被引用的；失败只计数不阻断）----
+  // 判据全部写在**语义层**（*.sst.tmp / 未注册 *.sst / 编号 < min_log_to_keep 的 *.log），
+  // 不绑定任何具体元数据文件名（M4 换 MANIFEST+CURRENT 时本段不变）。
+  {
+    std::set<uint64_t> registered;
+    for (const FileMetaData& f : version->files()) registered.insert(f.number);
+    const uint64_t min_keep = version->min_log_number_to_keep();
+    const uint64_t cur_log = version->log_number();
+    // 元数据临时文件永不权威：残留即删（它可能来自"写 META.tmp 之后、rename 之前"的崩溃）。
+    const std::string meta_tmp = VersionSet::MetaTempFileName(name);
+    if (env->FileExists(meta_tmp)) env->RemoveFile(meta_tmp);
+    const auto remove_orphan = [&](const std::string& path, bool tmp_kind) {
+      uint64_t size = 0;
+      env->GetFileSize(path, &size);
+      if (env->RemoveFile(path).ok()) {
+        if (tmp_kind) {
+          ++stats.orphan_tmp_removed;
+        } else {
+          ++stats.orphan_sst_removed;
+        }
+        stats.orphan_bytes_removed += size;
+      } else {
+        ++stats.orphan_remove_failed;
+      }
+    };
+    for (const std::string& c : children) {
+      uint64_t n = 0;
+      if (ParseTempFileName(c, &n)) {
+        remove_orphan(name + "/" + c, true);        // ⑥a：*.sst.tmp 构造上永不注册
+        continue;
+      }
+      if (ParseTableFileName(c, &n)) {
+        if (registered.count(n) == 0) remove_orphan(name + "/" + c, false);   // ⑥b：未注册 *.sst
+        continue;
+      }
+      if (ParseLogFileName(c, &n)) {
+        if (!options.recycle_log_files) continue;   // ⑥c：受 recycle_log_files 控制（M3-A48）
+        if (n == 0 || n >= min_keep) continue;      // 严格小于才可删（§6.6.2）
+        if (n == cur_log) continue;                 // 当前 log 永不删
+        uint64_t size = 0;
+        env->GetFileSize(LogFileName(name, n), &size);
+        if (env->RemoveFile(LogFileName(name, n)).ok()) {
+          ++stats.obsolete_logs_removed;
+          stats.obsolete_log_bytes_removed += size;
+        } else {
+          ++stats.orphan_remove_failed;
+        }
+      }
     }
   }
+
+  // ---- §8.3 ⑦：重放集合 = 清理之后目录里**实际存在**的 *.log，按编号数值升序 ----
+  children.clear();
+  s = env->GetChildren(name, &children);
+  if (!s.ok()) return s;
   std::vector<uint64_t> logs;
   for (const std::string& c : children) {
     uint64_t n = 0;
@@ -763,7 +1042,9 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   }
   std::sort(logs.begin(), logs.end());
   const uint64_t hi = logs.empty() ? 0 : logs.back();
+  stats.log_files = logs.size();
 
+  // ---- 第一遍：只扫描并规划（§8.2），判定"尾部残骸 vs 中间损坏"（M2 §5.3 逐字）----
   struct Plan {
     uint64_t number = 0;
     std::vector<std::string> records;
@@ -773,8 +1054,6 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   std::vector<Plan> plans;
   uint64_t total_payload = 0;
   uint64_t total_entries = 0;
-  RecoveryStats stats;
-  stats.log_files = logs.size();
 
   for (uint64_t n : logs) {
     const std::string path = LogFileName(name, n);
@@ -858,9 +1137,8 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
 
   // ---- 第二遍：按 D12 放大容量后重放 ----
   // 保守估计 MemTable 实际占用：编码字节 ×2（长度前缀/对齐/分配 slop）+ 每条节点开销 ×2 + 余量。
-  // M3.2：**没有重放到任何条目时**（新库 / 只有空 log）必须回到 write_buffer_size，
-  // 否则 kRecoverySlack(1 MiB) 会把小 write_buffer_size 的 flush 触发点整个盖住
-  // （M3-A20~A30 全都依赖小 buffer 真的能触发 flush）。
+  // 没有重放到任何条目时（新库 / 只有空 log）必须回到 write_buffer_size，
+  // 否则 kRecoverySlack(1 MiB) 会把小 write_buffer_size 的 flush 触发点整个盖住。
   const size_t recovered_cap =
       static_cast<size_t>(total_payload) * 2 +
       static_cast<size_t>(total_entries) * kMemTableNodeOverhead * 2 + kRecoverySlack;
@@ -869,7 +1147,7 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
                          : std::max(options.write_buffer_size, recovered_cap);
   std::unique_ptr<PersistentDBImpl> db(
       new PersistentDBImpl(options, InternalKeyComparator(options.comparator), name, cap));
-  SequenceNumber last = 0;
+  SequenceNumber replay_last = 0;
   for (const Plan& p : plans) {
     for (const std::string& rec : p.records) {
       SequenceNumber seq = 0;
@@ -878,7 +1156,7 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
       if (!ParseBatch(Slice(rec), &seq, &entries, &why)) {
         return Status::Corruption("RecoverAndOpen: batch 解析失败", why);
       }
-      if (seq <= last) {
+      if (seq <= replay_last) {
         // §5.4 承诺：跳过必须**计数上报**，不得静默（评审优化项）
         ++stats.records_skipped;
         continue;                                      // D7 幂等 + 拒绝 sequence 回退
@@ -892,14 +1170,14 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
           return Status::Corruption("RecoverAndOpen: 重放 Add 失败", a.ToString());
         }
       }
-      last = seq + static_cast<SequenceNumber>(entries.size()) - 1;
+      replay_last = seq + static_cast<SequenceNumber>(entries.size()) - 1;
     }
   }
+  // §8.3 ⑧ / I31 的唯一口径：last_sequence_ = max(WAL 重放最大值, 各已注册文件的 max_sequence)。
+  const SequenceNumber last = std::max(replay_last, version->MaxSequenceInFiles());
   db->last_sequence_ = last;
-  // 恢复期读出的记录必然已在 log 文件里，水位从同一边界起步（首次 Sync 的快照不会低报）。
-  db->appended_seq_ = last;
+  db->log_last_appended_seq_ = last;
   stats.last_sequence = last;
-  db->recovery_stats_ = stats;
   if (stats.tail_truncated_bytes > kMaxTailCorruptWarnBytes) {
     std::fprintf(stderr,
                  "[WARN] recovery: truncated %llu bytes of tail corruption at %s\n",
@@ -911,16 +1189,42 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
                  static_cast<unsigned long long>(stats.records_skipped));
   }
 
-  // ---- 打开 log 继续追加 ----
-  const uint64_t log_number = logs.empty() ? 1 : hi;
-  const std::string hi_path = LogFileName(name, log_number);
-  db->log_.reset(new WALWriter(env, hi_path));
-  s = db->log_->Open(env->FileExists(hi_path));
+  // ---- §8.3 ⑨：当前 log ----
+  // 元数据没有编号（M2 老库 / 元数据缺失）时：有 log 就沿用**最高编号**那个（与 M2 逐字兼容，
+  // 现有 M2 恢复用例依赖"最高编号 log 才允许尾部截断"）；一个 log 都没有才分配 next_file_number。
+  uint64_t log_number = version->log_number();
+  if (log_number == 0) {
+    log_number = logs.empty() ? std::max<uint64_t>(1, version->next_file_number()) : hi;
+  }
+  const std::string current_path = LogFileName(name, log_number);
+  if (!env->FileExists(current_path)) {
+    WritableFile* nf = nullptr;
+    s = env->NewWritableFile(current_path, &nf);
+    if (!s.ok()) return s;
+    {
+      std::unique_ptr<WritableFile> guard(nf);
+      s = guard->Close();
+    }
+    if (!s.ok()) return s;
+    s = env->SyncDir(name);
+    if (!s.ok()) return s;
+    ++stats.current_log_recreated;
+  }
+  db->log_.reset(new WALWriter(env, current_path));
+  s = db->log_->Open(true);
   if (!s.ok()) return s;
-  // M3.2：版本注册只在内存；M3.3 会从 META 恢复出同一结构。next_file_number 与 log 共享空间。
   db->log_number_ = log_number;
-  db->next_file_number_ = std::max<uint64_t>(1, hi + 1);
-  db->version_ = VersionSet::Empty(db->log_number_, db->next_file_number_);
+  // §8.3 步骤 ⑩：恢复出的 memtable 的 log_number = 被重放 log 的最小编号；无重放则 = 当前 log。
+  // 漏掉这一条会直接丢数据（I34 的必要性方向，M3-A46）。
+  db->memtable_log_number_ = logs.empty() ? log_number : logs.front();
+  db->next_file_number_ =
+      std::max<uint64_t>(1, std::max<uint64_t>(version->next_file_number(), log_number + 1));
+  // 当前 log 是"元数据没有编号"时的分配结果 ⇒ 用一个带显式 log_number 的新 Version 替换
+  // （Version 不可变，只能整体重建；M4 换 MANIFEST 后这一步由 VersionSet 内部完成）。
+  db->version_ = std::make_shared<const Version>(version->files(), log_number,
+                                                 version->min_log_number_to_keep(),
+                                                 db->next_file_number_);
+  db->recovery_stats_ = stats;
   db->file_lock_.reset(lock_guard.release());   // 所有权交给 DB（Close/析构时释放）
   db->closed_ = false;
   db->StartBackgroundThread();                  // L12：恢复成功后、发布 *dbptr 之前启动

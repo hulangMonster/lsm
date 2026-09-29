@@ -1,7 +1,9 @@
-// src/version_set.h —— M3 的不可变 Version + 内存 TableCache（docs/m3-design.md §7.4/§8.1）
+// src/version_set.h —— M3 的不可变 Version + 内存 TableCache + META 持久化（docs/m3-design.md §7.4/§8.1）
 //
-// M3.2 范围：注册**只在内存**（不写 META）。VersionSet 的 META Recover/Persist 留到 M3.3，
-// 因此本文件只保留当前阶段真正被使用的版本构建与缓存能力。
+// M3.3 起 VersionSet 的 Recover/Persist 真正落地（§8.1/§10.8）：
+//   Recover 读 META（或按 §10.9 的兼容规则重建），返回不可变 Version 与恢复计数；
+//   Persist 把当前 Version 作为**全量快照**写成 META.tmp → fsync → rename → SyncDir。
+// 迁移点（§D4/L17）：M4 换 MANIFEST+CURRENT 时只改这两个函数体，调用方不动。
 #ifndef LSM_VERSION_SET_H_
 #define LSM_VERSION_SET_H_
 
@@ -14,6 +16,7 @@
 
 #include "common.h"
 #include "sstable/table.h"
+#include "util/env.h"
 #include "version_edit.h"
 
 namespace lsm {
@@ -45,7 +48,7 @@ class Version {
   const uint64_t next_file_number_;
 };
 
-// M3.2 的内存注册入口；M3.3 的 META 持久化接在这里（不改调用方）。
+// M3 的"META 持久化"入口（§D4 的迁移点：M4 换成 MANIFEST 只改这个函数体）。
 class VersionSet {
  public:
   VersionSet() = default;
@@ -54,6 +57,38 @@ class VersionSet {
   static std::shared_ptr<const Version> RegisterFile(const Version& base, const FileMetaData& f,
                                                      uint64_t log_number,
                                                      uint64_t next_file_number);
+  // M3.3：注册时可显式给出重算后的 min_log_number_to_keep（I34 的单一落点）。
+  static std::shared_ptr<const Version> RegisterFile(const Version& base, const FileMetaData& f,
+                                                     uint64_t log_number,
+                                                     uint64_t min_log_number_to_keep,
+                                                     uint64_t next_file_number);
+
+  // 语义级文件名（M4 换 MANIFEST+CURRENT 时只改这里；调用方不得拼接 "META" 字面量）。
+  static std::string MetaFileName(const std::string& dbname);        // dbname + "/META"
+  static std::string MetaTempFileName(const std::string& dbname);    // dbname + "/META.tmp"
+
+  // M3-A38 的独立验证结果（§8.2 纪律 3）：每个已注册 .sst 全量扫描得到的真实 max_sequence
+  // 必须等于 META 里记录的值，否则 kCorruption（把"统计写错"从静默错误变成显式失败）。
+  struct RecoveryResult {
+    bool meta_present = false;
+    uint64_t sst_files_registered = 0;
+    uint64_t sst_bytes_registered = 0;
+    SequenceNumber max_sequence_in_files = 0;
+    uint64_t unknown_metaindex_entries = 0;
+  };
+
+  // 读版本元数据（§8.3 步骤 ⑤；children 是目录枚举结果，避免二次扫描）。
+  //   META 存在：解析 + 校验 comparator_name（不符 ⇒ kInvalidArgument，M3-A42）；
+  //              每个注册文件必须存在（否则 kCorruption）；max_sequence 全量扫描复核。
+  //   META 缺失：目录里有 *.sst ⇒ kCorruption（§10.9 安全阀，M3-A41）；否则空版本。
+  static Status Recover(Env* env, const std::string& dbname, const Options& options,
+                        const std::vector<std::string>& children,
+                        std::shared_ptr<const Version>* out, RecoveryResult* info);
+
+  // 把 v 作为**全量快照**持久化：META.tmp → fsync → rename(META) → SyncDir（L17）。
+  // `edit` 被填成即将写入的快照（供调用方观测/测试）。
+  static Status Persist(Env* env, const std::string& dbname, const Options& options,
+                        const Version& v, VersionEdit* edit);
 };
 
 // 文件号 → shared_ptr<const Table> 的有界缓存（D8/I30/L19）。

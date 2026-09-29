@@ -280,10 +280,15 @@ class FlushFailingEnv : public MemEnv {
     if (fail == FailAt::kRename && target.find(".sst") != std::string::npos) {
       return Status::IOError("FlushFailingEnv: injected rename failure", src);
     }
+    if (target.size() >= 4 && target.compare(target.size() - 4, 4, ".sst") == 0) {
+      sst_renamed_ = true;   // M3.3：只有 SSTable 已 rename 之后才注入 SyncDir 失败
+    }
     return MemEnv::RenameFile(src, target);
   }
   Status SyncDir(const std::string& dirname) override {
-    if (fail == FailAt::kSyncDir) {
+    // M3.3 起轮转也会调 SyncDir；本注入点只针对 flush 的"rename 之后、注册之前"那一次
+    // （§6.3 步骤 ⑥），否则轮转的 SyncDir 会先失败、flush 根本不会发生（A24 会空测）。
+    if (fail == FailAt::kSyncDir && sst_renamed_) {
       return Status::IOError("FlushFailingEnv: injected SyncDir failure", dirname);
     }
     return MemEnv::SyncDir(dirname);
@@ -293,6 +298,8 @@ class FlushFailingEnv : public MemEnv {
   static bool IsSstTmp(const std::string& name) {
     return name.size() >= 8 && name.compare(name.size() - 8, 8, ".sst.tmp") == 0;
   }
+
+  bool sst_renamed_ = false;
 
   class FailFile : public WritableFile {
    public:
@@ -423,7 +430,11 @@ TEST(Flush, OrderDurableRenameSyncDirRegister) {
   });
   const auto rename_hook = find_event("hook:rename");
   const auto rename = find_prefix("rename:/db/");
-  const auto syncdir = find_prefix("syncdir:/db");
+  // M3.3 起轮转也会 SyncDir（在 SSTable rename 之前）；这里必须取 **rename 之后**的那一次，
+  // 否则测的是轮转的 SyncDir 而不是 §6.3 步骤 ⑥。
+  const auto syncdir = std::find_if(rename, events.end(), [](const std::string& e) {
+    return e.compare(0, 8, "syncdir:") == 0;
+  });
   const auto reg = find_event("hook:register");
 
   ASSERT_NE(events.end(), written) << "OnSSTableWritten 未被调用";
@@ -449,8 +460,26 @@ TEST(Flush, OrderDurableRenameSyncDirRegister) {
         EXPECT_TRUE(is_tmp) << "注册后的 .sst 不得再被 fsync：" << e;
       }
     }
-    EXPECT_EQ(std::string::npos, e.find("META")) << "M3.2 不写 META：" << e;
   }
+  // M3.3：注册 = 写 META 成功（§8.1/L17）：META.tmp → fsync → rename(META) → SyncDir。
+  // 这是 M3.2 过渡断言（"不写 META"）按契约的收窄，不是放宽：断言的是**更强**的顺序链。
+  const auto meta_sync = std::find_if(events.begin(), events.end(), [](const std::string& e) {
+    return e.compare(0, 5, "sync:") == 0 && e.find("META.tmp") != std::string::npos;
+  });
+  const auto meta_rename = find_event("rename:/db/META.tmp->/db/META");
+  ASSERT_NE(events.end(), meta_sync) << "META.tmp 必须先 fsync（L17）";
+  ASSERT_NE(events.end(), meta_rename) << "META 必须原子 rename（L17）";
+  EXPECT_LT(rename, meta_sync) << "SSTable rename 必须早于 META 的写";
+  EXPECT_LT(reg, meta_sync) << "META 的写必须晚于「注册前」注入点";
+  EXPECT_LT(meta_sync, meta_rename) << "META.tmp 必须 fsync 后才 rename";
+  const auto meta_syncdir = std::find_if(meta_rename, events.end(), [](const std::string& e) {
+    return e.compare(0, 8, "syncdir:") == 0;
+  });
+  ASSERT_NE(events.end(), meta_syncdir) << "META rename 之后必须 SyncDir";
+  // M3.3：后台线程在注册成功后会做 WAL 回收（RecycleObsoleteLogs）并访问 Env；
+  // 本用例必须显式 Close/delete，否则 Env 先析构而后台线程仍在使用它（TSan 实测 data race）。
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
 }
 
 // ==== M3-A23 ====

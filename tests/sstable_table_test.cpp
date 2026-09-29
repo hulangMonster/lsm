@@ -761,4 +761,48 @@ TEST(Table, KeyRangeFilterDoesZeroIo) {
   EXPECT_GE(counting.random_read_calls(), 1u);
 }
 
+// ==== M3.3 回归（M3.2 实缺陷）：块内 Seek 必须走 InternalKeyComparator ====
+// 背景：M3.2 发现并修复了 BlockReader::Seek 用逐字节比较而非 InternalKeyComparator 的缺陷
+// （违反 §5.3）；它之所以逃过 M3.1 的审计，是因为当时的块级用例拿**裸 user key** 当 target
+// ——裸 user key 的字节序恰好与"user 升序"一致，掩盖了 trailer 降序那半条规则。
+// 本用例用 BuildLookupKey(user, snapshot)（snapshot **小于**文件内 sequence）当 target：
+//   internal key 序 = user 升序 + trailer 降序 ⇒ "k"@10 < "k"@5 < "k"@2；
+//   snapshot=5 必须命中 seq=2 的版本（v2）。若退回逐字节比较，"k"@2 的 trailer 字节 0x02…
+//   小于 "k"@10 的 0x0a… ⇒ Seek 会命中 v10 ⇒ 本用例红。这正是同类回归的挡板。
+TEST(Table, SeekWithSnapshotLookupKeyUsesInternalKeyComparator) {
+  MemEnv env;
+  TableOptions opts;
+  opts.block_size = 4096;
+  std::vector<std::pair<std::string, std::string>> kv;
+  kv.emplace_back(BuildInternalKey("k", 10, kTypeValue), "v10");
+  kv.emplace_back(BuildInternalKey("k", 2, kTypeValue), "v2");
+  kv.emplace_back(BuildInternalKey("z", 1, kTypeValue), "vz");
+  BuildInfo info;
+  ASSERT_TRUE(BuildTable(&env, "snap.sst", opts, kv, &info).ok());
+  std::shared_ptr<Table> t;
+  ASSERT_TRUE(OpenTable(&env, "snap.sst", opts, &t).ok());
+
+  std::string v;
+  ReadStats rs;
+  // 直接钉住"为什么逐字节比较是错的"：internal key 序是 user 升序 + trailer 降序，
+  // 而同样的两条 key 的逐字节序恰好相反（trailer 的 LE 首字节 0x0a > 0x02）。
+  {
+    const InternalKeyComparator icmp(BytewiseComparator());
+    const std::string k10 = BuildInternalKey("k", 10, kTypeValue);
+    const std::string k2 = BuildInternalKey("k", 2, kTypeValue);
+    EXPECT_LT(icmp.Compare(Slice(k10), Slice(k2)), 0) << "internal key 序：seq 大的在前";
+    EXPECT_GT(Slice(k10).compare(Slice(k2)), 0)
+        << "逐字节序与 internal key 序相反——这正是缺陷能逃过 M3.1 审计的原因";
+  }
+  ASSERT_TRUE(t->Get(Slice(BuildLookupKey("k", 5)), &v, &rs).ok())
+      << "snapshot=5 必须命中 seq<=5 的版本";
+  EXPECT_EQ("v2", v);
+  v.clear();
+  ASSERT_TRUE(t->Get(Slice(BuildLookupKey("k", 10)), &v, &rs).ok());
+  EXPECT_EQ("v10", v);
+  v.clear();
+  EXPECT_TRUE(t->Get(Slice(BuildLookupKey("k", 1)), &v, &rs).IsNotFound())
+      << "snapshot=1 时两个版本都不可见";
+}
+
 }  // namespace lsm
