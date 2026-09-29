@@ -961,20 +961,33 @@ TEST(DB, OpenMemoryMode) {
   delete db;
 }
 
-TEST(DB, OpenRejectsNonEmptyName) {
+// [#2/M2 修订，登记于 docs/m2-prerequisites.md §9] M2 改变了 Open 的契约：
+//   name 非空 从「仅内存模式 ⇒ kNotSupported」变为「持久模式（WAL + 崩溃恢复）」（docs/m2-design.md §5.1）。
+//   这条断言与旧契约直接绑定，必须随契约更新；本测试的其它断言（空 name 成功、非法 options 拒绝）未动。
+//   原测试名 OpenRejectsNonEmptyName 已不成立，改名为 OpenPersistentMode 并补上「重启后可恢复」。
+TEST(DB, OpenPersistentMode) {
+  TempDir dir("lsm_db_");
   Options options;
   DB* p = nullptr;
-  ASSERT_TRUE(DB::Open(options, "", &p).ok());
+  ASSERT_TRUE(DB::Open(options, dir.path(), &p).ok()) << "非空 name ⇒ 持久模式必须成功";
   ASSERT_TRUE(p != nullptr);
-  DB* const live = p;  // 保留句柄用于 delete（ASan 泄漏门禁会抓漏删）
+  ASSERT_TRUE(p->Put("k", "v").ok());
+  std::string v;
+  ASSERT_TRUE(p->Get("k", &v).ok());
+  EXPECT_EQ("v", v);
+  ASSERT_TRUE(p->Close().ok());
+  delete p;
 
-  const Status s = DB::Open(options, "some-dir", &p);
-  EXPECT_FALSE(s.ok());
-  EXPECT_TRUE(s.IsNotSupported()) << "name 非空必须是 kNotSupported：" << s.ToString();
-  EXPECT_NE(std::string::npos, s.ToString().find("NotSupported")) << s.ToString();
-  EXPECT_NE(std::string::npos, s.ToString().find("some-dir")) << s.ToString();
-  EXPECT_EQ(nullptr, p) << "失败路径必须把 *dbptr 置空，不得返回半构造对象（design §4.5 / I8）";
-  delete live;
+  // 关掉再打开：数据必须从 WAL 恢复（M2 的核心能力）
+  DB* q = nullptr;
+  ASSERT_TRUE(DB::Open(options, dir.path(), &q).ok());
+  ASSERT_TRUE(q != nullptr);
+  const Status gs = q->Get("k", &v);
+  ASSERT_TRUE(gs.ok()) << "重启后必须能从 WAL 恢复：" << gs.ToString();
+  EXPECT_EQ("v", v);
+  EXPECT_TRUE(q->Close().ok());
+  EXPECT_TRUE(q->Close().ok()) << "Close 必须幂等";
+  delete q;
 }
 
 TEST(DB, OpenRejectsInvalidOptions) {

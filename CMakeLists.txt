@@ -54,6 +54,9 @@ add_library(lsm STATIC
   src/db.cpp
   # M2.1：WAL writer/reader（docs/m2-design.md §4）
   src/wal.cpp
+  # M2.2：文件命名 + 持久化实现与恢复（docs/m2-design.md §5/§6/§7）
+  src/filename.cpp
+  src/db_impl.cpp
 )
 target_include_directories(lsm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(lsm PUBLIC Threads::Threads)
@@ -92,3 +95,10 @@ target_link_libraries(lsm_tests PRIVATE
 )
 
 add_test(NAME lsm_unit COMMAND lsm_tests)
+
+# M2.2：崩溃对账工具（docs/m2-design.md §8）—— 门禁脚本 scripts/lsm_crash_test.sh 调用
+add_executable(lsm_crash_writer scripts/crash_writer.cpp)
+target_link_libraries(lsm_crash_writer PRIVATE lsm)
+
+add_executable(lsm_crash_recover scripts/crash_recover.cpp)
+target_link_libraries(lsm_crash_recover PRIVATE lsm)

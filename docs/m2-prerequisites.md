@@ -161,6 +161,8 @@ bash scripts/lsm_crash_test.sh --rounds 30 --mode nosync  # 只断言无半写/�
 | A27/A28 | 「随机写 → 随机崩溃 → 随机撕裂长度」 | 未固定种子 ⇒ 失败不可复现 | 必须固定种子并打进 INFO；撕裂长度只能来自该种子驱动的 PRNG |
 | §4.2 writer | padding 条件写 `(kWALBlockSize - block_offset_) < kWALHeaderSize` | `block_offset_ = 32761`（剩余正好 7）时不补 padding，`avail = 0` ⇒ 写出 `length = 0` 的片段；而 §4.3 的 reader 规定 `len == 0 ⇒ PARSE_FAIL`，**writer 能写出自己读不回来的文件** | 改为 `<= kWALHeaderSize`；A03 的 `block_offset` 范围由 `32762..32767` 扩到 **`32761..32767`**（原范围恰好吃掉这个边界） |
 | A07/A08 | 判据要求 WAL 层就给出「尾部截断 vs 中间损坏」 | §5.3 的重同步判定属恢复层；WAL 层只能提供事实 | WAL 层返回 `verdict == kParseFail` + `valid_record_after_failure`（其后是否存在完好 record）+ `last_good_end`；§5.3 的分类由 M2.2 的 `Recovery.*` 施加 |
+| 契约 | §5.1 让 `Open(options, name非空)` = 持久模式，而 M1 的 `DB.OpenRejectsNonEmptyName` 断言的是 `kNotSupported` | 两者不可同时成立（M2 指令自己写了「Open 的恢复分支」） | **该断言随契约更新**（改名为 `DB.OpenPersistentMode`，并补上「重启后从 WAL 恢复」）；§4 的「禁止改动 M1 既有断言」按此**收窄为**「禁止改动与 M2 契约变化无关的 M1 断言」 |
+| 实测口径 | §9.1 的 A09「write 每次只写 1 字节 ⇒ Append 仍成功」需要 WAL 层知道写入字节数 | M1 冻结的 `WritableFile::Append` 只返回 `Status`，调用方拿不到字节数 | M2.1 用「信封式 FaultyEnv 把写切成 N 字节块」实现该注入（数据仍完整），并在测试注释里写明这一点 |
 
 另有两处**指令未覆盖、由设计补齐**的必要项（已在设计门获批，登记备查）：
 - **D12**：M2 无 flush ⇒ 恢复期必须按 WAL 实测字节数放大 MemTable 容量，否则 100 MiB WAL 会在 `write_buffer_size` 处 `kFrozen` 导致恢复失败。
