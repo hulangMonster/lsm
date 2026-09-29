@@ -8,10 +8,18 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "common.h"
 
 namespace lsm {
+
+// 进程级文件锁的句柄（M2 的 D10：LOCK 文件独占）。实现可以是 fd 包装；析构不自动解锁，
+// 必须显式 UnlockFile（内核在进程崩溃时会释放 fcntl 锁，这正是选它而不是 flock/自旋文件的原因）。
+class FileLock {
+ public:
+  virtual ~FileLock() = default;
+};
 
 class WritableFile {
  public:
@@ -37,12 +45,25 @@ class Env {
   static Env* Default();
 
   virtual Status NewWritableFile(const std::string& fname, WritableFile** result) = 0;
+
+  // M2 增补（design §5.7，只增不改）：以「追加」方式打开已存在的文件（不截断）。
+  // WAL 恢复后继续追加、以及测试里对文件做字节级手术都依赖它。
+  virtual Status NewAppendableFile(const std::string& fname, WritableFile** result) = 0;
+
   virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result) = 0;
   virtual bool FileExists(const std::string& fname) = 0;
   virtual Status GetFileSize(const std::string& fname, uint64_t* size) = 0;
   virtual Status DeleteFile(const std::string& fname) = 0;
   virtual Status RenameFile(const std::string& src, const std::string& target) = 0;
   virtual Status CreateDir(const std::string& dirname) = 0;
+
+  // M2 增补（design §5.7）：目录枚举（恢复时扫描 *.log）、删文件（DeleteFile 的别名语义）、
+  // 截断（恢复时把最高编号 log 截到最后一条完整 record，I18 允许的唯一写）、进程级独占锁。
+  virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) = 0;
+  virtual Status RemoveFile(const std::string& fname) = 0;
+  virtual Status Truncate(const std::string& fname, uint64_t size) = 0;
+  virtual Status LockFile(const std::string& fname, FileLock** lock) = 0;
+  virtual Status UnlockFile(FileLock* lock) = 0;
 
   virtual uint64_t NowMicros() = 0;
   virtual void SleepForMicros(uint64_t micros) = 0;

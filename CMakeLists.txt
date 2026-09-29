@@ -52,6 +52,8 @@ add_library(lsm STATIC
   # M1.2：跳表是 header-only（src/skiplist.h），此处只列 .cpp
   src/memtable.cpp
   src/db.cpp
+  # M2.1：WAL writer/reader（docs/m2-design.md §4）
+  src/wal.cpp
 )
 target_include_directories(lsm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(lsm PUBLIC Threads::Threads)
@@ -74,6 +76,9 @@ enable_testing()
 add_executable(lsm_tests
   tests/util_test.cpp
   tests/memtable_test.cpp
+  # M2：WAL 层用例（A01~A10）+ 故障注入 Env
+  tests/wal_test.cpp
+  tests/faulty_env.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}

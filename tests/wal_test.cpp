@@ -168,7 +168,15 @@ TEST(WAL, BlockTailPadding) {
       const uint32_t len = static_cast<uint32_t>(static_cast<unsigned char>(body[4])) |
                            (static_cast<uint32_t>(static_cast<unsigned char>(body[5])) << 8);
       const int type = static_cast<unsigned char>(body[6]);
-      if (crc == 0 && len == 0 && type == 0) break;   // padding 起点
+      if (crc == 0 && len == 0 && type == 0) {
+        // padding 起点：必须是全 0，且必须跳到下一块继续数（不能直接 break，否则漏掉第二块的片段）
+        const size_t next_block = ((off / kWALBlockSize) + 1) * kWALBlockSize;
+        for (size_t k = off; k < next_block && k < raw.size(); ++k) {
+          EXPECT_EQ(0, static_cast<int>(static_cast<unsigned char>(raw[k]))) << "padding 必须全 0";
+        }
+        off = next_block;
+        continue;
+      }
       EXPECT_GE(len, 1u) << "leftover=" << leftover << " 处出现了 length=0 的片段";
       EXPECT_LE(len, kWALMaxPayload);
       off += kWALHeaderSize + len;
@@ -312,7 +320,9 @@ TEST(WAL, TruncatedTailIsCut) {
     for (size_t i = 0; i < got.records.size(); ++i) {
       EXPECT_EQ(want[i], got.records[i]) << "len=" << len;
     }
-    if (len == base.size()) EXPECT_EQ(WALScanVerdict::kClean, got.result.verdict);
+    if (len == base.size()) {
+      EXPECT_EQ(WALScanVerdict::kClean, got.result.verdict);
+    }
   }
 }
 
@@ -335,8 +345,10 @@ TEST(WAL, MiddleCorruptionRejected) {
   const ScanOut got = Scan(env, path);
   EXPECT_EQ(WALScanVerdict::kParseFail, got.result.verdict);
   EXPECT_TRUE(got.result.valid_record_after_failure) << "其后仍有完好 record ⇒ 属中间损坏（必须拒绝启动）";
-  EXPECT_NE(0u, got.result.failure_offset);
+  // failure_offset 是**损坏片段的起始偏移**：改的是第一条记录的 payload ⇒ 应为 0
+  EXPECT_EQ(0u, got.result.failure_offset);
   EXPECT_FALSE(got.result.detail.empty()) << "必须带可定位信息";
+  EXPECT_EQ(0u, got.result.last_good_end) << "第一条就坏了 ⇒ 没有任何完整 record";
 }
 
 // A08
@@ -405,10 +417,13 @@ TEST(WAL, FsyncFailurePropagates) {
   const Status s = w.Sync();
   EXPECT_FALSE(s.ok()) << "fsync 失败绝不能返回 kOk";
   EXPECT_TRUE(s.IsIOError()) << s.ToString();
-  // 失败后必须粘性：不静默恢复
+  // 失败后必须粘性：不静默恢复。粘性的表现是**后续调用直接返回同一错误、不再触碰文件**
+  // （因此 sync_calls 不会增长——这正是 fail-stop 想要的：偏移已不可信，不该继续 IO）。
   const Status again = w.Sync();
   EXPECT_FALSE(again.ok()) << "fsync 失败必须是粘性的（fail-stop）";
-  EXPECT_GE(env.sync_calls(), 2);
+  EXPECT_TRUE(again.IsIOError());
+  EXPECT_EQ(1, env.sync_calls()) << "粘性错误后不得再对文件做 IO";
+  EXPECT_FALSE(w.Append(Slice(Repeat('g', 10))).ok()) << "失败后的写入也必须被拒（写只读）";
   w.Close();
 }
 

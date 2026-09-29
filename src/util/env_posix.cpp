@@ -10,6 +10,7 @@
 #include <ctime>
 #include <new>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -101,8 +102,90 @@ class PosixSequentialFile : public SequentialFile {
   FILE* file_;
 };
 
+// M2 的 D10：用 fcntl 写锁做进程级独占。崩溃时内核自动释放（不需要清理陈旧锁文件）。
+class PosixFileLock : public FileLock {
+ public:
+  explicit PosixFileLock(int fd) : fd_(fd) {}
+  ~PosixFileLock() override {
+    if (fd_ >= 0) ::close(fd_);
+  }
+  int fd() const { return fd_; }
+
+ private:
+  int fd_;
+};
+
 class PosixEnv : public Env {
  public:
+  Status NewAppendableFile(const std::string& fname, WritableFile** result) override {
+    *result = nullptr;
+    const int fd = ::open(fname.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd < 0) return Status::IOError(ErrnoMessage("NewAppendableFile", fname));
+    PosixWritableFile* f = new (std::nothrow) PosixWritableFile(fd);
+    if (f == nullptr) {
+      ::close(fd);
+      return Status::IOError("NewAppendableFile: out of memory", fname);
+    }
+    *result = f;
+    return Status::OK();
+  }
+
+  Status GetChildren(const std::string& dir, std::vector<std::string>* result) override {
+    result->clear();
+    DIR* d = ::opendir(dir.c_str());
+    if (d == nullptr) return Status::IOError(ErrnoMessage("GetChildren", dir));
+    while (struct dirent* e = ::readdir(d)) {
+      const std::string name = e->d_name;
+      if (name == "." || name == "..") continue;
+      result->push_back(name);
+    }
+    ::closedir(d);
+    return Status::OK();
+  }
+
+  Status RemoveFile(const std::string& fname) override {
+    if (::unlink(fname.c_str()) != 0) return Status::IOError(ErrnoMessage("RemoveFile", fname));
+    return Status::OK();
+  }
+
+  Status Truncate(const std::string& fname, uint64_t size) override {
+    if (::truncate(fname.c_str(), static_cast<off_t>(size)) != 0) {
+      return Status::IOError(ErrnoMessage("Truncate", fname));
+    }
+    return Status::OK();
+  }
+
+  Status LockFile(const std::string& fname, FileLock** lock) override {
+    *lock = nullptr;
+    const int fd = ::open(fname.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd < 0) return Status::IOError(ErrnoMessage("LockFile: open", fname));
+    struct flock fl;
+    std::memset(&fl, 0, sizeof(fl));
+    fl.l_type = F_WRLCK;
+    fl.l_whence = SEEK_SET;
+    if (::fcntl(fd, F_SETLK, &fl) != 0) {
+      ::close(fd);
+      return Status::IOError(ErrnoMessage("LockFile: already held by another process", fname));
+    }
+    *lock = new PosixFileLock(fd);
+    return Status::OK();
+  }
+
+  Status UnlockFile(FileLock* lock) override {
+    if (lock == nullptr) return Status::OK();
+    PosixFileLock* l = static_cast<PosixFileLock*>(lock);
+    const int fd = l->fd();
+    if (fd >= 0) {
+      struct flock fl;
+      std::memset(&fl, 0, sizeof(fl));
+      fl.l_type = F_UNLCK;
+      fl.l_whence = SEEK_SET;
+      ::fcntl(fd, F_SETLK, &fl);
+    }
+    delete l;
+    return Status::OK();
+  }
+
   Status NewWritableFile(const std::string& fname, WritableFile** result) override {
     *result = nullptr;
     const int fd = ::open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -143,12 +226,7 @@ class PosixEnv : public Env {
     return Status::OK();
   }
 
-  Status DeleteFile(const std::string& fname) override {
-    if (::unlink(fname.c_str()) != 0) {
-      return Status::IOError(ErrnoMessage("DeleteFile", fname));
-    }
-    return Status::OK();
-  }
+  Status DeleteFile(const std::string& fname) override { return RemoveFile(fname); }
 
   Status RenameFile(const std::string& src, const std::string& target) override {
     if (::rename(src.c_str(), target.c_str()) != 0) {
