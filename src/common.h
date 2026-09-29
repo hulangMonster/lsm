@@ -19,6 +19,8 @@
 
 namespace lsm {
 
+class Env;   // M2：Options::env 注入（定义见 util/env.h；此处只前向声明，保持 common.h 零项目依赖）
+
 // ---------------------------------------------------------------------------
 // Slice：ptr + len 视图
 // ---------------------------------------------------------------------------
@@ -226,6 +228,10 @@ class InternalKeyComparator : public Comparator {
 struct Options {
   const Comparator* comparator = BytewiseComparator();
   size_t write_buffer_size = 4 * 1024 * 1024;   // 4 MiB
+  // M2 增补（登记于 docs/m2-prerequisites.md §9 第 7 条）：注入 Env。nullptr = Env::Default()。
+  // 为什么需要：A27~A31 的掉电语义必须用 MemEnv（内存文件系统 + fsync 水位 + 固定种子撕裂）
+  // 才能确定性验证，而 M2 的恢复路径原来硬编码 Env::Default()，测试无法注入。
+  Env* env = nullptr;
 };
 
 // ---------------------------------------------------------------------------

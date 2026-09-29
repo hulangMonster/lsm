@@ -342,7 +342,8 @@ Status PersistentDBImpl::Close() {
 }
 
 Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::string& name, DB** dbptr) {
-  Env* env = Env::Default();
+  // 注入的 Env（A27~A31 的掉电语义测试用 MemEnv）；nullptr 时用真实 POSIX Env
+  Env* env = options.env != nullptr ? options.env : Env::Default();
   if (!env->FileExists(name)) {
     const Status s = env->CreateDir(name);
     if (!s.ok()) return s;
