@@ -44,6 +44,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # 被测库（docs/m1-design.md §3 文件清单；每个文件显式列出，不用 GLOB）
 add_library(lsm STATIC
+  # M3.1 格式层（docs/m3-design.md §11.1：format / block 先落地，table_* 随后）
+  src/sstable/format.cpp
+  src/sstable/block.cpp
   src/util/status.cpp
   src/util/coding.cpp
   src/util/crc32c.cpp

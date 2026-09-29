@@ -21,6 +21,7 @@
 
 #include "sstable/block.h"
 #include "sstable/format.h"
+#include "util/crc32c.h"
 
 namespace lsm {
 namespace {
@@ -489,8 +490,11 @@ TEST(Footer, RejectMatrix) {
   {
     std::string bad = enc;
     SetFixed32(&bad, 4, kTableFormatVersion + 1);
+    // 关键：更新引擎写出的合法文件带**正确**的 footer_crc，故必须一起重算 ——
+    // 否则测到的是"CRC 坏"（kCorruption），而不是"version 不认识"（kNotSupported）。
+    SetFixed32(&bad, kFooterSize - 4, crc32c::Value(bad.data(), kFooterSize - 4));
     EXPECT_EQ(Status::kNotSupported, out.DecodeFrom(Slice(bad)).code())
-        << "version != 1 必须是 kNotSupported（前向兼容信号），不得报 kCorruption";
+        << "version != 1 且 CRC 正确 ⇒ 必须是 kNotSupported（前向兼容信号），不得报 kCorruption";
   }
   // ④ footer_crc 不符
   {
