@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -665,4 +666,75 @@ TEST(Locks, ZeroIoWhileHoldingDbMutex) {
   delete db;
 }
 
+// ==== I32 回归（M2 补丁）：Sync() 不得把水位发布到「已分配 sequence、尚未 Append」的在飞批次 ====
+//
+// 窗口：RunFlusher 在锁内取批时就把 last_sequence_ 推进到本批末尾（:393），而 log_->Append 是锁外
+// 做的（:411）。并发 Sync() 若在两者之间拿到 commit_mu_，就会 fsync 一份**不含本批**的日志，却把
+// 水位发布到含本批 ⇒ Sync() 返回 kOk 而该批字节并未落盘，违反 db.h 对 Sync() 的「返回即 durable」契约。
+// 注入点：OnGroupTaken（批次已取、sequence 已推进、Append 尚未执行）把该窗口确定化，不靠时序碰运气。
+namespace {
+
+// 为什么用原子布尔自旋而不是 mutex+condition_variable：本用例会让 flusher 线程停在
+// OnGroupTaken 里（它正处在 Write→RunFlusher 的调用栈上），而主线程同时在 Sync()/Release()
+// 里访问同一对象。condvar 版本在 TSan 下实测报 double lock + 2 条 data race（见
+// docs/m2-evidence.md §TSan）。原子布尔 + 有限自旋无锁竞争、无 TSan 噪声，判定依然确定：
+// taken_ 置位严格早于 Append，released_ 只由主线程单点置位。
+class BlockingTakeHook : public CommitHook {
+ public:
+  void OnGroupTaken() override {
+    taken_.store(true, std::memory_order_release);
+    while (!released_.load(std::memory_order_acquire)) {
+      std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+  }
+  bool WaitUntilTaken(std::chrono::milliseconds timeout) {
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + timeout;
+    while (!taken_.load(std::memory_order_acquire)) {
+      if (std::chrono::steady_clock::now() > deadline) return false;
+      std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+    return true;
+  }
+  void Release() { released_.store(true, std::memory_order_release); }
+
+ private:
+  std::atomic<bool> taken_{false};
+  std::atomic<bool> released_{false};
+};
+
+}  // namespace
+
+TEST(GroupCommit, SyncDoesNotClaimInFlightBatch) {
+  MemEnv env;
+  BlockingTakeHook hook;
+  Options options;
+  options.env = &env;
+  options.commit_hook = &hook;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+
+  Status writer_status;
+  std::thread writer([&] { writer_status = db->Put(WriteOptions(), Key(1), Val(1)); });
+
+  ASSERT_TRUE(hook.WaitUntilTaken(std::chrono::milliseconds(5000)))
+      << "flusher 未在 5s 内走到 OnGroupTaken（屏障失效，用例无法判定）";
+  // 此刻本批的 sequence 已推进、字节尚未 Append ⇒ 本次 fsync 覆盖不到本批 ⇒ 水位不得包含它。
+  const Status early = db->Sync();
+  const SequenceNumber early_durable = impl->durable_seq();
+  hook.Release();
+  writer.join();
+  ASSERT_TRUE(writer_status.ok()) << writer_status.ToString();
+
+  const Status late = db->Sync();   // 本批已 Append，这次 fsync 确实覆盖它
+  const SequenceNumber late_durable = impl->durable_seq();
+  EXPECT_TRUE(early.ok()) << early.ToString();
+  EXPECT_TRUE(late.ok()) << late.ToString();
+  EXPECT_LT(early_durable, late_durable)
+      << "I32：在飞批次尚未 Append，Sync() 却把水位发布到了它（early=" << early_durable
+      << " late=" << late_durable << "）—— Sync() 返回 kOk 却在声称未落盘的记录已 durable";
+  EXPECT_GT(late_durable, 0u) << "修复不得以「永不发布水位」的方式通过";
+  db->Close();
+  delete db;
+}
 }  // namespace lsm

@@ -73,18 +73,24 @@ class MemSequentialFile : public SequentialFile {
 }  // namespace
 
 MemEnv::File* MemEnv::Find(const std::string& fname) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   auto it = files_.find(fname);
   if (it == files_.end() || !it->second.exists) return nullptr;
   return &it->second;
 }
 
 const MemEnv::File* MemEnv::Find(const std::string& fname) const {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   auto it = files_.find(fname);
   if (it == files_.end() || !it->second.exists) return nullptr;
   return &it->second;
 }
 
 uint32_t MemEnv::NextRandom() {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   // xorshift64*：确定性、无 <random>（跨平台/跨标准库可复现）
   uint64_t x = rng_state_;
   x ^= x >> 12;
@@ -95,6 +101,8 @@ uint32_t MemEnv::NextRandom() {
 }
 
 bool MemEnv::AppendRaw(const std::string& fname, const char* data, size_t n, size_t* written) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   ++write_calls_;
   if (enospc_) {
     *written = 0;
@@ -108,6 +116,8 @@ bool MemEnv::AppendRaw(const std::string& fname, const char* data, size_t n, siz
 }
 
 bool MemEnv::SyncRaw(const std::string& fname) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   ++sync_calls_;
   if (sync_fail_after_ >= 0 && sync_calls_ >= sync_fail_after_) return false;
   File* f = Find(fname);
@@ -117,6 +127,8 @@ bool MemEnv::SyncRaw(const std::string& fname) {
 }
 
 void MemEnv::SimulateCrash() {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   for (auto& kv : files_) {
     File& f = kv.second;
     if (!f.exists) continue;
@@ -133,16 +145,22 @@ void MemEnv::SimulateCrash() {
 }
 
 std::string MemEnv::Contents(const std::string& fname) const {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   const File* f = Find(fname);
   return f == nullptr ? std::string() : f->data;
 }
 
 uint64_t MemEnv::SyncedSize(const std::string& fname) const {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   const File* f = Find(fname);
   return f == nullptr ? 0 : f->synced_size;
 }
 
 void MemEnv::SetContents(const std::string& fname, const std::string& data) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   File& f = files_[fname];
   f.exists = true;
   f.data = data;
@@ -150,6 +168,8 @@ void MemEnv::SetContents(const std::string& fname, const std::string& data) {
 }
 
 Status MemEnv::NewWritableFile(const std::string& fname, WritableFile** result) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   *result = nullptr;
   File& f = files_[fname];
   f.exists = true;
@@ -160,6 +180,8 @@ Status MemEnv::NewWritableFile(const std::string& fname, WritableFile** result) 
 }
 
 Status MemEnv::NewAppendableFile(const std::string& fname, WritableFile** result) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   *result = nullptr;
   File& f = files_[fname];
   f.exists = true;
@@ -168,6 +190,8 @@ Status MemEnv::NewAppendableFile(const std::string& fname, WritableFile** result
 }
 
 Status MemEnv::NewSequentialFile(const std::string& fname, SequentialFile** result) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   *result = nullptr;
   const File* f = Find(fname);
   if (f == nullptr) return Status::IOError("MemEnv::NewSequentialFile: not found", fname);
@@ -175,9 +199,14 @@ Status MemEnv::NewSequentialFile(const std::string& fname, SequentialFile** resu
   return Status::OK();
 }
 
-bool MemEnv::FileExists(const std::string& fname) { return Find(fname) != nullptr; }
+bool MemEnv::FileExists(const std::string& fname) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  return Find(fname) != nullptr;
+}
 
 Status MemEnv::GetFileSize(const std::string& fname, uint64_t* size) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   const File* f = Find(fname);
   if (f == nullptr) return Status::IOError("MemEnv::GetFileSize: not found", fname);
   *size = f->data.size();
@@ -187,6 +216,8 @@ Status MemEnv::GetFileSize(const std::string& fname, uint64_t* size) {
 Status MemEnv::DeleteFile(const std::string& fname) { return RemoveFile(fname); }
 
 Status MemEnv::RemoveFile(const std::string& fname) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   auto it = files_.find(fname);
   if (it == files_.end() || !it->second.exists) {
     return Status::IOError("MemEnv::RemoveFile: not found", fname);
@@ -196,6 +227,8 @@ Status MemEnv::RemoveFile(const std::string& fname) {
 }
 
 Status MemEnv::RenameFile(const std::string& src, const std::string& target) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   const File* s = Find(src);
   if (s == nullptr) return Status::IOError("MemEnv::RenameFile: not found", src);
   File moved = *s;
@@ -205,11 +238,15 @@ Status MemEnv::RenameFile(const std::string& src, const std::string& target) {
 }
 
 Status MemEnv::CreateDir(const std::string& dirname) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   dirs_.insert(dirname);
   return Status::OK();
 }
 
 Status MemEnv::GetChildren(const std::string& dir, std::vector<std::string>* result) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   result->clear();
   const std::string prefix = dir.empty() ? std::string() : dir + "/";
   for (const auto& kv : files_) {
@@ -225,6 +262,8 @@ Status MemEnv::GetChildren(const std::string& dir, std::vector<std::string>* res
 }
 
 Status MemEnv::Truncate(const std::string& fname, uint64_t size) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   File* f = Find(fname);
   if (f == nullptr) return Status::IOError("MemEnv::Truncate: not found", fname);
   if (size < f->data.size()) {
@@ -237,6 +276,8 @@ Status MemEnv::Truncate(const std::string& fname, uint64_t size) {
 }
 
 Status MemEnv::LockFile(const std::string& fname, FileLock** lock) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   *lock = nullptr;
   if (locked_.count(fname) != 0) {
     return Status::IOError("MemEnv::LockFile: already held", fname);
@@ -249,6 +290,8 @@ Status MemEnv::LockFile(const std::string& fname, FileLock** lock) {
 }
 
 Status MemEnv::UnlockFile(FileLock* lock) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+
   if (lock == nullptr) return Status::OK();
   const std::string name = static_cast<MemFileLock*>(lock)->name();
   locked_.erase(name);

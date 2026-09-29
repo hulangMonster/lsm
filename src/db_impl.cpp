@@ -280,12 +280,15 @@ Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, cons
   }
 
   std::unique_lock<std::mutex> l(commit_mu_);
-  if (!bg_error_.ok()) return bg_error_;                   // 粘性 fail-stop（D11）
   {
     // L11/A31：**入队前**就拒绝关闭后的新写。若只在 RunFlusher 里判 closed_，
     // 关闭期间源源不断的新写者会不断把 flusher_active_ 置回 true，Close 等待 !flusher_active_
     // 就会活锁（实测：Close.RejectsNewWriters 挂住）。顺序必须是"先拒绝新写 → 再等在途批"。
     DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
+    // M2-I35（TSan 实测）：bg_error_ 的读写必须**同受 mutex_**（db_impl.h 的锁声明）。
+    // 原来这一行只在 commit_mu_ 下读，与 RunFlusher() 里持 mutex_ 的 `bg_error_ = s` 构成
+    // data race：Status 的 code 与 message 可能来自不同错误，最坏是漏掉粘性 fail-stop。
+    if (!bg_error_.ok()) return bg_error_;   // 粘性 fail-stop（D11）
     if (closed_) return Status::IOError("Put/Delete: DB is closed", dbname_);
   }
   queue_.push_back(&w);
@@ -409,6 +412,12 @@ Status PersistentDBImpl::RunFlusher() {
 
   // ---- 锁外做 IO（I17/L7）：Append 永远做，fsync 只在组内有人要求时做（I11/D3）----
   Status s = log_->Append(Slice(payload));
+  if (s.ok()) {
+    // I32 修复：Append 返回 kOk 即字节已交给文件（fsync 只决定是否落到介质），所以这个边界
+    // 只取决于 Append 的结果，与本次是否 fsync 无关。
+    DbMutexGuard ml(mutex_);
+    appended_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+  }
   if (s.ok() && need_sync) s = log_->Sync();
   if (s.ok()) {
     if (options_.commit_hook != nullptr) options_.commit_hook->OnAfterSyncBeforePublish();
@@ -489,11 +498,24 @@ Status PersistentDBImpl::Sync() {
   // 与 flusher 的 fsync 串行；语义 = 把此前全部已返回 kOk 的写刷到磁盘（design §7.4）
   std::lock_guard<std::mutex> ql(commit_mu_);
   if (log_ == nullptr) return Status::IOError("PersistentDBImpl::Sync: WAL is not open", dbname_);
-  if (!bg_error_.ok()) return bg_error_;
+  {
+    DbMutexGuard ml(mutex_);                // M2-I35：bg_error_ 只在 mutex_ 下读
+    if (!bg_error_.ok()) return bg_error_;
+  }
+  // I32 修复：**先**取「已实际追加的边界」，**再** fsync。fsync 只能覆盖调用之前已写进文件的
+  // 字节，所以水位只能发布到这个快照；并发在飞批次（sequence 已分配、Append 尚未执行）不得被
+  // 声称 durable。代价是可能少报（保守），绝不许多报 —— 契约仍然成立：任何在本次 Sync 之前
+  // 已返回 kOk 的写，其 Append 必然早于本次快照点，因而被这次 fsync 覆盖。
+  SequenceNumber appended_before_fsync = 0;
+  {
+    DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）；持锁期间不做 IO（I17）
+    appended_before_fsync = appended_seq_;
+  }
   const Status s = log_->Sync();
   if (s.ok()) {
-    DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
-    durable_seq_ = last_sequence_;
+    DbMutexGuard ml(mutex_);
+    // 单调发布：flusher 的水位发布与本次同受 commit_mu_ 串行，且 appended_seq_ 单调不减。
+    if (appended_before_fsync > durable_seq_) durable_seq_ = appended_before_fsync;
   }
   return s;
 }
@@ -519,7 +541,12 @@ Status PersistentDBImpl::Close() {
     if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());
     return Status::OK();
   }
-  Status s = bg_error_.ok() ? log_->Sync() : bg_error_;    // Close 隐含 Sync（I20/A30）
+  Status sticky;                                        // M2-I35：bg_error_ 只在 mutex_ 下读
+  {
+    DbMutexGuard ml(mutex_);
+    sticky = bg_error_;
+  }
+  Status s = sticky.ok() ? log_->Sync() : sticky;        // Close 隐含 Sync（I20/A30）
   const Status c = log_->Close();
   if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());   // D10：释放独占
   return s.ok() ? c : s;
@@ -679,6 +706,8 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
     }
   }
   db->last_sequence_ = last;
+  // 恢复期读出的记录必然已在 log 文件里，水位从同一边界起步（首次 Sync 的快照不会低报）。
+  db->appended_seq_ = last;
   stats.last_sequence = last;
   db->recovery_stats_ = stats;
   if (stats.tail_truncated_bytes > kMaxTailCorruptWarnBytes) {

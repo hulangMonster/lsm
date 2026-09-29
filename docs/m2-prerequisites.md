@@ -165,6 +165,17 @@ bash scripts/lsm_crash_test.sh --rounds 30 --mode nosync  # 只断言无半写/�
 | 实测口径 | §9.1 的 A09「write 每次只写 1 字节 ⇒ Append 仍成功」需要 WAL 层知道写入字节数 | M1 冻结的 `WritableFile::Append` 只返回 `Status`，调用方拿不到字节数 | M2.1 用「信封式 FaultyEnv 把写切成 N 字节块」实现该注入（数据仍完整），并在测试注释里写明这一点 |
 | **观察项（待 #4 评审裁决）** | D7「重放时 `batch.sequence <= last_sequence_` 则跳过」把「sequence 回退」**静默**吞掉 | 写 A12 时实测到：只要文件编号与 sequence 反序，数据会被无声丢弃且 `Open` 返回 `kOk` —— 这正是"写入串行化被破坏"的 bug 该被暴露的场景（§5.2 自己也写了"不得重排序，乱序应报 kCorruption 暴露"） | 本阶段**按设计实现**（静默跳过，不算偏离），但登记为观察项：建议 M2.3 或 #4 评审时改为「跳过并打 WARN」或「判 kCorruption」，二选一须与 D7 一起拍板 |
 
+### 9.1 `#4` 评审后补丁阶段发现的实现缺陷（M2-I32 / M2-I35，均已修复，附原始证据）
+
+| # | 现象 | 为什么是真的（原始证据） | 修法 | 回归用例 |
+|---|---|---|---|---|
+| **M2-I32** | `Sync()` 把 durable 水位发布到 `last_sequence_`，而该值在 `RunFlusher()` **锁内取批时**（`db_impl.cpp:393`）就推进，`log_->Append` 却是在**锁外**做的（`:411`） | 用 `CommitHook::OnGroupTaken`（批次已取、sequence 已推进、Append 尚未执行）把窗口确定化，主线程在该点调用 `DB::Sync()`：RED 原始输出 `Expected: (early_durable) < (late_durable), actual: 1 vs 1` ⇒ `Sync()` 返回 `kOk` 却声称**尚未落盘**的批次已 durable，违反 `db.h` 的「返回即 durable」契约 | 新增 `appended_seq_`（`Append` 成功后推进）；`Sync()` **先**快照该边界、**再** fsync，按 `max()` 单调发布；`RecoverAndOpen()` 以同一边界起始 | `GroupCommit.SyncDoesNotClaimInFlightBatch`（RED 输出存档 `docs/m2-tdd-red-i32.log`） |
+| **M2-I35** | `bg_error_` 的读（`Write` / `Sync` / `Close`）只在 `commit_mu_` 下进行，而写（`RunFlusher`）持 `mutex_` | TSan 原始报告（栈见 `docs/m2-evidence.md` §I35）：写栈 `Status::operator=` @ `db_impl.cpp:430`（持 `mutex_`），读栈 `Status::ok()` @ `db_impl.cpp:283`（持另一把锁）⇒ `Status` 的 code 与 message 可能来自不同错误，最坏情况漏掉粘性 fail-stop（把已损坏的库当成可写） | 三处读统一改为持 `mutex_`（`db_impl.h` 原本就声明 `mutex_` 保护 `bg_error_`，属**锁纪律违反**而非设计问题）；同时保持 I17：`Close()` 在锁内拷出水位、锁外才 fsync | TSan 全量：修复前 1 条 warning，修复后 **0**；`GroupCommit.FailurePropagatesToAllWaiters` 等并发失败传播用例全绿 |
+
+配套的**测试替身加固**（并发用例的前提，非产品缺陷）：① `MemEnv` 内部**完全没有加锁**，而 I32 用例第一次让「T1 在飞 `Append`」与「主线程 `Sync()`」并发 ⇒ `MemEnv::AppendRaw` 数据竞争；真实 POSIX 文件的并发 `write`/`fsync` 由内核保证，内存替身必须自己串行化，故加 `std::recursive_mutex`（`DeleteFile→RemoveFile`、`FileExists→Find` 存在公开方法间调用）。② 新用例的 hook 原用 `mutex`+`condition_variable`，TSan 实测 `double lock` + 2 条 data race，改为原子布尔 + 有限自旋，判定不变（`taken_` 置位严格早于 `Append`）。
+
+**对 M3 的影响**：`docs/m3-design.md` §0.5 登记的 I32 与本表为**同一缺陷**，M3 侧不必再开 `M3-A50` 的重复用例，改为引用本条回归用例；M3 设计里「I32 在 M3 顺手修」的计划已被本补丁**取代**（设计文档相应句子在进 `#2` 之前需要一次小修订）。
+
 ## 11. M2 进度与接续点（滚动更新：任何时刻中断，从这里接着做）
 
 | 子里程碑 | 状态 | 证据锚点 |

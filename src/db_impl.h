@@ -103,6 +103,9 @@ class PersistentDBImpl : public DB {
   SequenceNumber last_sequence_ = 0;  // 受 mutex_ 保护
   RecoveryStats recovery_stats_;      // 恢复期填好，之后只读
   SequenceNumber durable_seq_ = 0;    // 已 fsync 覆盖到的最大 sequence（受 commit_mu_ 保护）
+  // I32 修复：**已真正 Append 进 log 的**最大 sequence（受 mutex_ 保护）。水位只按它发布，
+  // 不按 last_sequence_ —— 后者在锁内取批时就推进了，而 Append 是锁外做的。
+  SequenceNumber appended_seq_ = 0;
   Status bg_error_;
   // 初始为 true：恢复中途失败时对象会被 unique_ptr 析构，此时 log_ 尚未打开 ——
   // 若不这样，析构会走到 Close() 里对 nullptr 的 log_ 取 Sync（实测段错误，见 docs/m2-evidence.md）

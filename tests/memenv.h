@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <memory>
 #include <set>
 #include <string>
@@ -83,6 +84,10 @@ class MemEnv : public Env {
   File* Find(const std::string& fname);
   const File* Find(const std::string& fname) const;
 
+  // 并发用例（I32 回归：在飞 Append 与 Sync 并发）要求内部串行化：真实 POSIX 文件的并发
+  // write/fsync 由内核保证，内存替身没有内核，必须自己加锁。用 recursive_mutex 是因为
+  // DeleteFile→RemoveFile、FileExists→Find 这类公开方法之间存在互相调用。
+  mutable std::recursive_mutex mu_;
   std::map<std::string, File> files_;
   std::set<std::string> dirs_;
   std::set<std::string> locked_;

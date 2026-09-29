@@ -388,3 +388,68 @@ TSan 运行退出码：0
 ThreadSanitizer 报告出现次数：0
 
 注：本轮修复触及 db_impl.cpp / memtable.cpp / scripts/lsm_crash_test.sh，故 TSan 全量为修复后重跑。
+
+---
+
+## M2 补丁（`#4` 评审后）：I32 与 I35 的原始证据
+
+### I32 —— `Sync()` 把水位发布到在飞批次（RED → GREEN）
+
+注入方式：`CommitHook::OnGroupTaken`。该点位于 `RunFlusher()` 的 `db_impl.cpp:408`，语义是
+「批次已取、`last_sequence_` 已推进、`log_->Append` 尚未执行」；主线程在此点调用 `DB::Sync()`。
+
+RED（修复前，完整输出存档 `docs/m2-tdd-red-i32.log`）：
+
+```
+[ RUN      ] GroupCommit.SyncDoesNotClaimInFlightBatch
+/home/tengyujie/lsm-kv/tests/crash_test.cpp:731: Failure
+Expected: (early_durable) < (late_durable), actual: 1 vs 1
+I32：在飞批次尚未 Append，Sync() 却把水位发布到了它（early=1 late=1）—— Sync() 返回 kOk 却在声称未落盘的记录已 durable
+[  FAILED  ] GroupCommit.SyncDoesNotClaimInFlightBatch (1 ms)
+[  PASSED  ] 0 tests.
+```
+
+GREEN（修复后，同一用例）：
+
+```
+[ RUN      ] GroupCommit.SyncDoesNotClaimInFlightBatch
+[       OK ] GroupCommit.SyncDoesNotClaimInFlightBatch (1 ms)
+[  PASSED  ] 1 test.
+```
+
+### I35 —— `bg_error_` 无锁读（TSan 实测）
+
+TSan 原始报告（修复前；`Write` 的数据竞争摘录）：
+
+```
+WARNING: ThreadSanitizer: data race (pid=71683)
+  Write of size 4 at 0x7b50000007b0 by thread T33 (mutexes: write M72474652542240368):
+    #0 lsm::Status::operator=(lsm::Status const&) src/common.h:81
+    #1 lsm::PersistentDBImpl::RunFlusher() src/db_impl.cpp:430
+    #2 lsm::PersistentDBImpl::Write(...) src/db_impl.cpp:299
+    #3 lsm::PersistentDBImpl::Put(...) src/db_impl.cpp:457
+
+  Previous read of size 4 at 0x7b50000007b0 by thread T34 (mutexes: write M72193177565529752):
+    #0 lsm::Status::ok() const src/common.h:103
+    #1 lsm::PersistentDBImpl::Write(...) src/db_impl.cpp:283
+
+  Location is heap block of size 480 at 0x7b5000000600 allocated by main thread:
+    #1 lsm::PersistentDBImpl::RecoverAndOpen(...) src/db_impl.cpp:670
+```
+
+本轮 TSan 共 4 条 warning，其中 **1 条是产品代码**（本条的 `bg_error_`），另 3 条来自新用例的脚手架
+（condvar hook 的 `double lock` + 2 条 data race），已分别通过「hook 改原子自旋」与「`MemEnv` 内部加锁」消除。
+注意：`Write` 读 `bg_error_` 只用 `commit_mu_`，而 `RunFlusher` 写它持 `mutex_` —— 这是 `db_impl.h` 里
+「`mutex_` …保护 `bg_error_`」这条声明的**锁纪律违反**，不是新引入的；本补丁改变调度后它才被 TSan 抓到。
+
+### 修复后的验收（同一棵树，全部本轮实测）
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 默认构建全量 | `./build/bin/lsm_tests` | `83 tests from 19 test suites ran.` / `[  PASSED  ] 83 tests.`（33289 ms） |
+| ASan 全量 | `./build-asan/bin/lsm_tests` | `[  PASSED  ] 83 tests.`（82927 ms） |
+| TSan 全量 | `setarch $(uname -m) -R ./build-tsan/bin/lsm_tests` | `[  PASSED  ] 83 tests.`（375667 ms）；`grep -c "WARNING: ThreadSanitizer"` = **0** |
+| 编译告警 | 三构建 `grep -Ei "error\|warning"` | 0 行输出 |
+| 门禁 5 腿 | `bash scripts/lsm_gate.sh --rounds 100` | 5/5 PASS（干净重建+0 warning+全量用例 / ASan 全量 / kill -9 ×100 崩溃对账 / 逐字节截断扫描 B03 / 中间损坏拒绝启动 B04） |
+
+用例数由 82 增至 83：新增 `GroupCommit.SyncDoesNotClaimInFlightBatch`；既有 82 例全部保持绿（无任何断言放宽）。

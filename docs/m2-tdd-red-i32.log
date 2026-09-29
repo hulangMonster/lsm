@@ -1,0 +1,20 @@
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = GroupCommit.SyncDoesNotClaimInFlightBatch
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from GroupCommit
+[ RUN      ] GroupCommit.SyncDoesNotClaimInFlightBatch
+/home/tengyujie/lsm-kv/tests/crash_test.cpp:731: Failure
+Expected: (early_durable) < (late_durable), actual: 1 vs 1
+I32：在飞批次尚未 Append，Sync() 却把水位发布到了它（early=1 late=1）—— Sync() 返回 kOk 却在声称未落盘的记录已 durable
+
+[  FAILED  ] GroupCommit.SyncDoesNotClaimInFlightBatch (1 ms)
+[----------] 1 test from GroupCommit (1 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (2 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] GroupCommit.SyncDoesNotClaimInFlightBatch
+
+ 1 FAILED TEST
