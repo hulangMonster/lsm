@@ -542,13 +542,17 @@ class Env {
 
 ## 13. #2 阶段 RED 策略（为什么这样能拿到真实 RED）
 
-测试文件写完时实现尚不存在。若直接在 `CMakeLists.txt` 里列不存在的源文件，只会得到 `CMake Error: Cannot find source file`
-（配置期失败，证明不了测试覆盖了什么）。因此：
+**修订记录（#1 阶段回退 #0，2026-09-29）**：本节初稿写「`lsm` 用 INTERFACE 目标 → 得到链接期 `undefined reference`」。
+`#1` 校验时发现该路径不可达：测试文件要 `#include "common.h"` 等头文件，而 `#2` 按指令「不新增任何实现文件」，
+头文件尚不存在 → RED 发生在**编译期**（`fatal error: common.h: No such file or directory`），不可能走到链接期。
+改为如实分两段留档，**影响面仅限 #2 的证据形式，不动任何接口/不变量/测试矩阵**：
 
-- #2 阶段 `CMakeLists.txt` 里 `lsm` 用 `add_library(lsm INTERFACE)`（无实现符号），`lsm_tests` 正常编译测试。
-- 构建结果 = **链接期大批 `undefined reference to lsm::...`**，逐个对应测试真正依赖的接口 —— 这是「测试已表达全部契约、
-  实现为零」的真实证据，原始输出落 `docs/m1-tdd-red.log`（保留，不删）。
-- M1.1 起把 `lsm` 改成 `STATIC` 并按 §3 文件清单逐个补源文件，RED 随之收敛。
+- **#2（编译期 RED）**：`CMakeLists.txt` 里 `lsm` 用 `add_library(lsm INTERFACE)`（无源文件），`lsm_tests` 正常配置；
+  构建在编译测试文件时失败于缺失头文件。原始输出落 `docs/m1-tdd-red.log` 的 `## #2 编译期 RED` 小节。
+  证据含义：**测试集已完整表达契约，实现为零**。
+- **M1.1（链接期 RED）**：头文件与部分 util 实现落地后，首次构建出现链接期 `undefined reference to lsm::...`，
+  逐个对应尚未实现的符号。原始输出追加进同一文件（`## M1.1 链接期 RED` 小节），RED 随子里程碑逐步收敛。
+- 不在 #2 阶段为了凑链接期错误而预写头文件——那会把「测试先行」变成「实现先行」。
 
 ## 14. 自检（占位符 / 内部矛盾 / 歧义 / 范围越界）
 
