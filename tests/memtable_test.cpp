@@ -219,6 +219,12 @@ TEST(Skiplist, IteratorForwardBackward) {
   it->SeekToFirst();
   ASSERT_TRUE(it->Valid());
   EXPECT_EQ(first, it->key().ToString());
+  // [#4 评审建议 5] 原文这段注释承诺「首元素再 Prev」，但代码里并没有 Prev —— 补齐，
+  // 让注释承诺的边界真的被验证（首元素 Prev 后必须 !Valid，且再 Prev 不得崩）。
+  it->Prev();
+  EXPECT_FALSE(it->Valid());
+  it->Prev();
+  EXPECT_FALSE(it->Valid());
 }
 
 TEST(Skiplist, DuplicateKeys) {
@@ -250,6 +256,17 @@ TEST(Skiplist, DuplicateKeys) {
     EXPECT_LE(fwd[i - 1], fwd[i]);
   }
   EXPECT_EQ(fwd.size(), SkiplistKeysBackward(list).size());
+  // [#4 评审建议 6] 原文只比条数：补上重复段内的 Prev 顺序断言（必须逐节点回退、不是跨过整段）
+  {
+    std::unique_ptr<Skiplist::Iterator> dup_it(list.NewIterator());
+    std::vector<std::string> back;
+    for (dup_it->SeekToLast(); dup_it->Valid(); dup_it->Prev()) {
+      back.push_back(dup_it->key().ToString());
+    }
+    ASSERT_EQ(fwd.size(), back.size());
+    EXPECT_EQ(std::vector<std::string>(fwd.rbegin(), fwd.rend()), back)
+        << "反向遍历必须是正向遍历的严格逆序（含重复段内部）";
+  }
 
   // MemTable 层不会出现重复：internal key 含 sequence（design §7.4）
   InternalKeyComparator icmp(BytewiseComparator());
@@ -1346,7 +1363,8 @@ TEST(Stress, AlignmentUnderSanitizers) {
     }
   }
 
-  // 显式 8/16/32/64 对齐 + 非 2 的幂请求不得崩
+  // 显式 8/16/32/64/128/256 对齐（AllocateAligned 的前置条件是 align 为 2 的幂；
+  // [#4 评审建议 5] 原文注释写「非 2 的幂请求不得崩」但 aligns[] 全是 2 的幂，注释已订正）
   const size_t aligns[] = {8, 16, 32, 64, 128, 256};
   for (size_t align : aligns) {
     char* p = arena.AllocateAligned(1000, align);
@@ -1398,4 +1416,109 @@ TEST(Stress, AlignmentUnderSanitizers) {
   RecordProperty("allocations", std::to_string(allocs.size()));
   std::cout << "[   INFO   ] Stress.AlignmentUnderSanitizers: allocations=" << allocs.size()
             << " alignof(max_align_t)=" << kAlign << std::endl;
+}
+
+// ===========================================================================
+// [#4 评审阻断项回归] 自定义比较器一致性 / 畸形输入安全（design §4.3、protocol §6）
+// ===========================================================================
+
+namespace {
+
+// 大小写不敏感：key 的「等价关系」与「字节相等」故意不一致，用来暴露
+// 「排序用注入比较器、命中/判段却用逐字节」这类不一致缺陷。
+// 不用 std::tolower，避免引入 <cctype> 与 locale 相关的未定义行为。
+inline char FoldAscii(char c) {
+  return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+class CaseInsensitiveComparator : public Comparator {
+ public:
+  int Compare(const Slice& a, const Slice& b) const override {
+    const size_t n = a.size() < b.size() ? a.size() : b.size();
+    for (size_t i = 0; i < n; ++i) {
+      const unsigned char ca = static_cast<unsigned char>(FoldAscii(a[i]));
+      const unsigned char cb = static_cast<unsigned char>(FoldAscii(b[i]));
+      if (ca != cb) return ca < cb ? -1 : 1;
+    }
+    if (a.size() == b.size()) return 0;
+    return a.size() < b.size() ? -1 : 1;
+  }
+  const char* Name() const override { return "test.CaseInsensitiveComparator"; }
+};
+
+}  // namespace
+
+TEST(MemTable, CustomComparatorEqualityIsHonored) {
+  CaseInsensitiveComparator cmp;
+  Options options;
+  options.comparator = &cmp;
+  DB* raw = nullptr;
+  ASSERT_TRUE(DB::Open(options, "", &raw).ok());
+  std::unique_ptr<DB> db(raw);
+
+  ASSERT_TRUE(db->Put("Key", "v1").ok());
+  std::string v;
+  ASSERT_TRUE(db->Get("KEY", &v).ok()) << "等价 key（仅大小写不同）必须命中";
+  EXPECT_EQ("v1", v);
+  ASSERT_TRUE(db->Get("key", &v).ok());
+  EXPECT_EQ("v1", v);
+
+  // 等价 key 的再次写入 = 同一条逻辑 key 的新版本（覆盖语义按比较器判定）
+  ASSERT_TRUE(db->Put("KEY", "v2").ok());
+  ASSERT_TRUE(db->Get("Key", &v).ok());
+  EXPECT_EQ("v2", v);
+
+  // 用户视图：等价 key 只能出现一条（否则说明判段退化成了逐字节比较）
+  std::unique_ptr<Iterator> it(db->NewIterator());
+  const std::vector<std::pair<std::string, std::string>> fwd = CollectForward(it.get());
+  ASSERT_EQ(1u, fwd.size()) << "等价 user key 必须去重成一条";
+  EXPECT_EQ("v2", fwd[0].second);
+
+  // 正反向视图条数必须一致（design §4.4）
+  std::unique_ptr<Iterator> it2(db->NewIterator());
+  const std::vector<std::pair<std::string, std::string>> bwd = CollectBackward(it2.get());
+  EXPECT_EQ(fwd.size(), bwd.size()) << "正反向视图条数必须一致";
+
+  // 再加两条不同 key：排序（按注入比较器）与去重必须同时成立
+  ASSERT_TRUE(db->Put("Zz", "z").ok());
+  ASSERT_TRUE(db->Put("aa", "a").ok());
+  std::unique_ptr<Iterator> it3(db->NewIterator());
+  const std::vector<std::pair<std::string, std::string>> all = CollectForward(it3.get());
+  ASSERT_EQ(3u, all.size());
+  EXPECT_EQ("aa", all[0].first);
+  EXPECT_EQ("KEY", all[1].first) << "输出的是该逻辑 key 最新版本的字节形态";
+  EXPECT_EQ("Zz", all[2].first);
+  std::unique_ptr<Iterator> it4(db->NewIterator());
+  EXPECT_EQ(all.size(), CollectBackward(it4.get()).size());
+}
+
+TEST(MemTable, MalformedInputDoesNotReadOutOfBounds) {
+  InternalKeyComparator icmp(BytewiseComparator());
+  MemTable mem(icmp, kTestWriteBufferSize);
+  AddEntry(&mem, 1, kTypeValue, std::string(1000, 'x'), "v");
+
+  // 1) lookup_key 少于 8 字节（漏拼 trailer 的调用方）：必须安全判未命中，不得触发 size_t 下溢
+  std::string v;
+  for (size_t n = 0; n < kInternalKeyMinSize; ++n) {
+    const std::string bad(n, 'x');
+    EXPECT_EQ(MemTable::GetResult::kNotFound, mem.Get(Slice(bad), &v)) << "lookup_key size=" << n;
+  }
+  EXPECT_EQ(MemTable::GetResult::kFound,
+            mem.Get(BuildLookupKey(std::string(1000, 'x'), kMaxSequenceNumber), &v));
+
+  // 2) 条目编码自洽但 internal_key_size < 8：比较器必须拒绝解码并退化为整条字节序
+  const std::string malformed =
+      std::string(1, static_cast<char>(5)) + std::string(5, 'z') + std::string(1, '\x00');
+  const std::string well_formed = ManualEntry("userkey", 7, kTypeValue, Slice("v"));
+  MemTableKeyComparator mkc(&icmp);
+  EXPECT_NE(0, mkc.Compare(malformed, well_formed));
+  EXPECT_NE(0, mkc.Compare(well_formed, malformed));
+  EXPECT_EQ(0, mkc.Compare(malformed, malformed));
+  EXPECT_EQ(0, mkc.Compare(well_formed, well_formed));
+
+  // 3) InternalKeyComparator 对畸形 internal key 同样不得越界（M3 会复用同一个比较器）
+  const std::string good = BuildInternalKey("userkey", 1, kTypeValue);
+  EXPECT_EQ(0, icmp.Compare(Slice("ab"), Slice("ab")));
+  EXPECT_LT(icmp.Compare(Slice("ab"), Slice(good)), 0);
+  EXPECT_GT(icmp.Compare(Slice(good), Slice("ab")), 0);
 }

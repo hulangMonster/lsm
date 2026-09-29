@@ -201,6 +201,10 @@ class InternalKeyComparator : public Comparator {
       : user_comparator_(user_comparator) {}
 
   int Compare(const Slice& a, const Slice& b) const override {
+    // 防御：畸形 internal key（< kInternalKeyMinSize）不得进入 ExtractUserKey（size_t 下溢 + 越界读）。
+    // 库内不产生畸形键，但 M3 的 block 解析会复用同一个比较器、输入来自磁盘。退化为整条字节序，
+    // 代价是畸形键参与排序时顺序未定义 —— 这属于「输入已损坏」的范畴，安全性优先。
+    if (a.size() < kInternalKeyMinSize || b.size() < kInternalKeyMinSize) return a.compare(b);
     const int c = user_comparator_->Compare(ExtractUserKey(a), ExtractUserKey(b));
     if (c != 0) return c;
     const uint64_t ta = DecodeTrailerLE(a.data() + a.size() - kInternalKeyTrailerSize);
@@ -239,6 +243,11 @@ class Iterator {
   virtual void Prev() = 0;
 
   // 仅在 Valid() 时可调用（前置条件）。
+  // 有效期契约（#4 评审建议 1；design §4.1 的 I7）：
+  //   - MemTable 内部序迭代器：两者都指向 Arena，有效期 = MemTable 存活期；
+  //   - DB 用户视图迭代器：value() 指向 Arena；**key() 指向迭代器内部的 user key 缓存，
+  //     下一次定位调用（Seek*/SeekToFirst/SeekToLast/Next/Prev）后即失效**。
+  //   需要跨调用保留一律 ToString()。
   virtual Slice key() const = 0;
   virtual Slice value() const = 0;
   virtual Status status() const = 0;

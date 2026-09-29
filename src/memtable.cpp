@@ -8,12 +8,26 @@
 namespace lsm {
 namespace {
 
+bool DecodeEntryValue(const Slice& entry, Slice* value) {
+  Slice input = entry;
+  uint32_t len = 0;
+  if (!GetVarint32(&input, &len)) return false;
+  if (len < kInternalKeyMinSize || len > input.size()) return false;
+  input = Slice(input.data() + len, input.size() - len);
+  if (!GetVarint32(&input, &len) || len > input.size()) return false;
+  *value = Slice(input.data(), len);
+  return true;
+}
+
 // 从条目里解出 internal_key（protocol §7）。输入必须是本类写入的合法编码。
 bool DecodeEntryInternalKey(const Slice& entry, Slice* internal_key) {
   Slice input = entry;
   uint32_t len = 0;
   if (!GetVarint32(&input, &len)) return false;
-  if (len > input.size()) return false;
+  // protocol §6 的 MUST：解码前必须校验长度 >= kInternalKeyMinSize。
+  // 少了这一条，长度 5 的 internal_key 会让 ExtractUserKey 的 size_t 下溢成 ~2^64，
+  // 进而在 Slice::compare 里越界读（#4 评审阻断项 2 的 ASan 复现）。
+  if (len < kInternalKeyMinSize || len > input.size()) return false;
   *internal_key = Slice(input.data(), len);
   return true;
 }
@@ -114,8 +128,16 @@ int MemTableKeyComparator::Compare(const Slice& a, const Slice& b) const {
   if (DecodeEntryInternalKey(a, &ia) && DecodeEntryInternalKey(b, &ib)) {
     const int c = internal_comparator_->Compare(ia, ib);
     if (c != 0) return c;
+    // internal key 按比较器等价（注意：**不一定字节相同** —— 自定义比较器下 "Key"/"key" 等价）。
+    // 此时只用 **value 段** 定序，绝不能用「整条条目的字节序」：探针条目（空 value）的 user key
+    // 字节形态可能与真实条目不同，整条字节序会把逻辑相等的真实条目排到探针之前，
+    // 于是 Seek 跳过它、Get 落空（#4 评审阻断项 1 的更深一层根因）。
+    // 用 value 定序还能保证探针（空 value）≤ 同 internal key 的任何真实条目，Seek 必能命中。
+    Slice va;
+    Slice vb;
+    if (DecodeEntryValue(a, &va) && DecodeEntryValue(b, &vb)) return va.compare(vb);
   }
-  // 同 internal key（或任一侧解码失败）：退化为整条条目的字节序 → 仍是严格全序
+  // 任一侧畸形：退化为整条字节序。只用于保证内存安全与全序，正常路径不会走到。
   return a.compare(b);
 }
 
@@ -168,6 +190,12 @@ Status MemTable::Add(SequenceNumber seq, ValueType type, const Slice& key, const
 }
 
 MemTable::GetResult MemTable::Get(const Slice& lookup_key, std::string* value) const {
+  // 调用方给的不是合法 lookup key（user_key || trailer，至少 8 字节）时直接判未命中，
+  // 而不是把控制流送进会做 size_t 下溢的路径（protocol §6 / #4 评审阻断项 2）。
+  if (lookup_key.size() < kInternalKeyMinSize) {
+    if (value != nullptr) value->clear();
+    return GetResult::kNotFound;
+  }
   const ProbeEntry probe(lookup_key);
   Skiplist::Iterator it(&skiplist_);
   it.Seek(probe.slice());
@@ -179,7 +207,12 @@ MemTable::GetResult MemTable::Get(const Slice& lookup_key, std::string* value) c
   SequenceNumber seq = 0;
   ValueType type = kTypeValue;
   if (!ParseInternalKey(internal_key, &user_key, &seq, &type)) return GetResult::kNotFound;
-  if (user_key.compare(ExtractUserKey(lookup_key)) != 0) return GetResult::kNotFound;
+  // 等价判定必须走注入的 user comparator，不能退化成逐字节比较：
+  // 否则「排序说相等、Get 说不等」——自定义比较器（如大小写不敏感）下 Get 会命中不了
+  // （#4 评审阻断项 1 的复现）。protocol §6.1 里的「字节序」是默认 BytewiseComparator 下的特例。
+  if (internal_comparator_->user_comparator()->Compare(user_key, ExtractUserKey(lookup_key)) != 0) {
+    return GetResult::kNotFound;
+  }
 
   if (type == kTypeDeletion) {
     if (value != nullptr) value->clear();

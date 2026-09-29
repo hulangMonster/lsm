@@ -19,7 +19,9 @@ std::string TruncatedKey(const Slice& key) {
 class UserIterator : public Iterator {
  public:
   explicit UserIterator(const MemTable* mem)
-      : internal_(mem->NewIterator()), state_(kBeforeFirst) {}
+      : internal_(mem->NewIterator()),
+        user_comparator_(mem->internal_comparator().user_comparator()),
+        state_(kBeforeFirst) {}
   ~UserIterator() override { delete internal_; }
   UserIterator(const UserIterator&) = delete;
   UserIterator& operator=(const UserIterator&) = delete;
@@ -126,12 +128,18 @@ class UserIterator : public Iterator {
     state_ = kBeforeFirst;
   }
 
+  // 「是不是同一个 user key」必须与排序用同一个 comparator：用逐字节比较的话，
+  // 大小写不敏感之类的比较器下会把一条逻辑 key 拆成多条输出（#4 评审阻断项 1）。
+  bool SameUserKey(const Slice& a, const Slice& b) const {
+    return user_comparator_->Compare(a, b) == 0;
+  }
+
   void SkipCurrentRunForwardWithKey(const Slice& user_key) {
     while (internal_->Valid()) {
       Slice uk;
       ValueType type = kTypeValue;
       if (!ParseEntry(internal_->key(), &uk, &type)) break;
-      if (uk.compare(user_key) != 0) break;
+      if (!SameUserKey(uk, user_key)) break;
       internal_->Next();
     }
   }
@@ -142,6 +150,7 @@ class UserIterator : public Iterator {
   }
 
   Iterator* internal_;
+  const Comparator* user_comparator_;   // 不拥有；来自 MemTable 的 internal_comparator
   State state_;
   std::string current_user_key_;
 };

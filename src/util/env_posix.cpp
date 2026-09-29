@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <new>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -29,6 +30,8 @@ std::string ErrnoMessage(const char* what, const std::string& fname) {
 class PosixWritableFile : public WritableFile {
  public:
   explicit PosixWritableFile(int fd) : fd_(fd) {}
+  PosixWritableFile(const PosixWritableFile&) = delete;
+  PosixWritableFile& operator=(const PosixWritableFile&) = delete;
   ~PosixWritableFile() override {
     if (fd_ >= 0) ::close(fd_);
   }
@@ -72,6 +75,8 @@ class PosixWritableFile : public WritableFile {
 class PosixSequentialFile : public SequentialFile {
  public:
   explicit PosixSequentialFile(FILE* f) : file_(f) {}
+  PosixSequentialFile(const PosixSequentialFile&) = delete;
+  PosixSequentialFile& operator=(const PosixSequentialFile&) = delete;
   ~PosixSequentialFile() override {
     if (file_ != nullptr) std::fclose(file_);
   }
@@ -102,7 +107,13 @@ class PosixEnv : public Env {
     *result = nullptr;
     const int fd = ::open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) return Status::IOError(ErrnoMessage("NewWritableFile", fname));
-    *result = new PosixWritableFile(fd);
+    // nothrow + 失败时关掉 fd：否则 new 抛 bad_alloc 会把已打开的 fd 漏掉（#4 评审建议 6）
+    PosixWritableFile* f = new (std::nothrow) PosixWritableFile(fd);
+    if (f == nullptr) {
+      ::close(fd);
+      return Status::IOError("NewWritableFile: out of memory", fname);
+    }
+    *result = f;
     return Status::OK();
   }
 
@@ -110,7 +121,12 @@ class PosixEnv : public Env {
     *result = nullptr;
     FILE* f = std::fopen(fname.c_str(), "r");
     if (f == nullptr) return Status::IOError(ErrnoMessage("NewSequentialFile", fname));
-    *result = new PosixSequentialFile(f);
+    PosixSequentialFile* file = new (std::nothrow) PosixSequentialFile(f);
+    if (file == nullptr) {
+      std::fclose(f);
+      return Status::IOError("NewSequentialFile: out of memory", fname);
+    }
+    *result = file;
     return Status::OK();
   }
 

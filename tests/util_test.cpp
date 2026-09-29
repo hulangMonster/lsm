@@ -725,6 +725,8 @@ TEST(Arena, Reset) {
 
   arena.Reset();
   EXPECT_EQ(0u, arena.MemoryUsage()) << "Reset 必须丢弃全部块（design §6）";
+  // [#4 评审建议 6] design §6 同时冻结了 BytesAllocated() 在 Reset 后归零，之前全仓无断言
+  EXPECT_EQ(0u, arena.BytesAllocated()) << "Reset 必须把「累计交出载荷字节」也归零（design §6）";
   // Reset 之后原指针全部失效（悬垂），此处刻意不再触碰 allocs 里的指针 ——
   // 一旦实现「只重置指针不释放」或「释放后仍被引用」，ASan 会在后续分配里抓到。
 

@@ -2,6 +2,9 @@
 #include "util/arena.h"
 
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <new>
 
 namespace lsm {
 namespace {
@@ -54,8 +57,16 @@ char* Arena::AllocateFallbackAligned(size_t bytes, size_t align) {
 }
 
 char* Arena::AllocateNewBlock(size_t block_bytes) {
-  // operator new[] 保证 alignof(std::max_align_t) 对齐；分配失败按 design §6 的决策 fail-fast。
-  char* result = new char[block_bytes];
+  // operator new[] 保证 alignof(std::max_align_t) 对齐。
+  // 分配失败按 design §6 的显式决策 fail-fast：打印可定位信息后 abort。
+  // 用 nothrow 变体是为了不让 std::bad_alloc 逃逸成无信息的 std::terminate
+  //（#4 评审建议 4：原文的决策在实现里没兑现）。
+  char* result = new (std::nothrow) char[block_bytes];
+  if (result == nullptr) {
+    std::fprintf(stderr, "lsm::Arena: out of memory allocating %zu bytes (design §6: fail-fast)\n",
+                 block_bytes);
+    std::abort();
+  }
   blocks_.push_back(result);
   memory_usage_ += block_bytes + sizeof(char*);
   return result;
