@@ -107,3 +107,6 @@ target_link_libraries(lsm_crash_recover PRIVATE lsm)
 # M2.2c：损坏注入的端到端判据（B03 逐字节截断扫描 / B04 中间损坏）
 add_executable(lsm_damage_test scripts/lsm_damage_test.cpp)
 target_link_libraries(lsm_damage_test PRIVATE lsm)
+
+# B07：单次提交延迟微基准（docs/m2-design.md §9.2/§9.3；M5 的性能分母）
+add_executable(fsbench_commit_latency scripts/fsbench_commit_latency.cpp)
