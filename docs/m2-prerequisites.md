@@ -159,6 +159,8 @@ bash scripts/lsm_crash_test.sh --rounds 30 --mode nosync  # 只断言无半写/�
 |---|---|---|---|
 | A20 | 「64 个并发写者，`Sync` 调用次数 `<= 8`」 | 串行调度下每人自成一批 ⇒ 64 次 fsync ⇒ 假失败（赌调度） | 改为 `CommitHook` 确定性屏障（断言本批含 64 个写者且 fsync 次数 == 1）；真实并发统计降级为 A20b（不作门禁） |
 | A27/A28 | 「随机写 → 随机崩溃 → 随机撕裂长度」 | 未固定种子 ⇒ 失败不可复现 | 必须固定种子并打进 INFO；撕裂长度只能来自该种子驱动的 PRNG |
+| §4.2 writer | padding 条件写 `(kWALBlockSize - block_offset_) < kWALHeaderSize` | `block_offset_ = 32761`（剩余正好 7）时不补 padding，`avail = 0` ⇒ 写出 `length = 0` 的片段；而 §4.3 的 reader 规定 `len == 0 ⇒ PARSE_FAIL`，**writer 能写出自己读不回来的文件** | 改为 `<= kWALHeaderSize`；A03 的 `block_offset` 范围由 `32762..32767` 扩到 **`32761..32767`**（原范围恰好吃掉这个边界） |
+| A07/A08 | 判据要求 WAL 层就给出「尾部截断 vs 中间损坏」 | §5.3 的重同步判定属恢复层；WAL 层只能提供事实 | WAL 层返回 `verdict == kParseFail` + `valid_record_after_failure`（其后是否存在完好 record）+ `last_good_end`；§5.3 的分类由 M2.2 的 `Recovery.*` 施加 |
 
 另有两处**指令未覆盖、由设计补齐**的必要项（已在设计门获批，登记备查）：
 - **D12**：M2 无 flush ⇒ 恢复期必须按 WAL 实测字节数放大 MemTable 容量，否则 100 MiB WAL 会在 `write_buffer_size` 处 `kFrozen` 导致恢复失败。

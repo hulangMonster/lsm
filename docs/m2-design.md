@@ -345,8 +345,11 @@ enum RecordType : uint8_t {
 WriteRecord(payload):
   begin = true
   while true:
-    if (kWALBlockSize - block_offset_) < kWALHeaderSize:
-        # 块尾放不下一个头 ⇒ 补零 padding 到块尾
+    if (kWALBlockSize - block_offset_) <= kWALHeaderSize:      # 修订（#1 回退 #0）：原来是 "<"，
+        # 剩余空间 <= 7 时也必须补 padding：若只剩 7 字节，头之后 avail == 0，
+        # 会写出 length == 0 的非法片段 —— 而本设计的 reader 明文规定 len == 0 ⇒ PARSE_FAIL，
+        # 即 writer 能写出自己读不回来的文件（LevelDB 允许空片段，本设计**不允许**）。
+        # 块尾放不下一个头（或放得下头但放不下 payload）⇒ 补零 padding 到块尾
         if (kWALBlockSize - block_offset_) > 0: emit zeros(kWALBlockSize - block_offset_)
         block_offset_ = 0
     avail   = kWALBlockSize - block_offset_ - kWALHeaderSize
@@ -1012,7 +1015,7 @@ exit 0
 |---|---|---|---|---|
 | A01 | `WAL.WriteReadRoundTrip` | MemEnv 忠实实现 `append`/`read` | 1..N 条随 record 往返逐字节一致；含空 payload 的**拒绝**路径 | `MemEnv` |
 | A02 | `WAL.LargeRecordCrossBlockSplit` | 无 | 边界四组：payload = `32761`（正好一块）、`32762`（跨两块）、`2*32761`（跨三块）、`1`（最小合法）；`record.size() == 0` ⇒ 构造期拒绝 | 无 |
-| A03 | `WAL.BlockTailPadding` | 无 | 写入使 `block_offset` 落在 `32762..32767` 的 record，断言 padding 为 0 且 reader 正确跳过；`kZeroType` 不被当成 record | 无 |
+| A03 | `WAL.BlockTailPadding` | 无 | 写入使 `block_offset` 落在 **`32761..32767`**（**含 32761**：剩余正好 7 字节是 writer 会写出 length=0 片段的边界，见 §4.2 修订）的 record，断言 padding 为 0、**任何片段的 length 都 >= 1**、reader 正确跳过；`kZeroType` 不被当成 record | 无 |
 | A04 | `WAL.CrcDetectsSingleByteFlip` | 无 | 对 `crc`/`length`/`type`/payload 四处各逐位翻转（≥4×8 次），**每次都不得被当成有效 record**；payload 翻转必须 CRC 失败 | 无 |
 | A05 | `WAL.RejectsIllegalTypeAndLength` | 无 | `type ∉ {1..4}`、`length == 0`、`length > 32761` ⇒ 判损坏，**且不得越界读**（ASan 下跑） | ASan |
 | A06 | `WAL.TruncatedTailIsCut` | 无 | 对一条含 3 条 record 的 WAL，**对每个长度 0..file_size 都做一遍**：`Open`/`Scan` 必须返回 `CLEAN`（长度落在 record 边界）或 `TAIL_RESIDUE`，且 `last_good_end` 是某个 record 边界；任何长度都不得 panic / 越界 / 死循环 | ASan + 逐字节截断循环 |
