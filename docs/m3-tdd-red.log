@@ -1,0 +1,41 @@
+# M3 #2 RED 原始输出
+
+命令: cmake --build build -j8（库尚未包含 src/sstable/*.cpp，实现留到 #3/M3.1）
+退出码: 2
+
+## 未定义符号计数
+114
+
+## 编译期错误（应只有 collect2 汇总行，无 error: 源码错误）
+collect2: error: ld returned 1 exit status
+
+## 未定义符号样本（前 25 条）
+sstable_format_test.cpp:(.text+0x172e): undefined reference to `lsm::BlockReader::key() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x186f): undefined reference to `lsm::BlockReader::key() const'
+sstable_format_test.cpp:(.text+0x1aa3): undefined reference to `lsm::BlockBuilder::Add(lsm::Slice const&, lsm::Slice const&)'
+sstable_format_test.cpp:(.text+0x1c8b): undefined reference to `lsm::BlockBuilder::BlockBuilder(int)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x1cbb): undefined reference to `lsm::BlockBuilder::Finish()'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x1cec): undefined reference to `lsm::BlockReader::Open(lsm::Slice const&, std::unique_ptr<lsm::BlockReader, std::default_delete<lsm::BlockReader> >*)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x1dc6): undefined reference to `lsm::BlockReader::Seek(lsm::Slice const&)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x1e75): undefined reference to `lsm::BlockReader::Valid() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x1f80): undefined reference to `lsm::BlockReader::status() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x213f): undefined reference to `lsm::BlockBuilder::BlockBuilder(int)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x219e): undefined reference to `lsm::BlockBuilder::Finish()'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x21d7): undefined reference to `lsm::BlockReader::Open(lsm::Slice const&, std::unique_ptr<lsm::BlockReader, std::default_delete<lsm::BlockReader> >*)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x22a8): undefined reference to `lsm::BlockReader::Seek(lsm::Slice const&)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x2350): undefined reference to `lsm::BlockReader::Valid() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x242b): undefined reference to `lsm::BlockReader::value() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x253f): undefined reference to `lsm::BlockReader::Seek(lsm::Slice const&)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x25e5): undefined reference to `lsm::BlockReader::Valid() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x270e): undefined reference to `lsm::BlockReader::Seek(lsm::Slice const&)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x27b6): undefined reference to `lsm::BlockReader::Valid() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x2ffe): undefined reference to `lsm::BlockReader::Prev()'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x308a): undefined reference to `lsm::BlockReader::Valid() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x33f2): undefined reference to `lsm::BlockReader::Seek(lsm::Slice const&)'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x3493): undefined reference to `lsm::BlockReader::Valid() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x35ae): undefined reference to `lsm::BlockReader::status() const'
+/usr/bin/ld: sstable_format_test.cpp:(.text+0x36e4): undefined reference to `lsm::BlockReader::SeekToFirst()'
+
+## 结论
+新增用例全部可编译（0 条源码编译错误），链接失败 = 本阶段预期的 RED：
+声明在 src/sstable/{format,block}.h，实现（M3.1）尚未开始。

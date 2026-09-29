@@ -77,6 +77,7 @@ endif()
 enable_testing()
 
 add_executable(lsm_tests
+  tests/sstable_format_test.cpp      # M3.1 格式层（Block/Footer）
   tests/util_test.cpp
   tests/memtable_test.cpp
   # M2：WAL 层用例（A01~A10）+ 故障注入 Env + 恢复层用例（A11~A19）+ 内存文件系统（崩溃语义 seam）
