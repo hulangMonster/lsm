@@ -79,10 +79,11 @@ enable_testing()
 add_executable(lsm_tests
   tests/util_test.cpp
   tests/memtable_test.cpp
-  # M2：WAL 层用例（A01~A10）+ 故障注入 Env + 恢复层用例（A11~A19）
+  # M2：WAL 层用例（A01~A10）+ 故障注入 Env + 恢复层用例（A11~A19）+ 内存文件系统（崩溃语义 seam）
   tests/wal_test.cpp
   tests/faulty_env.cpp
   tests/recovery_test.cpp
+  tests/memenv.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}
