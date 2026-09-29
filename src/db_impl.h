@@ -56,6 +56,11 @@ class PersistentDBImpl : public DB {
   const std::string dbname_;
   std::unique_ptr<MemTable> memtable_;
   std::unique_ptr<WALWriter> log_;
+  // D10：进程级独占锁（Close/析构时释放）。缺了它，两个进程同时 Open 同一目录会同时
+  // Append 同一 WAL ⇒ record 交错 ⇒ 恢复报中间损坏（设计点名的最难排查路径）。
+  std::unique_ptr<FileLock> file_lock_;
+
+  Env* EnvOf() const { return options_.env != nullptr ? options_.env : Env::Default(); }
 
   // 组提交（design §6.3）。锁序（L8）：commit_mu_ → mutex_；且**两把锁都不跨 IO**（I17）。
   struct Pending {

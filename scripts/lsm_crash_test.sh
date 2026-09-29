@@ -31,6 +31,8 @@ WORK=$(mktemp -d /tmp/lsm_crash_XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 MISSING_TOTAL=0
 MISMATCH_TOTAL=0
+ACKED_TOTAL=0
+ROUNDS_OK=0
 echo "== lsm_crash_test: rounds=$ROUNDS mode=$MODE ack_sync_every=$ACK_SYNC_EVERY dir=$WORK =="
 for i in $(seq 1 "$ROUNDS"); do
   DB="$WORK/db$i"
@@ -44,7 +46,28 @@ for i in $(seq 1 "$ROUNDS"); do
   sleep "$(awk "BEGIN{printf \"%.3f\", $SLEEP_MS/1000}")"
   kill -9 "$WPID" 2>/dev/null
   wait "$WPID" 2>/dev/null
-  OUT=$("$BIN/lsm_crash_recover" "$DB" "$ACK" 2>"$WORK/r$i.err")
+  OUT="$("$BIN/lsm_crash_recover" "$DB" "$ACK" 2>"$WORK/r$i.err")"
+  RC=$?
+  LINE=$(echo "$OUT" | grep '^ROUND ' | head -1)
+  # 阻断项 3 的修复：门禁必须能区分"通过"与"对账工具根本没跑起来"。
+  # 原来 RC != 0 只打一行 stderr、不退出；而且 M 取空时 $((MISSING_TOTAL + M)) 是 bash 算术
+  # 语法错误被静默跳过 ⇒ 计数恒 0 ⇒ 末尾的 exit 1 永不触发 ⇒ 工具每轮崩溃也打印 [OK]。
+  if [ "$RC" -ne 0 ] || [ -z "$LINE" ]; then
+    echo "ROUND_FAIL $i RC $RC（对账工具未成功产出 ROUND 行）" >&2
+    sed 's/^/    /' "$WORK/r$i.err" >&2
+    exit 1
+  fi
+  M=$(echo "$LINE" | sed -n 's/.*MISSING \([0-9]*\).*/\1/p')
+  MM=$(echo "$LINE" | sed -n 's/.*MISMATCH \([0-9]*\).*/\1/p')
+  RACKED=$(echo "$LINE" | sed -n 's/.*ACKED \([0-9]*\).*/\1/p')
+  if [ -z "$M" ] || [ -z "$MM" ] || [ -z "$RACKED" ]; then
+    echo "ROUND_FAIL $i 无法从 ROUND 行解析 ACKED/MISSING/MISMATCH：$LINE" >&2
+    exit 1
+  fi
+  MISSING_TOTAL=$((MISSING_TOTAL + M))
+  MISMATCH_TOTAL=$((MISMATCH_TOTAL + MM))
+  ACKED_TOTAL=$((ACKED_TOTAL + RACKED))
+  ROUNDS_OK=$((ROUNDS_OK + 1))
   RC=$?
   LINE=$(echo "$OUT" | grep '^ROUND ' | head -1)
   M=$(echo "$LINE" | sed -n 's/.*MISSING \([0-9]*\).*/\1/p')
@@ -57,7 +80,15 @@ for i in $(seq 1 "$ROUNDS"); do
     sed 's/^/    /' "$WORK/r$i.err" >&2
   fi
 done
-echo "TOTAL_ROUNDS $ROUNDS MISSING_TOTAL $MISSING_TOTAL MISMATCH_TOTAL $MISMATCH_TOTAL"
+echo "TOTAL_ROUNDS $ROUNDS ROUNDS_OK $ROUNDS_OK ACKED_TOTAL $ACKED_TOTAL MISSING_TOTAL $MISSING_TOTAL MISMATCH_TOTAL $MISMATCH_TOTAL"
+if [ "$ROUNDS_OK" -ne "$ROUNDS" ]; then
+  echo "[FAIL] 只有 $ROUNDS_OK/$ROUNDS 轮成功产出对账结果（门禁不完整）" >&2
+  exit 1
+fi
+if [ "$ACKED_TOTAL" -eq 0 ]; then
+  echo "[FAIL] 全部轮次 ACKED 合计为 0：写者根本没写进任何数据，门禁无意义" >&2
+  exit 1
+fi
 if [ "$MISSING_TOTAL" -ne 0 ] || [ "$MISMATCH_TOTAL" -ne 0 ]; then
   echo "[FAIL] 已 ack 的写出现丢失或值不一致" >&2
   exit 1

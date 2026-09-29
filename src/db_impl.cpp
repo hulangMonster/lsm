@@ -288,6 +288,26 @@ Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, cons
   return w.status;
 }
 
+namespace {
+// RAII：恢复失败等任何提前返回路径都必须释放 LOCK，否则同一进程内重试会被自己的锁挡住
+class ScopedFileLock {
+ public:
+  ScopedFileLock(Env* env, FileLock* lock) : env_(env), lock_(lock) {}
+  ~ScopedFileLock() {
+    if (lock_ != nullptr) env_->UnlockFile(lock_);
+  }
+  FileLock* release() {
+    FileLock* l = lock_;
+    lock_ = nullptr;
+    return l;
+  }
+
+ private:
+  Env* const env_;
+  FileLock* lock_;
+};
+}  // namespace
+
 std::string PersistentDBImpl::EncodeGroup(SequenceNumber begin,
                                           const std::vector<Pending*>& members) {
   // §9.4 的 batch 编码：sequence(8B LE) || count(4B LE) || entry[0..count)
@@ -455,18 +475,28 @@ Status PersistentDBImpl::Sync() {
 
 Status PersistentDBImpl::Close() {
   std::unique_lock<std::mutex> ql(commit_mu_);
+  bool already_closed = false;
   {
     std::lock_guard<std::mutex> l(mutex_);
-    if (closed_) return Status::OK();                      // 幂等（A30）
-    closed_ = true;
+    already_closed = closed_;
+    closed_ = true;                                        // 幂等（A30）
+  }
+  if (already_closed) {
+    // 幂等路径也必须确保 LOCK 已释放（恢复期失败可能留下未释放的锁）
+    if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());
+    return Status::OK();
   }
   // L11/A31 + 阻断项 6：必须等「没有在途 flusher」**且「队列已排空」**。
   // 只看 !flusher_active_ 会漏掉"批边界之外被留在队列里的写者"——它随后仍会成为 flusher，
   // 若调用方按惯例 Close() 后立刻 delete db，就会落在已析构对象上（UAF 窗口）。
   commit_cv_.wait(ql, [this] { return !flusher_active_ && queue_.empty(); });
-  if (log_ == nullptr) return Status::OK();                // 尚未打开 WAL（恢复中途失败）⇒ 没有要刷的东西
+  if (log_ == nullptr) {                                   // 尚未打开 WAL（恢复中途失败）
+    if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());
+    return Status::OK();
+  }
   Status s = bg_error_.ok() ? log_->Sync() : bg_error_;    // Close 隐含 Sync（I20/A30）
   const Status c = log_->Close();
+  if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());   // D10：释放独占
   return s.ok() ? c : s;
 }
 
@@ -477,6 +507,13 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
     const Status s = env->CreateDir(name);
     if (!s.ok()) return s;
   }
+
+  // D10：进程级独占（评审阻断项 4 —— 用户已裁决纳入，但此前完全没接线）。
+  // fcntl 写锁是**进程级**的：同一进程内二次 Open 不冲突，验证必须用双进程。
+  FileLock* raw_lock = nullptr;
+  const Status lock_status = env->LockFile(LockFileName(name), &raw_lock);
+  if (!lock_status.ok()) return lock_status;      // 已被别的进程持有 ⇒ kIOError
+  ScopedFileLock lock_guard(env, raw_lock);
 
   // ---- 第一遍：只扫描并规划（§5.2）----
   std::vector<std::string> children;
@@ -576,6 +613,7 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   db->log_.reset(new WALWriter(env, hi_path));
   s = db->log_->Open(env->FileExists(hi_path));
   if (!s.ok()) return s;
+  db->file_lock_.reset(lock_guard.release());   // 所有权交给 DB（Close/析构时释放）
   db->closed_ = false;
   *dbptr = db.release();
   return Status::OK();
