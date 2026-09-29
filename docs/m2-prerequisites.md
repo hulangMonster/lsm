@@ -163,6 +163,7 @@ bash scripts/lsm_crash_test.sh --rounds 30 --mode nosync  # 只断言无半写/�
 | A07/A08 | 判据要求 WAL 层就给出「尾部截断 vs 中间损坏」 | §5.3 的重同步判定属恢复层；WAL 层只能提供事实 | WAL 层返回 `verdict == kParseFail` + `valid_record_after_failure`（其后是否存在完好 record）+ `last_good_end`；§5.3 的分类由 M2.2 的 `Recovery.*` 施加 |
 | 契约 | §5.1 让 `Open(options, name非空)` = 持久模式，而 M1 的 `DB.OpenRejectsNonEmptyName` 断言的是 `kNotSupported` | 两者不可同时成立（M2 指令自己写了「Open 的恢复分支」） | **该断言随契约更新**（改名为 `DB.OpenPersistentMode`，并补上「重启后从 WAL 恢复」）；§4 的「禁止改动 M1 既有断言」按此**收窄为**「禁止改动与 M2 契约变化无关的 M1 断言」 |
 | 实测口径 | §9.1 的 A09「write 每次只写 1 字节 ⇒ Append 仍成功」需要 WAL 层知道写入字节数 | M1 冻结的 `WritableFile::Append` 只返回 `Status`，调用方拿不到字节数 | M2.1 用「信封式 FaultyEnv 把写切成 N 字节块」实现该注入（数据仍完整），并在测试注释里写明这一点 |
+| **观察项（待 #4 评审裁决）** | D7「重放时 `batch.sequence <= last_sequence_` 则跳过」把「sequence 回退」**静默**吞掉 | 写 A12 时实测到：只要文件编号与 sequence 反序，数据会被无声丢弃且 `Open` 返回 `kOk` —— 这正是"写入串行化被破坏"的 bug 该被暴露的场景（§5.2 自己也写了"不得重排序，乱序应报 kCorruption 暴露"） | 本阶段**按设计实现**（静默跳过，不算偏离），但登记为观察项：建议 M2.3 或 #4 评审时改为「跳过并打 WARN」或「判 kCorruption」，二选一须与 D7 一起拍板 |
 
 另有两处**指令未覆盖、由设计补齐**的必要项（已在设计门获批，登记备查）：
 - **D12**：M2 无 flush ⇒ 恢复期必须按 WAL 实测字节数放大 MemTable 容量，否则 100 MiB WAL 会在 `write_buffer_size` 处 `kFrozen` 导致恢复失败。

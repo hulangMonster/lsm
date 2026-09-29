@@ -53,7 +53,9 @@ class PersistentDBImpl : public DB {
   std::mutex log_mu_;        // 串行化整条写路径（M2.2 过渡形态）；**持它期间不做 DB 锁内的 IO**
   SequenceNumber last_sequence_ = 0;
   Status bg_error_;
-  bool closed_ = false;
+  // 初始为 true：恢复中途失败时对象会被 unique_ptr 析构，此时 log_ 尚未打开 ——
+  // 若不这样，析构会走到 Close() 里对 nullptr 的 log_ 取 Sync（实测段错误，见 docs/m2-evidence.md）
+  bool closed_ = true;
 };
 
 }  // namespace lsm

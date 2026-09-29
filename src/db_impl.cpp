@@ -323,6 +323,7 @@ Iterator* PersistentDBImpl::NewIterator() {
 
 Status PersistentDBImpl::Sync() {
   std::lock_guard<std::mutex> log_lock(log_mu_);
+  if (log_ == nullptr) return Status::IOError("PersistentDBImpl::Sync: WAL is not open", dbname_);
   if (!bg_error_.ok()) return bg_error_;
   return log_->Sync();
 }
@@ -334,6 +335,7 @@ Status PersistentDBImpl::Close() {
     if (closed_) return Status::OK();                      // 幂等（A30）
     closed_ = true;
   }
+  if (log_ == nullptr) return Status::OK();                // 尚未打开 WAL（恢复中途失败）⇒ 没有要刷的东西
   Status s = bg_error_.ok() ? log_->Sync() : bg_error_;    // Close 隐含 Sync（I20/A30）
   const Status c = log_->Close();
   return s.ok() ? c : s;

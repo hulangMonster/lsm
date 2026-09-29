@@ -90,3 +90,43 @@ TOTAL_ROUNDS 100 MISSING_TOTAL 0 MISMATCH_TOTAL 0
 73
 --- 100/100 轮均为 MISSING 0 MISMATCH 0 的行数 ---
 100
+
+## M2.2b —— 恢复层确定性用例（A11~A19）与一个由它们抓到的真 bug
+
+执行时间：2026-09-29T20:15:12+08:00
+
+命令 1：bash scripts/lsm_build.sh（干净重建 + 0 warning + 全量）
+$ bash scripts/lsm_build.sh
+[  PASSED  ] 66 tests.
+[CHECK] 用例计数：
+[==========] 66 tests from 14 test suites ran. (28777 ms total)
+[  PASSED  ] 66 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+命令 2：恢复层用例 A11~A19
+$ ./build/bin/lsm_tests --gtest_filter=Recovery.*
+[       OK ] Recovery.TornTailDoesNotResurrectOlderValue (4 ms)
+[ RUN      ] Recovery.EmptyWalAndMissingDir
+[       OK ] Recovery.EmptyWalAndMissingDir (2 ms)
+[ RUN      ] Recovery.MalformedBatchPayloadIsCorruption
+[       OK ] Recovery.MalformedBatchPayloadIsCorruption (5 ms)
+[ RUN      ] Recovery.NonHighestLogTailCorruptionRejected
+[       OK ] Recovery.NonHighestLogTailCorruptionRejected (3 ms)
+[ RUN      ] Recovery.SameKeyManyVersionsReplaysLatest
+[       OK ] Recovery.SameKeyManyVersionsReplaysLatest (9 ms)
+[----------] 9 tests from Recovery (68 ms total)
+
+[----------] Global test environment tear-down
+[==========] 9 tests from 1 test suite ran. (68 ms total)
+[  PASSED  ] 9 tests.
+
+## 由 A17（畸形 batch）抓到的真 bug：恢复中途失败时析构崩溃
+
+修复前（原始输出）：
+$ timeout 60 ./build/bin/lsm_tests --gtest_filter=Recovery.MalformedBatchPayloadIsCorruption
+timeout: the monitored command dumped core    # 退出码 134（SIGSEGV）
+
+根因：RecoverAndOpen 在重放阶段构造了 PersistentDBImpl，畸形 batch 让解析失败并 return；
+unique_ptr 析构 → Close() → 此时 log_ 仍是 nullptr（WAL 在重放的**后面**才打开）→ 对 nullptr 取 Sync 段错误。
+修复：closed_ 初值改为 true（未完全打开就不做关闭动作）+ Sync/Close 对 log_ == nullptr 做显式判断。
+影响面：任何「恢复中途失败」的路径（畸形 batch、重放 Add 失败）都会踩到，属阻断级。
