@@ -155,6 +155,8 @@ cmake --build build-tsan -j8 && setarch $(uname -m) -R ./build-tsan/bin/lsm_test
   `docs/m1-evidence.md`。这不是「为了通过而改测试」：实现侧未因此放宽任何校验，
   protocol §6「type ∉ {0,1} 视为畸形」的行为保持不变。
 - **影响面**：仅该用例；`ParseInternalKey` 的接口、语义与其它用例不受影响。
+- **交叉复核**：#4 独立评审者手算验证了 `b7=0x02 ⇒ trailer=0x0200000000002A01 ⇒ seq=562949953421354`，
+  与 `docs/m1-evidence.md` 里修复前的原始输出完全吻合，确认「改的是错的物理字节」而非「放松断言」。
 
 ### 9.2 `InternalKey.LookupKeySemantics` 尾部两条断言互斥
 
@@ -175,6 +177,13 @@ cmake --build build-tsan -j8 && setarch $(uname -m) -R ./build-tsan/bin/lsm_test
   同理 `Seek(BuildInternalKey("b",2,kTypeValue))` 落在 seq=2 的 b 上（该用例另一处断言，说明 Seek
   确实按 internal key 定位，不是按 user key）。
 - **处理**：把期望改为 `'e'`，与该行原有注释「Seek 未命中 → 落在下一个更大的条目」的字面含义一致。
+
+### 9.5 迭代器泄漏（`MultiVersionOrderInInternalIterator`，修复于 a7b0052）
+
+- `CollectForward(mem.NewIterator())` / `CollectBackward(mem.NewIterator())` 把裸指针直接交给助手、
+  从不 `delete`，违反 design §4.5 自己声明的「`NewIterator()` 返回值所有权归调用方」。
+  ASan/LSan 报 `LeakSanitizer: 64 byte(s) leaked in 2 allocation(s)`。
+- **处理**：改用 `unique_ptr` 接管（断言与遍历顺序未动）。此条由 #4 评审者指出「§9 漏登记」，现补记。
 
 ### 9.4 小结（#2 测试集的系统性偏差）
 

@@ -161,6 +161,11 @@ struct Options {
 
 **M1 的 `Options` 只有这两个字段**；任何「看起来能用但没实现」的字段一律不加（评审项 §4.1）。
 
+**`comparator` 必须全链路兑现（#4 评审阻断项 1）**：它不只用于跳表排序，还必须用于
+① `MemTable::Get` 的「是否同一条 user key」判定；② 用户视图迭代器的「同 user key 段」判定。
+任何一处退化成 `Slice::compare`（逐字节）都会让「排序说相等、命中说不等」，
+在等价关系 ≠ 字节相等 的比较器下 Get 落空、用户视图重复输出。
+
 ### 4.4 `Iterator`（src/common.h）
 
 ```cpp
@@ -183,14 +188,21 @@ class Iterator {
 
 | 状态 | 进入方式 | `Next()` | `Prev()` | `Valid()` |
 |---|---|---|---|---|
-| `kBeforeFirst` | 构造后 / `SeekToFirst` 空表 / `Seek` 无结果 | `SeekToFirst()` | 保持 `kBeforeFirst`（nothing before first） | false |
+| `kBeforeFirst` | 构造后 / `SeekToLast` 空表 / 反向走到底 | `SeekToFirst()` | 保持 `kBeforeFirst`（nothing before first） | false |
 | `kValid` | 命中可见条目 | 移到下一个可见 user key | 移到上一个可见 user key | true |
-| `kPastEnd` | `Next()` 越过最后一条 | 保持 `kPastEnd` | `SeekToLast()` 语义（回到最后一条可见条目） | false |
+| `kPastEnd` | `SeekToFirst`/`Seek` 无结果（含空表）/ `Next()` 越过最后一条 | 保持 `kPastEnd` | `SeekToLast()` 语义（回到最后一条可见条目） | false |
+
+> **修订（#4 评审建议 3）**：本表初稿把「`Seek` 无结果 / `SeekToFirst` 空表」写成 `kBeforeFirst`，
+> 而实现、同节脚注、prerequisites §5 与冻结测试都要求 `kPastEnd`。**实现对、表错**，已按实现订正
+> （这正是 M3 用 MergingIterator/DBIter 替换内部实现时必须保持不变的用户可见契约）。
 
 - `Seek(target)`：定位到 **≥ target 的第一个可见 user key**；无则 `kPastEnd` 且 `!Valid()`。
 - `SeekToLast()`：最后一条可见 user key；空表 → `kBeforeFirst` 且 `!Valid()`。
 - 空表上任何 Seek/Next/Prev 都不得 UB；终态是 `!Valid()`。
 - `key()`/`value()` 仅在 `Valid()` 时可调用（前置条件，头文件注释写明）。
+- **返回值有效期（#4 评审建议 1）**：内部序迭代器的 `key()/value()` 指向 Arena（有效期 = MemTable 存活期）；
+  用户视图迭代器的 `value()` 指向 Arena，而 **`key()` 指向迭代器内部的 user key 缓存，
+  下一次定位调用（`Seek*`/`Next`/`Prev`）后即失效**。跨调用边界保留一律 `ToString()`（I7）。
 - 可见性定义：每个 user key 只输出**其最新版本**；若最新版本是 tombstone，则该 user key 不可见。
 - 并发写下的可见性（I5）：向前遍历**可能**看到「当前位置之后」新插入的条目（不保证不看到），
   但**已建立的位置与已返回的结果不受影响**。这条是 M1 迭代器测试的判据。

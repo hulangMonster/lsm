@@ -172,3 +172,51 @@ TSan 运行退出码（/tmp/tsan_rc）：0
 ThreadSanitizer 报告出现次数：0
 [==========] 45 tests from 12 test suites ran. (345683 ms total)
 [  PASSED  ] 45 tests.
+
+## M1 #4 评审阻断项修复后的全量重验
+
+执行时间：2026-09-29T19:25:46+08:00
+
+命令 1：bash scripts/lsm_build.sh（干净重建 + 0 warning 断言 + 全量 47 例）
+$ bash scripts/lsm_build.sh
+[==========] 47 tests from 12 test suites ran. (22907 ms total)
+[  PASSED  ] 47 tests.
+[CHECK] 用例计数：
+[==========] 47 tests from 12 test suites ran. (22907 ms total)
+[  PASSED  ] 47 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+命令 2：Skiplist.RandomLayerDistribution（design §11 层高判据；固定种子跨构建可复现）
+$ ./build/bin/lsm_tests --gtest_filter=Skiplist.RandomLayerDistribution
+[   INFO   ] Skiplist.RandomLayerDistribution: node_count=100000 mean_height=1.33456 P(h>=2)=0.2502 P(h>=3)=0.06272 max_height=9
+[       OK ] Skiplist.RandomLayerDistribution (131 ms)
+[  PASSED  ] 1 test.
+$ ./build-asan/bin/lsm_tests --gtest_filter=Skiplist.RandomLayerDistribution
+[   INFO   ] Skiplist.RandomLayerDistribution: node_count=100000 mean_height=1.33456 P(h>=2)=0.2502 P(h>=3)=0.06272 max_height=9
+[       OK ] Skiplist.RandomLayerDistribution (339 ms)
+[  PASSED  ] 1 test.
+
+命令 3：两个新回归用例（#4 阻断项 1/2）
+$ ./build/bin/lsm_tests --gtest_filter=MemTable.CustomComparatorEqualityIsHonored:MemTable.MalformedInputDoesNotReadOutOfBounds
+[       OK ] MemTable.MalformedInputDoesNotReadOutOfBounds (0 ms)
+[----------] 2 tests from MemTable (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 2 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 2 tests.
+
+命令 4：ASan 全量
+ASan 构建 warning 计数：0
+ASan 运行退出码：0
+[----------] Global test environment tear-down
+[==========] 47 tests from 12 test suites ran. (67358 ms total)
+[  PASSED  ] 47 tests.
+AddressSanitizer/LeakSanitizer 报告出现次数：0
+
+命令 5：TSan 全量（setarch 关 ASLR）
+TSan 构建 warning 计数：0
+TSan 运行退出码（/tmp/tsan_rc2）：0
+[----------] Global test environment tear-down
+[==========] 47 tests from 12 test suites ran. (346218 ms total)
+[  PASSED  ] 47 tests.
+ThreadSanitizer 报告出现次数：0
