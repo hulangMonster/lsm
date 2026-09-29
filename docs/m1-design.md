@@ -542,14 +542,20 @@ class Env {
 文档提交：`docs(m1): 冻结 M1 设计（design/protocol/roadmap/prerequisites）`（#0+#1 产物一个提交）。
 每个提交 push 到 `origin`（`git@github.com:hulangMonster/lsm.git`），M1 收口后 `git tag m1-memtable && git push origin m1-memtable`。
 
-**修订记录（#1 回退 #0，2026-09-29）—— M1.1 的验证口径**：本表初稿写「M1.1 判据 = `util_test` 全绿 + 干净重建 0 warning」，
-但 `lsm_tests` 是**单一可执行文件**，不存在「部分链接」：M1.1 只有 util 层时若把 `tests/memtable_test.cpp` 一并编入，
-整个二进制都链接失败，`util_test` 也跑不起来（该失败正是 `docs/m1-tdd-red.log` 记录的现象）。
-落地口径（不改指令要求的「lsm 静态库 + lsm_tests 测试可执行文件」目标布局）：
+**修订记录（#3 实施阶段回退 #0，2026-09-29，终版）—— M1.1 的验证口径**：本表初稿写「M1.1 判据 = `util_test` 全绿 + 干净重建 0 warning」。
+实施时发现该判据**物理上不可达**：`lsm_tests` 是单一可执行文件（不存在部分链接），而 `tests/util_test.cpp`
+经 `tests/test_harness.h` 依赖 M1.2 的头文件（`common.h`/`db.h`/`memtable.h`/`skiplist.h`），
+且它自身就有两个用例直接用 `MemTable`/`Skiplist`（`InternalKey.LookupKeySemantics`、`MemTableKeyComparator.TotalOrder`）。
+因此 M1.1 既链接不出 `lsm_tests`，也抽不出「零依赖 util 的测试文件」。落地口径（不改指令要求的
+「lsm 静态库 + lsm_tests 测试可执行文件」目标布局）：
 
-- **M1.1**：`CMakeLists.txt` 里 `lsm_tests` 只含 `tests/util_test.cpp`（CMakeLists 注释写明 M1.2 会加回），
-  因此 `lsm` 改成 STATIC 并只列 `src/util/*.cpp`；门禁 = `bash scripts/lsm_build.sh` 干净重建 0 warning + `util_test` 全绿。
-- **M1.2**：`lsm_tests` 加回 `tests/memtable_test.cpp`，`lsm` 列全 `src/**`；门禁 = A 组全绿。
+- **M1.1**：`lsm` 改成 STATIC 并只列 `src/util/*.cpp`；`lsm_tests` 源列表自 `#2` 起**保持不变**（两个测试文件）。
+  门禁 = ① `cmake --build build --target lsm` 干净重建 0 warning；② **util 子集**全绿 —— 子集是从冻结的
+  `tests/util_test.cpp` 原样抽取（`awk` 截到 `TEST(InternalKey, LookupKeySemantics)` 之前，断言一字不改），
+  配 `#2` 的 `test_harness.h` 中不依赖 M1.2 头的部分，18 例。子集偏漏的两个用例随 M1.2 一起验。
+  证据（含抽取命令与原始输出）落 `docs/m1-evidence.md`。
+- **M1.2**：`lsm` 补齐 `src/**`；门禁 = `bash scripts/lsm_build.sh` 干净重建 0 warning + **A 组 43 例全绿**（首次可运行）。
+- **M1.3**：B 组压力 + ASan + TSan。
 - `#2` 的 RED 证据不受影响（那一版 CMakeLists 两个测试文件都在，原始输出已留档）。
 
 ## 13. #2 阶段 RED 策略（为什么这样能拿到真实 RED）

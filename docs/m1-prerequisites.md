@@ -136,3 +136,22 @@ cmake --build build-tsan -j8 && setarch $(uname -m) -R ./build-tsan/bin/lsm_test
 ```
 
 未跑不算过：任何「通过」结论必须粘贴上述命令的原始输出摘录（构建日志尾部、`[  PASSED  ] N tests.`、sanitizer 无报告行）。
+
+## 9. 测试集缺陷登记（#3 实施阶段发现，已按最小改动修正）
+
+### 9.1 `InternalKey.ParseMalformed` 的 type 字节下标写错（自相矛盾，必须修）
+
+- **现象**：该用例构造 `ManualInternalKey("userkey", 42, kTypeValue)` 后，用 `raw[raw.size() - 1] = t` 写入
+  「非法 type」并断言 `ParseInternalKey` 返回 false。
+- **问题**：protocol §6 的 trailer 是 **8 字节小端**，type 占**最低物理字节**即 `raw[size-8]`；
+  `raw[size-1]` 是最高字节 b7，属于 **sequence 字段**（bit 48..55）。
+- **可证明的自相矛盾**：该用例要求 `b7 ∈ {2,3,0x10,0x7F,0x80,0xFE,0xFF}` 必须被拒；
+  而同一份 `util_test.cpp` 的 `InternalKey.BuildParseRoundTrip` 用 `seq = kMaxSequenceNumber = 2^56-1`
+  构造 internal key，其 trailer 的 `b7` 恰好 **= 0xFF**，并被断言必须解析成功。
+  任何解析器都不可能同时接受与拒绝 `b7 = 0xFF`。（实测：修复前子集运行中该用例失败，
+  报出 `seq = 71776119061217322 = 42 + 0xFF<<48`，即被写坏的是 sequence 而非 type。）
+- **处理**：把下标改为 `raw[raw.size() - 8]`（与该行原有注释「trailer 最低物理字节 = type」的原意一致），
+  并在测试里写明修订理由。**只改这一个下标，不动任何断言语义**；修订单独成一个提交，原始失败输出入档
+  `docs/m1-evidence.md`。这不是「为了通过而改测试」：实现侧未因此放宽任何校验，
+  protocol §6「type ∉ {0,1} 视为畸形」的行为保持不变。
+- **影响面**：仅该用例；`ParseInternalKey` 的接口、语义与其它用例不受影响。
