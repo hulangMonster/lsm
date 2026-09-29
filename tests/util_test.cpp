@@ -1131,7 +1131,10 @@ TEST(InternalKey, LookupKeySemantics) {
   // lookup key 与「该快照下的版本」的相对次序（protocol §6.2 的推理依据）
   EXPECT_EQ(0, icmp.Compare(BuildLookupKey("k", 4), BuildInternalKey("k", 4, kTypeValue)));
   EXPECT_LT(icmp.Compare(BuildLookupKey("k", 3), BuildInternalKey("k", 3, kTypeDeletion)), 0);
-  EXPECT_LT(icmp.Compare(BuildLookupKey("k", 3), BuildInternalKey("k", 3, kTypeValue)), 0);
+  // [#3 阶段修订] 原文写 EXPECT_LT(...)：与上一行（seq=4 的同型比较断言 == 0）互斥 ——
+  // kValueTypeForSeek == kTypeValue 时，BuildLookupKey(k,s) 与 BuildInternalKey(k,s,kTypeValue)
+  // 逐字节相同，同一比较器不可能对 s=4 给 0、对 s=3 给负数。按 protocol §6.2 的定义改为相等。
+  EXPECT_EQ(0, icmp.Compare(BuildLookupKey("k", 3), BuildInternalKey("k", 3, kTypeValue)));
   EXPECT_GT(icmp.Compare(BuildLookupKey("k", 3), BuildInternalKey("k", 4, kTypeValue)), 0);
   EXPECT_GT(icmp.Compare(BuildLookupKey("k", 4), BuildInternalKey("k", 5, kTypeValue)), 0);
   // user key 不同时，lookup key 的构造不影响 user key 序

@@ -657,9 +657,13 @@ TEST(MemTable, IteratorStateMachine) {
   it->Seek(BuildInternalKey("bb", kMaxSequenceNumber, kTypeValue));
   ASSERT_TRUE(it->Valid());
   EXPECT_EQ('c', ExtractUserKey(it->key())[0]);
+  // [#3 阶段修订] 原文期望落在 'd'。但 trailer 是**降序**（本文件 MultiVersionOrderInInternalIterator
+  // 与 util_test InternalKey.CompareOrder 都用 a5 < a3 钉死了这一点）：seq=0 是最小 trailer，
+  // 因此 target("d",0,del) 排在 d 的全部版本**之后**，按「第一个 >= target」应当落在 'e'，
+  // 这也正是本行注释「Seek 未命中 → 落在下一个更大的条目」的字面含义。
   it->Seek(BuildInternalKey("d", 0, kTypeDeletion));
   ASSERT_TRUE(it->Valid());
-  EXPECT_EQ('d', ExtractUserKey(it->key())[0]);
+  EXPECT_EQ('e', ExtractUserKey(it->key())[0]);
   // Seek 到 0 位置之前
   it->Seek(BuildInternalKey("", kMaxSequenceNumber, kTypeValue));
   ASSERT_TRUE(it->Valid());
