@@ -169,16 +169,24 @@ bash scripts/lsm_crash_test.sh --rounds 30 --mode nosync  # 只断言无半写/�
 
 | 子里程碑 | 状态 | 证据锚点 |
 |---|---|---|
-| M2.1 WAL record 格式与跨块切分 | ✅ | A01~A10 全绿；\`docs/m2-evidence.md\` 的 M2.1 小节 |
-| M2.2 DB::Open 恢复 + 崩溃对账 | ✅ | \`TOTAL_ROUNDS 100 MISSING_TOTAL 0 MISMATCH_TOTAL 0\`；A11~A19 全绿 |
-| M2.2c 损坏注入端到端 | ✅ | B03 \`TAIL_CASES 1401 TAIL_OK 1401 TAIL_FAIL 0\`；B04 中间损坏拒绝启动且可定位 |
-| 门禁 | ✅ | 干净重建 0 warning + **66/66**；ASan 66/66 退出码 0 报告 0 条 |
-| M2.2d \`MemEnv\` + A27~A31（掉电语义/固定种子撕裂/崩溃回滚） | ⏳ 未做 | 设计 §9.1 的 CrashSim 组；按 §4 的裁决 \`MemEnv\` 落在 M2.2 |
-| M2.3 组提交 + \`sync\` 语义（A20~A26）+ \`fsbench_commit_latency\` | ⏳ 未做 | 设计 §6.3/§6.4/§7 与 §9.3 的固定输出格式 |
-| #4 独立评审 + 阻断项修复 + tag \`m2-wal\` | ⏳ 未做 | 评审重点见 M2 指令 §4 的 9 条 |
+| M2.1 WAL record 格式与跨块切分 | ✅ | A01~A10 全绿；`docs/m2-evidence.md` 的 M2.1 小节 |
+| M2.2 DB::Open 恢复 + 崩溃对账 | ✅ | `TOTAL_ROUNDS 100 MISSING_TOTAL 0 MISMATCH_TOTAL 0`；A11~A19 全绿 |
+| M2.2c 损坏注入端到端 | ✅ | B03 `TAIL_CASES 1401 TAIL_OK 1401 TAIL_FAIL 0`；B04 中间损坏拒绝启动且可定位 |
+| M2.2d 基准与门禁入口 | DONE | B05 恢复代价基线、B07 提交延迟（ext4 中位 2.5~3.2ms，证伪指令里 8ms）；scripts/lsm_gate.sh 一条命令跑完全部门禁 |
+| M2.2e MemEnv + Options::env + A27~A30（掉电语义） | DONE | 3 种子 x 3 撕裂概率；50 轮连续崩溃；Sync/Close 持久性 |
+| M2.2f A31（Close 期间并发写） | DONE | 4 写者 + 并发 Close：不 UAF/不死锁、拒绝新写、Close 幂等 |
+| M2.3 组提交 + A20/A21/A23/A24 | DONE | 队首即 flusher；批合并成一条 record；谓词覆盖我能否接手；窗口最后一步放开；失败传播整批 |
+| M2.3(b) TSan 全量（组提交后） | DONE | TSan 71/71、退出码 0、race 0 条（410s，含 1M 压力） |
+| M2.3(c) A20 确定性版 | DONE | CommitHook::OnBeforeGroupAssemble 屏障：64 写者 -> 本批含 64、sync_calls==1、水位一步跳到 64 |
+| docs/protocol.md 追加第 9 章 WAL 编码 | DONE | 204 行；patch 文本来自设计 4.6 |
+| 门禁总览 | DONE | 干净重建 0 warning + 75/75；ASan 干净；TSan 全量 race 0；100 轮 kill -9 MISSING 0；截断扫描 1401/1401；中间损坏拒绝启动且可定位 |
+| A25（持锁零 IO 的探针式验证） | TODO | 需 SpyLogWriter + MuHeldGuard（约 80 行 src 仪表 + 用例）；目前 I17 只有代码评审级证据 |
+| #4 独立评审（M2） | 进行中 | 后台 subagent；9 条评审重点 + 5 个自曝风险点 |
+| tag m2-wal | TODO | 待评审阻断项修完 |
+| #4 独立评审 + 阻断项修复 + tag `m2-wal` | ⏳ 未做 | 评审重点见 M2 指令 §4 的 9 条 |
 
-**接续时先做的事**：① \`bash scripts/lsm_build.sh\` 确认 66/66；② 读本文件 §9 的 5 处修订 + 1 条观察项；
-③ 从 M2.2d 开始（\`tests/memenv.{h,cpp}\` 的内存 FS + fsync 水位 + 固定种子撕裂 + 崩溃回滚），
+**接续时先做的事**：① `bash scripts/lsm_build.sh` 确认 66/66；② 读本文件 §9 的 5 处修订 + 1 条观察项；
+③ 从 M2.2d 开始（`tests/memenv.{h,cpp}` 的内存 FS + fsync 水位 + 固定种子撕裂 + 崩溃回滚），
 它同时也是 M2.3 组提交测试（A20~A26）的 seam。
 
 另有两处**指令未覆盖、由设计补齐**的必要项（已在设计门获批，登记备查）：
