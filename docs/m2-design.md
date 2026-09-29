@@ -994,6 +994,15 @@ exit 0
 
 > 每条用例给出：**名字 / 依赖的假设 / 通过判据 / 需要的 seam**。
 > A 组必须零 flaky（无真实磁盘语义依赖、无真实时间依赖、无网络）；B 组进程级/磁盘级，脚本驱动。
+> **A 组凡涉及随机的用例必须固定种子，并把种子打进 INFO / RecordProperty**（失败必须可复现，见 §9.4）。
+
+### 9.4 修订（#1 阶段回退 #0）
+
+- **A20 判据与零 flaky 冲突**：初稿写「64 个并发写者，`Sync` 调用次数 `<= 8`」。若调度器恰好让写者串行推进，
+  每人自成一批 ⇒ 64 次 fsync ⇒ 断言失败。这不是实现 bug，是测试在赌调度。改为用 `CommitHook` 造**确定性屏障**（A20），
+  并把真实无屏障并发下的统计降级为 **A20b**（只断言 `fsync_calls < writer_count`，不作硬门禁）。
+- **A27/A28 的随机性未固定种子**：崩溃模拟必须用固定种子（失败可复现），种子打进 INFO；
+  `MemEnv::SimulateCrash()` 的撕裂长度也只能来自该种子驱动的 PRNG。
 
 ### 9.1 A 组（确定性：MemEnv + FakeClock + 可注入故障）
 
@@ -1030,7 +1039,8 @@ exit 0
 
 | # | 名字 | 依赖的假设 | 通过判据 | 需要的 seam |
 |---|---|---|---|---|
-| A20 | `GroupCommit.NWritersOneFsync` | 线程调度可产生并发 | 64 个并发写者，`Sync` 调用次数 `<= 8`（远小于 64）且全部返回 `kOk`；记录 `fsync_per_write` 实测比值 | `SpyLogWriter`（计数 + 调用序列） |
+| A20 | `GroupCommit.NWritersOneFsync` | **无（不依赖调度）** | **确定性**：64 个写者全部在 `CommitHook` 的屏障点等待，第 64 个入队后统一放行 ⇒ 断言「本批含全部 64 个写者」且「**本批 fsync 次数 == 1**」 | `CommitHook` + `SpyLogWriter` |
+| A20b | `GroupCommit.BatchingReducesFsyncCount` | 线程调度可产生并发（**允许调度相关，不作硬门禁**） | 无屏障真实并发 64 写者：`fsync_calls < writer_count` 且全部 `kOk`；实测 `fsync_per_write` 打进 INFO | `SpyLogWriter` |
 | A21 | `GroupCommit.NoLostWakeup` | 无 | 用 `OnBeforeUnlockAfterGroupTaken` 构造"最后写者在放锁窗口内"的时序：所有写者在 `wait_for(200ms)` 内完成，**超时即 FAIL**（不是"慢"而是"丢唤醒"）；覆盖 §6.3 的场景 1/2/3/4 | `CommitHook`（测试注入；生产为 `nullptr`） |
 | A22 | `GroupCommit.MixedSyncPropagates` | 无 | 一批内混入 `sync=false` 与 `sync=true` 的写者 ⇒ 该批必须 `fsync`；`sync=true` 的写者返回 `kOk` 后 `durable_seq_ >= 其 end_seq` | `SpyLogWriter` + `MemEnv` 的 fsync 水位 |
 | A23 | `GroupCommit.FailurePropagatesToAllWaiters` | 注入失败 | 注入 `fsync` 失败 ⇒ **本批全部**等待者都拿到非 `kOk`，**无一人**拿到 `kOk`；`commit_error_` 粘性；后续写立即返回同一错误 | `MemEnv::SetSyncFailureAfter` |
