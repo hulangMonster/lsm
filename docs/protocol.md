@@ -202,3 +202,176 @@ entry   := type(1B) || key_len(varint32) || key || [ value_len(varint32) || valu
 - 第 `i` 条 entry 的 sequence = `sequence + i`。
 - 解析必须**恰好消费完** payload：`count` 条 entry 解完后仍有剩余字节 ⇒ 损坏。
 - 本编码与 M5 的 `WriteBatch` 落盘布局同构（M2 只作为 WAL 内部组织，**不提供公共 API**）。
+
+## 10. SSTable 编码（M3 定稿）
+
+> 追加章节。§1~§9 为 M1/M2 冻结内容，本节不得反向修改它们。
+> 本节的所有多字节整数一律**小端（LE）**，逐字节拼装/解析，禁止 `reinterpret_cast`（§1）。
+> 本节与 §9 共用同一条 CRC 纪律：**CRC 覆盖面必须包含长度字段**（§9.3 的"有意差异"在此复用）。
+
+### 10.1 文件命名与文件号空间
+
+```
+<dbname>/LOCK                 进程级独占锁（§9 无关，M2 的 D10）
+<dbname>/META                 版本快照（§10.7）——**不是** MANIFEST
+<dbname>/META.tmp             META 的写临时文件
+<dbname>/%06u.log             WAL（§9）
+<dbname>/%06u.sst             SSTable（已注册即不可变）
+<dbname>/%06u.sst.tmp         SSTable 的写临时文件（**永不注册**）
+```
+
+- `.log` 与 `.sst` **共享**一个单调递增的 `next_file_number`（持久化在 `META`）。
+- `META.next_file_number` 只是提示；`Open` 时的权威值 = `max(META.next_file_number, 目录中最大编号 + 1)`。
+- 空库：`next_file_number = 1`，第一个 log 编号为 `1`。
+- 后缀匹配**精确**：`ParseTableFileName` 必须拒绝 `%06u.sst.tmp`（禁止用前缀匹配）。
+
+### 10.2 常量
+
+| 常量 | 值 | 说明 |
+|---|---|---|
+| `kTableMagic` | `"LSM1"`（4 B） | footer magic |
+| `kTableFormatVersion` | `1` | footer 版本 |
+| `kFooterSize` | `44` | 定长 footer |
+| `kBlockHeaderSize` | `5` | `length(4B LE) ‖ type(1B)` |
+| `kBlockTrailerSize` | `4` | `crc32c(4B LE)` |
+| `kBlockOverhead` | `9` | `kBlockHeaderSize + kBlockTrailerSize` |
+| `kBlockMinPayload` | `8` | 最小合法 payload（空块的 restart 数组） |
+| `kDefaultBlockSize` | `4096` | 数据块目标大小 |
+| `kRestartInterval` | `16` | 数据块 restart 间隔 |
+| `kIndexRestartInterval` | `1` | 索引块 / metaindex 块的 restart 间隔 |
+| `kBlockTypeData` | `0x01` | 数据块 |
+| `kBlockTypeIndex` | `0x02` | 索引块 |
+| `kBlockTypeMetaIndex` | `0x03` | 元数据块 |
+| `kBlockTypeFilter` | `0x04` | 预留（M5 的 Bloom filter 块；M3 不产出） |
+| `kMetaMagic` | `"LSMM"`（4 B） | `META` 的 magic（与 SSTable 的 `"LSM1"` **不同**，防止两类文件被互相当成对方） |
+
+### 10.3 块（block）的通用外壳
+
+```
+block_on_disk := header(5B) ‖ payload ‖ crc32c(4B LE)
+header        := length(4B LE) ‖ type(1B)
+crc           := crc32c( length(4B LE) ‖ type(1B) ‖ payload )
+```
+
+| 字段 | 字节数 | 字节序 | 取值 |
+|---|---|---|---|
+| `length` | 4 | LE | payload 字节数（不含 header 与 crc），`>= 8` |
+| `type` | 1 | — | §10.2 的块类型 |
+| `payload` | `length` | — | §10.4 / §10.5 / §10.6 |
+| `crc32c` | 4 | LE | 覆盖 `length ‖ type ‖ payload`（**含长度**，与 §9.3 同口径） |
+
+**handle**（16 B，定宽）：
+
+```
+handle := offset(8B LE) ‖ size(8B LE)
+```
+
+`size` = 目标块的**总字节数** = `kBlockHeaderSize + length + kBlockTrailerSize`（即包含 header 与 crc）。
+
+**读取与校验顺序（不可交换）**：
+
+1. 校验 `handle.size >= kBlockOverhead + kBlockMinPayload`；
+2. 按 `handle.size` 读取字节（**`handle.size` 是"读多少"的唯一真相源**）；
+3. 解析 `header`，校验 `kBlockHeaderSize + length + kBlockTrailerSize == handle.size`（**先于 CRC**）；
+4. 校验 `type` 等于调用方期望的块类型；
+5. 计算 `crc32c(length ‖ type ‖ payload)` 与块尾 4 字节比较。
+
+任一步失败 ⇒ `kCorruption`，**不得**用任何已解析出的长度去推进偏移或读取。
+
+### 10.4 数据块 payload
+
+```
+data_block_payload := entry* ‖ restart_offset[uint32 LE] * restart_count ‖ restart_count(uint32 LE)
+entry              := varint32(shared) ‖ varint32(non_shared) ‖ key_delta[non_shared] ‖ varint32(value_len) ‖ value
+```
+
+| 字段 | 编码 | 约束 |
+|---|---|---|
+| `shared` | varint32 | `0 .. 上一条完整 key 的长度`；**restart 点必须为 `0`** |
+| `non_shared` | varint32 | `>= 1`；`shared + non_shared <= kMaxUserKeySize + 8`；`shared + non_shared <= 剩余字节` |
+| `key_delta` | 字节 | `key = 上一条 key[0..shared) ‖ key_delta`；restart 点时"上一条 key"为空 |
+| `value_len` | varint32 | `0 .. 剩余字节`；`type == kTypeDeletion` 时**必须为 0** |
+| `value` | 字节 | 原始字节 |
+| `restart_offset` | 4 B LE × n | `restart_offset[0] == 0`；**严格单调递增**；`< length - 4*(n+1)` |
+| `restart_count` | 4 B LE | `>= 1` |
+
+- `key` 是 **internal key**（§6）：`user_key ‖ trailer(8B LE)`。块内 entry 按 `InternalKeyComparator`（§6.1）
+  **严格升序**；写入方必须保证，读取方不重排。
+- **restart 组语义**：每 `kRestartInterval`(=16) 条 entry 一个 restart 点；**每组第一条的 `shared == 0`**，
+  即**组间不共享前缀**（即使有公共前缀）。`last_key` 在 restart 点重置。
+- **空数据块**：`payload` = `restart_offset[0]=0 (4B) ‖ restart_count=1 (4B)` = **8 字节**。
+- **单条 entry 可以大于 `kDefaultBlockSize`**：切块判据是"**加上这一条之后**是否超过目标大小"，
+  超了先封块；因此 `block_size` 是**目标值**，不是硬上限。
+
+### 10.5 索引块 payload
+
+```
+index_payload := index_entry* ‖ restart_offset[uint32 LE] * n ‖ n(uint32 LE)
+index_entry   := varint32(internal_key_len) ‖ internal_key ‖ handle(16B)
+```
+
+- `internal_key` = **对应数据块内最后一条 entry 的完整 internal key**（不做分隔 key 缩短）。
+- `restart_interval = kIndexRestartInterval`(=1)。
+- `Seek(target)`：在索引块上取**第一个 `internal_key >= target`** 的索引项（`>=`，不是 `>`）。
+
+### 10.6 元数据块 payload
+
+```
+metaindex_payload := meta_entry* ‖ restart_offset[uint32 LE] * n ‖ n(uint32 LE)
+meta_entry        := varint32(name_len) ‖ name ‖ handle(16B)
+```
+
+- `name` 是普通字符串（**不是** internal key）。M3 写**空表**（`n = 1`，`restart_offset[0] = 0`，无 entry）。
+- M5 的 Bloom filter 通过 `name = "filter.leveldb.BuiltinBloomFilter2"` 指向 `kBlockTypeFilter` 块；
+  **footer 布局不变、`kTableFormatVersion` 不升**。
+- 读取方**必须容忍未知 `name`**（记录并计数，不报错、不影响其他块）。
+
+### 10.7 footer
+
+```
+footer := magic(4B) ‖ version(4B LE) ‖ index_handle(16B) ‖ metaindex_handle(16B) ‖ footer_crc(4B LE)
+```
+
+| 字段 | 偏移 | 字节数 | 说明 |
+|---|---|---|---|
+| `magic` | 0 | 4 | `"LSM1"`；不符 ⇒ `kCorruption` |
+| `version` | 4 | 4 | M3 写 `1`；读到 ≠1 ⇒ `kNotSupported` |
+| `index_handle` | 8 | 16 | §10.3 |
+| `metaindex_handle` | 24 | 16 | §10.3 |
+| `footer_crc` | 40 | 4 | `crc32c(footer[0..40))` |
+
+文件整体顺序（校验器据此检查）：
+`metaindex.offset + metaindex.size <= index.offset`，且 `index.offset + index.size == file_size - kFooterSize`。
+
+### 10.8 META（版本快照）
+
+```
+META := header ‖ file* ‖ tail
+header := magic(4B "LSMM") ‖ format_version(4B LE = 1) ‖ comparator_name(len-prefixed)
+          ‖ log_number(8B LE) ‖ min_log_number_to_keep(8B LE) ‖ next_file_number(8B LE) ‖ file_count(4B LE)
+file   := number(8B LE) ‖ file_size(8B LE) ‖ max_sequence(8B LE)
+          ‖ smallest(len-prefixed internal key) ‖ largest(len-prefixed internal key)
+tail   := crc32c(4B LE)      // 覆盖 header ‖ file* 的全部字节
+```
+
+- `smallest`/`largest` 是该文件内按 `InternalKeyComparator` 的**最小/最大 internal key**（用于 key range 过滤）。
+- `max_sequence` = 该文件内**最大**的 `sequence`（注意：**不是** `largest` 的 sequence——因为内部 key 序是
+  "user key 升序 + trailer 降序"，`largest` 的 trailer 反而最小）。写入方在 `TableBuilder` 内顺带统计。
+- `META` 的写入方式：写 `META.tmp` → `fsync` → `rename(META.tmp, META)` → `SyncDir(dir)`。
+  **禁止原地覆写 `META`。**
+- `META` 缺失时的语义见 §10.9。
+
+### 10.9 恢复口径（与 §9 的 WAL 恢复组合）
+
+1. `META` 存在：解析并校验 `tail` 的 CRC；任一处不符 ⇒ `kCorruption`（**不自动修复**）。
+2. `META` **不存在**：
+   - 目录中若存在 `*.sst` ⇒ `kCorruption`（"META 丢失但目录非空"——把最坏情况从**静默丢数据**变成**显式拒绝**）；
+   - 否则版本为空、`min_log_number_to_keep = 1`、重放目录中**全部** `*.log`（等价于 M2 的行为）。
+3. 重放集合由**目录实际内容**决定（不按水位裁剪）；`min_log_number_to_keep` 只用于**删除**已注册覆盖的 log。
+4. 重放顺序：log 编号**数值升序**，文件内按字节顺序（§9.2 的 reader）。判定"尾部残骸 vs 中间损坏"沿用 §9 的
+   口径：**只有最高编号的 log 允许尾部截断**，其余残骸 ⇒ `kCorruption`。
+5. 恢复后的下一个可分配 sequence = `max(META 各文件的 max_sequence, WAL 重放到的最大 sequence) + 1`。
+6. 恢复**不做任何基于水位的水位跳过**（只保留 §9 的"文件内 sequence 非递增则跳过并计数"）。
+````
+
+---

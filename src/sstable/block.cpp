@@ -35,7 +35,10 @@ struct Cursor {
 // ============================ BlockBuilder ============================
 
 BlockBuilder::BlockBuilder(int restart_interval)
-    : restart_interval_(restart_interval > 0 ? restart_interval : 1), counter_(0), finished_(false) {
+    : restart_interval_(restart_interval > 0 ? restart_interval : 1),
+      counter_(0),
+      num_entries_(0),
+      finished_(false) {
   // §3.2：第一条 entry 必然是 restart 点；空块的 restart 数组恒为 [0]（payload 恰 8 字节）。
   restarts_.push_back(0);
 }
@@ -61,6 +64,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
 
   last_key_.assign(key.data(), key.size());
   ++counter_;
+  ++num_entries_;
   finished_ = false;
 }
 
@@ -71,6 +75,7 @@ void BlockBuilder::Reset() {
   restarts_.clear();
   restarts_.push_back(0);
   counter_ = 0;
+  num_entries_ = 0;
   finished_ = false;
 }
 
@@ -78,9 +83,29 @@ bool BlockBuilder::empty() const { return buffer_.empty(); }
 
 size_t BlockBuilder::NumRestarts() const { return restarts_.size(); }
 
+size_t BlockBuilder::NumEntries() const { return num_entries_; }
+
 size_t BlockBuilder::CurrentSizeEstimate() const {
   // entry 区 + restart 数组（含 count 字段本身）
   return buffer_.size() + 4 * (restarts_.size() + 1);
+}
+
+size_t BlockBuilder::EstimatedSizeAfter(const Slice& key, const Slice& value) const {
+  // 与 Add 使用**同一份** shared 计算与 restart 追加规则；这是切块判据的唯一实现点。
+  uint32_t shared = 0;
+  if (counter_ < restart_interval_ && !buffer_.empty()) {
+    const size_t min_len = std::min(last_key_.size(), key.size());
+    while (shared < min_len && last_key_[shared] == key[shared]) ++shared;
+  }
+  const uint32_t non_shared = static_cast<uint32_t>(key.size() - shared);
+  const uint64_t entry_bytes = static_cast<uint64_t>(VarintLength(shared)) +
+                               static_cast<uint64_t>(VarintLength(non_shared)) +
+                               static_cast<uint64_t>(non_shared) +
+                               static_cast<uint64_t>(VarintLength(value.size())) +
+                               static_cast<uint64_t>(value.size());
+  size_t restarts = restarts_.size();
+  if (counter_ >= restart_interval_ && !buffer_.empty()) ++restarts;   // 本条会开一个新 restart 组
+  return buffer_.size() + static_cast<size_t>(entry_bytes) + 4 * (restarts + 1);
 }
 
 Slice BlockBuilder::Finish() {

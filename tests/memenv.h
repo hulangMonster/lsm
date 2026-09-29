@@ -37,6 +37,7 @@ class MemEnv : public Env {
   Status NewWritableFile(const std::string& fname, WritableFile** result) override;
   Status NewAppendableFile(const std::string& fname, WritableFile** result) override;
   Status NewSequentialFile(const std::string& fname, SequentialFile** result) override;
+  Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result) override;
   bool FileExists(const std::string& fname) override;
   Status GetFileSize(const std::string& fname, uint64_t* size) override;
   Status DeleteFile(const std::string& fname) override;
@@ -45,6 +46,11 @@ class MemEnv : public Env {
   Status GetChildren(const std::string& dir, std::vector<std::string>* result) override;
   Status RemoveFile(const std::string& fname) override;
   Status Truncate(const std::string& fname, uint64_t size) override;
+  // M3：内存 FS 没有目录项概念（RenameFile 一次赋值即永久，SimulateCrash 不碰 dirs_）
+  // ⇒ 这里只**计数**，供用例做"调用了 SyncDir 且顺序在 rename 之后"的**顺序断言**；
+  // 不得据此宣称"掉电安全已证明"（docs/m3-design.md §15 R4）。
+  Status SyncDir(const std::string& dirname) override;
+  int sync_dir_calls() const { return sync_dir_calls_; }
   Status LockFile(const std::string& fname, FileLock** lock) override;
   Status UnlockFile(FileLock* lock) override;
   uint64_t NowMicros() override { return now_micros_; }
@@ -65,6 +71,7 @@ class MemEnv : public Env {
   void ClearSyncFailures() { sync_fail_after_ = -1; }
   int write_calls() const { return write_calls_; }
   int sync_calls() const { return sync_calls_; }
+  int sync_dir_calls_ = 0;
 
   // ---- 测试内省 ----
   std::string Contents(const std::string& fname) const;

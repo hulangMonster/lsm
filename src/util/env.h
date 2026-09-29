@@ -38,6 +38,15 @@ class SequentialFile {
   virtual Status Skip(uint64_t n) = 0;
 };
 
+// M3 增补（design §11.1 必改清单）：**随机读**。SSTable 的块读取必须能按 (offset, size) 直接读，
+// 而不是顺序扫到目标位置（读放大与"打开即扫全文件"都会毁掉 M3 的读路径）。
+class RandomAccessFile {
+ public:
+  virtual ~RandomAccessFile() = default;
+  // 从 offset 读至多 n 字节到 scratch，*result 指向 scratch 内的一段；到 EOF 返回空 Slice 且状态 OK。
+  virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const = 0;
+};
+
 class Env {
  public:
   virtual ~Env() = default;
@@ -51,6 +60,9 @@ class Env {
   virtual Status NewAppendableFile(const std::string& fname, WritableFile** result) = 0;
 
   virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result) = 0;
+
+  // M3 增补（design §11.1）：随机读打开。失败语义与 NewSequentialFile 一致（不存在 ⇒ kNotFound）。
+  virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result) = 0;
   virtual bool FileExists(const std::string& fname) = 0;
   virtual Status GetFileSize(const std::string& fname, uint64_t* size) = 0;
   virtual Status DeleteFile(const std::string& fname) = 0;
@@ -64,6 +76,10 @@ class Env {
   virtual Status Truncate(const std::string& fname, uint64_t size) = 0;
   virtual Status LockFile(const std::string& fname, FileLock** lock) = 0;
   virtual Status UnlockFile(FileLock* lock) = 0;
+
+  // M3 增补（design §3.7/§8.1）：**目录项** fsync。write+fsync+rename 之后若不 SyncDir，掉电时
+  // 丢失的是"目录项"本身（文件内容在，名字没了）。META 的原子 rename 与 SSTable 注册都依赖它。
+  virtual Status SyncDir(const std::string& dirname) = 0;
 
   virtual uint64_t NowMicros() = 0;
   virtual void SleepForMicros(uint64_t micros) = 0;

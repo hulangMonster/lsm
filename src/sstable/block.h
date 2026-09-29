@@ -35,6 +35,7 @@ class BlockBuilder {
   void Reset();
   bool empty() const;
   size_t NumRestarts() const;
+  size_t NumEntries() const;
 
   // payload := entry* ‖ restart_offset[uint32 LE]* ‖ restart_count(uint32 LE)
   // 反复调用返回同一份内容（幂等）；空 builder 返回的 payload 恰 8 字节。
@@ -43,12 +44,18 @@ class BlockBuilder {
   // 与 Finish().size() 必须相等（A01 断言）。
   size_t CurrentSizeEstimate() const;
 
+  // §5.2/§3.2：**唯一的切块判据** —— 「再加上这一条之后」的 payload 字节数
+  // （含本条 entry 的 varint 前缀、value，以及可能新增的 restart_offset 与 count 字段）。
+  // TableBuilder::Add 只在它 > block_size 时封块；实现不得在别处复算该口径。
+  size_t EstimatedSizeAfter(const Slice& key, const Slice& value) const;
+
  private:
   int restart_interval_;
   std::string buffer_;               // entry 区
   std::vector<uint32_t> restarts_;   // restart 点（entry 起始偏移），空块恒为 {0}
   std::string last_key_;             // 上一条 key（**已完整复原**，不是 delta）
   int counter_;                      // 本组已写几条
+  size_t num_entries_;               // 已 Add 的 entry 总数（估计口径与 NumRestarts 无关）
   bool finished_;
   std::string finished_payload_;     // Finish() 的结果（幂等）
 };

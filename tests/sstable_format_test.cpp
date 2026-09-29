@@ -3,10 +3,9 @@
 // 契约：docs/m3-design.md §3.2（数据块）、§3.3（索引块）、§3.6（块头/CRC）、§3.7（footer 44B）；
 // 用例编号与设计 §10.1 **逐字对应**（A01~A08），便于 `#4` 评审按编号核对。
 //
-// 本片只覆盖**不需要 Env / 文件**的部分：
-//   Block：A01~A06      Footer：A07 + A08 的**前 4 行**
-// A08 的后 3 行（handle 越界 / metaindex 与 index 顺序 / index 未紧贴 footer）需要 file_size，
-// 属于 Table 打开路径，随 `src/sstable/table.*` 在下一片补齐（设计 §10.1 已如此标注）。
+// 本片覆盖**不需要 Env / 文件**的部分与 A08 的 Table 打开路径：
+//   Block：A01~A06      Footer：A07 + A08 的全部（前 4 行在 Footer::DecodeFrom，
+//   后 3 行 handle 越界 / metaindex 与 index 顺序 / index 未紧贴 footer 在 Table::Open）。
 //
 // `#2` 的 RED 形态：声明齐备、实现未写 ⇒ 用例可编译、**链接失败**（与 M1 `#2` 的骨架同形，
 // 先例见 docs/m1-tdd-red.log）。`#3`（M3.1）补上实现后本文件转绿。
@@ -19,8 +18,10 @@
 #include <utility>
 #include <vector>
 
+#include "memenv.h"
 #include "sstable/block.h"
 #include "sstable/format.h"
+#include "sstable/table.h"
 #include "util/crc32c.h"
 
 namespace lsm {
@@ -503,7 +504,47 @@ TEST(Footer, RejectMatrix) {
     EXPECT_EQ(Status::kCorruption, out.DecodeFrom(Slice(bad)).code()) << "footer_crc 必须校验";
   }
   // ⑤⑥⑦ handle 越界 / metaindex 与 index 顺序 / index 未紧贴 footer：
-  //        需要 file_size，属 Table 打开路径 —— 见设计 §10.1 的 A08 与 §3.7 失败矩阵后三行。
+  //        需要 file_size，属于 Table 打开路径（§3.7 失败矩阵后三行）。
+  {
+    const uint64_t kPrefixLen = 56;   // file_size = 100 ⇒ 块区域 = 56，footer 紧贴文件尾
+    const auto reject = [&](const Footer& footer, const char* what) {
+      test::MemEnv env;
+      std::string file(kPrefixLen, '\0');
+      footer.EncodeTo(&file);
+      env.SetContents("reject.sst", file);
+      std::shared_ptr<Table> t;
+      const Status s = Table::Open(TableOptions(), &env, "reject.sst", &t);
+      EXPECT_EQ(Status::kCorruption, s.code()) << what << "：" << s.ToString();
+    };
+
+    // ⑤ handle 越界（offset+size > file_size-44）
+    {
+      Footer bad;
+      bad.index_handle.offset = kPrefixLen + 1000;
+      bad.index_handle.size = 16;
+      bad.metaindex_handle.offset = 0;
+      bad.metaindex_handle.size = 16;
+      reject(bad, "handle 越界必须 kCorruption");
+    }
+    // ⑥ metaindex.offset+size > index.offset（顺序约束）
+    {
+      Footer bad;
+      bad.index_handle.offset = 0;
+      bad.index_handle.size = kPrefixLen;
+      bad.metaindex_handle.offset = 10;
+      bad.metaindex_handle.size = 20;
+      reject(bad, "metaindex.offset+size > index.offset 必须 kCorruption");
+    }
+    // ⑦ index.offset+size != file_size-44（索引必须紧贴 footer）
+    {
+      Footer bad;
+      bad.index_handle.offset = 0;
+      bad.index_handle.size = kPrefixLen - 1;
+      bad.metaindex_handle.offset = 0;
+      bad.metaindex_handle.size = 0;
+      reject(bad, "index.offset+size != file_size-44 必须 kCorruption");
+    }
+  }
 }
 
 }  // namespace lsm

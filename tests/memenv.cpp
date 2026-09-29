@@ -17,6 +17,29 @@ class MemFileLock : public FileLock {
   std::string name_;
 };
 
+// M3：内存随机读。每次 Read 走 Contents() 取一份快照（O(文件大小)），因为 MemEnv 的 File
+// 会在 Append 时增长；测试体量下这是可接受的，换来的是"不需要新开一条易错的读取路径"。
+class MemRandomAccessFile : public RandomAccessFile {
+ public:
+  MemRandomAccessFile(MemEnv* env, std::string name) : env_(env), name_(std::move(name)) {}
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const override {
+    const std::string data = env_->Contents(name_);
+    if (offset >= data.size()) {
+      *result = Slice();
+      return Status::OK();
+    }
+    const size_t avail = data.size() - static_cast<size_t>(offset);
+    const size_t len = n < avail ? n : avail;
+    if (len > 0) std::memcpy(scratch, data.data() + offset, len);
+    *result = Slice(scratch, len);
+    return Status::OK();
+  }
+
+ private:
+  MemEnv* env_;
+  std::string name_;
+};
+
 class MemWritableFile : public WritableFile {
  public:
   MemWritableFile(MemEnv* env, std::string name) : env_(env), name_(std::move(name)) {}
@@ -165,6 +188,23 @@ void MemEnv::SetContents(const std::string& fname, const std::string& data) {
   f.exists = true;
   f.data = data;
   f.synced_size = data.size();
+}
+
+Status MemEnv::NewRandomAccessFile(const std::string& fname, RandomAccessFile** result) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  *result = nullptr;
+  if (Find(fname) == nullptr) {
+    return Status::NotFound("MemEnv::NewRandomAccessFile", fname);
+  }
+  *result = new MemRandomAccessFile(this, fname);
+  return Status::OK();
+}
+
+Status MemEnv::SyncDir(const std::string& dirname) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  (void)dirname;   // 见 memenv.h：内存 FS 不建模目录项，只计数（§15 R4 的证据强度限制）
+  ++sync_dir_calls_;
+  return Status::OK();
 }
 
 Status MemEnv::NewWritableFile(const std::string& fname, WritableFile** result) {

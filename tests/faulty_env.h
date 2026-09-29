@@ -52,6 +52,10 @@ class FaultyEnv : public Env {
   }
   Status RemoveFile(const std::string& f) override { return base_->RemoveFile(f); }
   Status Truncate(const std::string& f, uint64_t n) override { return base_->Truncate(f, n); }
+  Status NewRandomAccessFile(const std::string& f, RandomAccessFile** r) override {
+    return base_->NewRandomAccessFile(f, r);
+  }
+  Status SyncDir(const std::string& d) override { return base_->SyncDir(d); }
   Status LockFile(const std::string& f, FileLock** l) override { return base_->LockFile(f, l); }
   Status UnlockFile(FileLock* l) override { return base_->UnlockFile(l); }
   uint64_t NowMicros() override { return base_->NowMicros(); }

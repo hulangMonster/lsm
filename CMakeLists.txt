@@ -44,9 +44,11 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # 被测库（docs/m1-design.md §3 文件清单；每个文件显式列出，不用 GLOB）
 add_library(lsm STATIC
-  # M3.1 格式层（docs/m3-design.md §11.1：format / block 先落地，table_* 随后）
+  # M3.1 格式层（docs/m3-design.md §11.1：format / block / table_* 同属纯格式层）
   src/sstable/format.cpp
   src/sstable/block.cpp
+  src/sstable/table_builder.cpp
+  src/sstable/table.cpp
   src/util/status.cpp
   src/util/coding.cpp
   src/util/crc32c.cpp
@@ -63,6 +65,21 @@ add_library(lsm STATIC
 )
 target_include_directories(lsm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(lsm PUBLIC Threads::Threads)
+
+# M3.1 的依赖纪律机制（docs/m3-design.md §5.1/§11.1）：纯格式层的独立静态库，只链 util。
+# 越权依赖（db_impl/version_*/merging_iterator/db_iter/wal）会在这个目标上**链接失败**，
+# 不靠人盯。`nm -C build/liblsm_sstable.a | grep -c 'db_impl\|wal\|version'` 期望 0。
+add_library(lsm_sstable STATIC
+  src/sstable/format.cpp
+  src/sstable/block.cpp
+  src/sstable/table_builder.cpp
+  src/sstable/table.cpp
+  src/util/status.cpp
+  src/util/coding.cpp
+  src/util/crc32c.cpp
+)
+target_include_directories(lsm_sstable PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(lsm_sstable PUBLIC Threads::Threads)
 
 # GTest 是测试专用依赖：用 /usr/local 的既有安装，不做 FetchContent、不 vendor。
 # 找不到必须硬失败：静默跳过测试目标等于把「没跑」伪装成「通过」（docs/roadmap.md §3.4）。
@@ -81,6 +98,7 @@ enable_testing()
 
 add_executable(lsm_tests
   tests/sstable_format_test.cpp      # M3.1 格式层（Block/Footer）
+  tests/sstable_table_test.cpp       # M3.1 Table/TableBuilder（A08 后 3 行、A09~A19）
   tests/util_test.cpp
   tests/memtable_test.cpp
   # M2：WAL 层用例（A01~A10）+ 故障注入 Env + 恢复层用例（A11~A19）+ 内存文件系统（崩溃语义 seam）

@@ -2240,3 +2240,25 @@ CURRENT / Bloom filter 内容 / `WriteBatch` 公共 API / 块缓存 / 压缩算�
 `m2-wal` 已从 `8189607` 前移到 **`a3c85a8`**（force push；远端 tag 对象 `9bde3a6`）。⇒ M3 的实现基线
 = `a3c85a8`（含 A22/A25 + `GetRecoveryStats` + I32/I35）；设计文档本身冻结在 `961343e`，`#1` 前置条件
 文档为 `a83053e`。M3 后续一切"与 M2 基线对比"的证据都必须以 `a3c85a8` 为基准。
+
+### R6 —— M3.1 文件拆分偏离（登记，非放宽）
+
+- **设计原文（§11.1）**：新增 `src/sstable/{format.h, block_builder.{h,cpp}, block.{h,cpp},
+  footer.{h,cpp}, table_builder.{h,cpp}, table.{h,cpp}}`。
+- **实际交付**：`src/sstable/format.{h,cpp}`（常量 + `BlockHandle` + `Footer`）、
+  `src/sstable/block.{h,cpp}`（`BlockBuilder` + `BlockReader` + `ValidatePayload`），
+  用例文件 `tests/sstable_format_test.cpp`（对应 §10.1 的 A01~A08）。
+- **理由**：把 `BlockHandle`/`Footer`（合计不足 90 行）单独拆成 `footer.*` 之类的文件对，会让
+  M3.1 的 6 个文件里 3 个近乎空壳；合并后每个文件的职责边界反而更清楚（"块内布局" vs "文件级布局"）。
+- **影响面（必须明说）**：**§3.2/§3.3/§3.6/§3.7 的位级契约不受任何影响**（同一份字节布局）；
+  受影响的只是"文件如何切分"这一工程组织项。
+- **不得因此省掉的判据**：§11.1 的**零依赖**机制化断言必须原样保留 ——
+  `nm -C build/liblsm_sstable.a | grep -cE 'version|db_impl|wal'` ⇒ **0**（R6-a 已落地并实测为 0）。
+- **后续遵守**：M3.1 剩余部分（`table_builder.*` / `table.*`）**按设计原文件名**落地，不再合并。
+- **另一条已登记的偏离及其处置（R6-e，暂不闭合）**：`Table::ReadExactFile` 当前用
+  `Env::NewSequentialFile + Skip + Read` 模拟按偏移读块（每读一个块打开一次顺序文件）。
+  代理已在 `src/sstable/table.h` 顶部显式登记该偏离与替换点。本设计**刻意不在 M3.1 内闭合它**：
+  §11.1 只要求 `Env` **具备** `RandomAccessFile`（R6-b 已交付），并未要求 M3.1 的 `Table` 改用它；
+  而隔离实验证明现在就换会让 `M3-A19` 的"计数 seam 真被用上"断言（`sequential_files_opened >= 1`）
+  失效 —— 该断言的意图是防空绿，值本身要随 API 一起改。⇒ 与 `TableCache` 的引入**同批**在 M3.2
+  完成（一次把"随机读 API + 缓存 + 计数 seam"三件事改到位），M3.2 必须更新该计数器的语义。

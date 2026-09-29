@@ -73,6 +73,26 @@ class PosixWritableFile : public WritableFile {
   int fd_;
 };
 
+// M3：pread 语义的随机读（不改变文件偏移，天然可并发；const 方法内不改任何状态）。
+class PosixRandomAccessFile : public RandomAccessFile {
+ public:
+  PosixRandomAccessFile(int fd, std::string fname) : fd_(fd), fname_(std::move(fname)) {}
+  ~PosixRandomAccessFile() override {
+    if (fd_ >= 0) ::close(fd_);
+  }
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const override {
+    if (fd_ < 0) return Status::IOError("PosixRandomAccessFile: closed", fname_);
+    const ssize_t r = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
+    if (r < 0) return Status::IOError(ErrnoMessage("pread", fname_));
+    *result = Slice(scratch, static_cast<size_t>(r));
+    return Status::OK();
+  }
+
+ private:
+  int fd_;
+  std::string fname_;
+};
+
 class PosixSequentialFile : public SequentialFile {
  public:
   explicit PosixSequentialFile(FILE* f) : file_(f) {}
@@ -197,6 +217,27 @@ class PosixEnv : public Env {
       return Status::IOError("NewWritableFile: out of memory", fname);
     }
     *result = f;
+    return Status::OK();
+  }
+
+  Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result) override {
+    *result = nullptr;
+    const int fd = ::open(fname.c_str(), O_RDONLY);
+    if (fd < 0) {
+      if (errno == ENOENT) return Status::NotFound("NewRandomAccessFile", fname);
+      return Status::IOError(ErrnoMessage("open", fname));
+    }
+    *result = new PosixRandomAccessFile(fd, fname);
+    return Status::OK();
+  }
+
+  // M3：目录项 fsync（O_DIRECTORY 只在 Linux 有效；本仓库的运行环境是 Ubuntu 上的 ext4）。
+  Status SyncDir(const std::string& dirname) override {
+    const int fd = ::open(dirname.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd < 0) return Status::IOError(ErrnoMessage("SyncDir: open", dirname));
+    const int rc = ::fsync(fd);
+    ::close(fd);
+    if (rc != 0) return Status::IOError(ErrnoMessage("SyncDir: fsync", dirname));
     return Status::OK();
   }
 
