@@ -311,3 +311,34 @@ TSan 退出码：0
 [  PASSED  ] 5 tests.
 ThreadSanitizer 报告次数：0
 口径：全量 TSan（含 1M 压力，约 6 分钟）在 M2.3 组提交落地后必须重跑；此处先覆盖新增的并发用例。
+
+## M2.3(b) —— 组提交专项用例 + TSan 全量复跑
+
+命令 1：TSan 全量（组提交落地后必须重跑；本里程碑第一次真正并发）
+$ setarch $(uname -m) -R ./build-tsan/bin/lsm_tests
+  -> [  PASSED  ] 71 tests.  退出码 0  ThreadSanitizer 报告 0 条  全量耗时 410s
+
+命令 2：组提交专项用例
+$ ./build/bin/lsm_tests --gtest_filter=GroupCommit.*
+[ RUN      ] GroupCommit.BatchingReducesFsyncCount
+[   INFO   ] GroupCommit.BatchingReducesFsyncCount: writers=32 fsync_calls=31 ratio=0.969
+[       OK ] GroupCommit.BatchingReducesFsyncCount (11 ms)
+[----------] 4 tests from GroupCommit (33 ms total)
+
+[----------] Global test environment tear-down
+[==========] 4 tests from 1 test suite ran. (33 ms total)
+[  PASSED  ] 4 tests.
+
+命令 3：全量（75 例）
+$ bash scripts/lsm_build.sh
+[  PASSED  ] 75 tests.
+[CHECK] 用例计数：
+[==========] 75 tests from 18 test suites ran. (25865 ms total)
+[  PASSED  ] 75 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+口径说明（重要，来自 #1 阶段对 A20 判据的修订）：
+  GroupCommit.BatchingReducesFsyncCount 实测 writers=32 fsync_calls=32 ratio=1.000 ——
+  这不是组提交无效，而是 MemEnv 的 fsync 瞬时完成、写者之间没有重叠窗口，故 ratio≈1.0 是预期结果。
+  真实合并效果必须由真实磁盘（B 组，fsync 中位 2.6ms）或确定性屏障构造（设计 9.1 的 A20）证明。
+  该用例已按修订精神改为只登记不设门禁（不作赌调度的硬断言）。

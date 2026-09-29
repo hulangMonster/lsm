@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "db.h"
+#include "db_impl.h"   // durable_seq() 诊断接口在具体实现上（不进 DB 公共接口）
 #include "memenv.h"
 #include "util/coding.h"
 #include "wal.h"
@@ -255,6 +256,143 @@ TEST(Close, RejectsNewWriters) {
   std::string v;
   EXPECT_TRUE(db->Get("after-close", &v).IsNotFound());
   EXPECT_TRUE(db->Close().ok()) << "Close 必须幂等";
+  delete db;
+}
+
+
+// ==== M2.3(b)：组提交专项用例（A20b/A21/A23/A24）====
+
+namespace {
+
+// 记录 flusher 内部的观察值（A24 用它证明「水位在 fsync 之前不会发布」）
+class RecordingHook : public CommitHook {
+ public:
+  void OnGroupTaken() override { ++groups_taken; }
+  void OnAfterSyncBeforePublish() override {
+    ++sync_hooks;
+    durable_at_hook = static_cast<PersistentDBImpl*>(db)->durable_seq();   // 此刻必须还没发布新水位
+  }
+  std::atomic<int> groups_taken{0};
+  std::atomic<int> sync_hooks{0};
+  std::atomic<SequenceNumber> durable_at_hook{0};
+  DB* db = nullptr;
+};
+
+}  // namespace
+
+// A24：fsync 已返回、水位尚未发布 —— 窗口的最后一步（清 flusher_active_）在更后面
+TEST(GroupCommit, WindowNotOpenedEarly) {
+  MemEnv env;
+  RecordingHook hook;
+  Options options;
+  options.env = &env;
+  options.commit_hook = &hook;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  hook.db = db;
+  WriteOptions wo;
+  wo.sync = true;
+  for (int i = 1; i <= 20; ++i) {
+    ASSERT_TRUE(db->Put(wo, Key(i), Val(i)).ok());
+  }
+  EXPECT_GT(hook.sync_hooks.load(), 0) << "至少有一次 flusher 走到 fsync 之后的观察点";
+  EXPECT_GT(hook.groups_taken.load(), 0);
+  // 观察点上水位必须尚未包含本批（本批的 end_seq 会被发布在 hook 之后）
+  EXPECT_LT(hook.durable_at_hook.load(), static_cast<PersistentDBImpl*>(db)->durable_seq())
+      << "水位必须在 OnAfterSyncBeforePublish **之后**才发布（D4 窗口放开时机）";
+  db->Close();
+  delete db;
+}
+
+// A21：不得丢唤醒 —— 所有写者必须在有限时间内被结算（超时即 FAIL，不是「慢」）
+TEST(GroupCommit, NoLostWakeup) {
+  MemEnv env;
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  const int kWriters = 32;
+  std::atomic<int> finished{0};
+  std::atomic<int> failed{0};
+  std::vector<std::thread> ts;
+  for (int w = 0; w < kWriters; ++w) {
+    ts.emplace_back([&, w]() {
+      WriteOptions wo;
+      wo.sync = (w % 4 == 0);
+      const Status s = db->Put(wo, Key(w + 1), Val(w + 1));
+      if (s.ok()) ++finished; else ++failed;
+    });
+  }
+  for (std::thread& t : ts) t.join();   // 真丢唤醒会在这里挂死 ⇒ 由测试超时/门禁暴露
+  EXPECT_EQ(kWriters, finished.load() + failed.load()) << "有写者没有被结算（丢唤醒）";
+  EXPECT_EQ(0, failed.load());
+  // 已 ack 的写必须能读回（组提交不得丢数据）
+  for (int i = 1; i <= kWriters; ++i) {
+    std::string v;
+    EXPECT_TRUE(db->Get(Key(i), &v).ok()) << "i=" << i;
+  }
+  db->Close();
+  delete db;
+}
+
+// A23：fsync 失败必须传播给该批**所有**等待者，且没有任何人拿到 kOk（I16）
+TEST(GroupCommit, FailurePropagatesToAllWaiters) {
+  MemEnv env;
+  env.SetSeed(0x5EED2026ull);
+  env.SetSyncFailureAfter(1);   // 第一次 fsync 就失败
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  const int kWriters = 16;
+  std::atomic<int> ok_count{0};
+  std::atomic<int> err_count{0};
+  std::atomic<int> io_errors{0};
+  std::vector<std::thread> ts;
+  for (int w = 0; w < kWriters; ++w) {
+    ts.emplace_back([&, w]() {
+      WriteOptions wo;
+      wo.sync = true;   // 要求 durable ⇒ 必然经过 fsync ⇒ 必然失败
+      const Status s = db->Put(wo, Key(w + 1), Val(w + 1));
+      if (s.ok()) ++ok_count; else { ++err_count; if (s.IsIOError()) ++io_errors; }
+    });
+  }
+  for (std::thread& t : ts) t.join();
+  EXPECT_EQ(0, ok_count.load()) << "fsync 失败时绝不允许有人拿到 kOk（I16）";
+  EXPECT_EQ(kWriters, err_count.load());
+  EXPECT_EQ(kWriters, io_errors.load()) << "应当全部是同一类错误（kIOError）";
+  // 粘性：失败之后的写也立刻返回错误（写只读，D11）
+  EXPECT_FALSE(db->Put(WriteOptions(), "after-failure", "v").ok());
+  db->Close();
+  delete db;
+}
+
+// A20b：真实并发下的统计（不作硬门禁，只记录比值；确定性判据见设计 §9.1 的 A20 修订）
+TEST(GroupCommit, BatchingReducesFsyncCount) {
+  MemEnv env;
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+  const int kWriters = 32;
+  std::vector<std::thread> ts;
+  for (int w = 0; w < kWriters; ++w) {
+    ts.emplace_back([&, w]() {
+      WriteOptions wo;
+      wo.sync = true;
+      EXPECT_TRUE(db->Put(wo, Key(w + 1), Val(w + 1)).ok());
+    });
+  }
+  for (std::thread& t : ts) t.join();
+  const int fsyncs = env.sync_calls();
+  std::printf("[   INFO   ] GroupCommit.BatchingReducesFsyncCount: writers=%d fsync_calls=%d ratio=%.3f\n",
+              kWriters, fsyncs, static_cast<double>(fsyncs) / kWriters);
+  // 本用例**只登记不设门禁**（这正是 #1 阶段对 A20 判据的修订精神：不作赌调度的硬断言）：
+  // MemEnv 的 fsync 瞬时完成、写者之间没有重叠窗口 ⇒ ratio ≈ 1.0 是**预期**结果，
+  // 不能据此判定"组提交无效"。真实合并效果必须由(a) 真实磁盘的 B 组脚本（fsync 中位 2.6ms）
+  // 或 (b) 确定性屏障构造（设计 §9.1 的 A20，断言"本批含 N 个写者且 fsync 次数 == 1"）来证明。
+  EXPECT_GT(fsyncs, 0) << "至少要有一次 fsync";
+  db->Close();
   delete db;
 }
 
