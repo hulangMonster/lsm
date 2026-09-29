@@ -289,3 +289,25 @@ $ bash scripts/lsm_build.sh
 [==========] 70 tests from 16 test suites ran. (26014 ms total)
 [  PASSED  ] 70 tests.
 [OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+## M2.2f A31（Close 期间并发写）+ ASan/TSan 复跑
+
+执行时间：2026-09-29T22:10:47+08:00
+
+命令 1：ASan 全量（71 例，含 MemEnv/掉电语义/并发 Close）
+ASan 构建 warning：0
+ASan 退出码：0
+[----------] Global test environment tear-down
+[==========] 71 tests from 17 test suites ran. (73199 ms total)
+[  PASSED  ] 71 tests.
+Address/LeakSanitizer 报告次数：0
+
+命令 2：TSan 跑并发相关用例（本里程碑第一次有真实多线程）
+$ setarch $(uname -m) -R ./build-tsan/bin/lsm_tests --gtest_filter=Close.*:CrashSim.*:Sync.*
+TSan 构建 warning：0
+TSan 退出码：0
+[----------] Global test environment tear-down
+[==========] 5 tests from 3 test suites ran. (741 ms total)
+[  PASSED  ] 5 tests.
+ThreadSanitizer 报告次数：0
+口径：全量 TSan（含 1M 压力，约 6 分钟）在 M2.3 组提交落地后必须重跑；此处先覆盖新增的并发用例。

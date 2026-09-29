@@ -8,8 +8,11 @@
 // ② 出现的 key 集合必须是写入序列的**前缀**；③ 已 fsync 过的写一条都不能少。
 #include "test_harness.h"
 
+#include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "db.h"
@@ -202,6 +205,56 @@ TEST(Sync, CloseIsDurable) {
   ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
   EXPECT_EQ(kN, CheckedPrefix(db, kN)) << "Close 之后掉电，全部写入都必须在";
   db->Close();
+  delete db;
+}
+
+
+// A31：Close() 与并发写者的交互（I20/L11）——Close 期间不得 UAF、不得死锁；
+// 并发写只能拿到明确的 Status；Close 返回之后不得再接受写入。
+TEST(Close, RejectsNewWriters) {
+  MemEnv env;
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
+
+  std::atomic<bool> stop{false};
+  std::atomic<int> ok_count{0};
+  std::atomic<int> err_count{0};
+  std::atomic<int> unexpected{0};
+  auto worker = [&](int id) {
+    WriteOptions wo;
+    long long i = 0;
+    while (!stop.load()) {
+      char key[32];
+      std::snprintf(key, sizeof(key), "t%d-%06lld", id, i++);
+      const Status s = db->Put(wo, Slice(key), Slice("v"));
+      if (s.ok()) {
+        ++ok_count;
+      } else {
+        ++err_count;
+        if (!(s.IsIOError() || s.IsFrozen() || s.IsInvalidArgument())) ++unexpected;
+        break;   // 被拒之后退出（DB 转写只读）
+      }
+    }
+  };
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 4; ++i) threads.emplace_back(worker, i);
+  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  ASSERT_TRUE(db->Close().ok());      // 与 4 个写者并发
+  stop.store(true);
+  for (std::thread& t : threads) t.join();
+
+  EXPECT_GT(ok_count.load(), 0) << "Close 之前应当有成功的写入";
+  EXPECT_EQ(0, unexpected.load()) << "并发写只能拿到明确的错误 Status（IOError/Frozen/InvalidArgument）";
+  EXPECT_GT(err_count.load(), 0) << "Close 之后仍在跑的写者必须被明确拒绝";
+
+  // Close 返回之后的新写入必须被拒，且不得真的写进去
+  const Status after = db->Put(WriteOptions(), "after-close", "v");
+  EXPECT_FALSE(after.ok()) << "Close 之后不得再接受写入：" << after.ToString();
+  std::string v;
+  EXPECT_TRUE(db->Get("after-close", &v).IsNotFound());
+  EXPECT_TRUE(db->Close().ok()) << "Close 必须幂等";
   delete db;
 }
 
