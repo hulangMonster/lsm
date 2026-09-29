@@ -21,6 +21,16 @@ namespace lsm {
 
 class Env;   // M2：Options::env 注入（定义见 util/env.h；此处只前向声明，保持 common.h 零项目依赖）
 
+// M2：组提交的可注入观察点（生产为 nullptr）。测试用它构造确定性时序，而不是靠 sleep 赌调度：
+//   - OnGroupTaken：队首已选出 flusher、批已组装但**尚未做 IO** —— A20 在这里让整批写者就位
+//   - OnAfterSyncBeforePublish：fsync 已返回、durable 水位**尚未发布** —— A24 在这里断言窗口没被提前放开
+class CommitHook {
+ public:
+  virtual ~CommitHook() = default;
+  virtual void OnGroupTaken() {}
+  virtual void OnAfterSyncBeforePublish() {}
+};
+
 // ---------------------------------------------------------------------------
 // Slice：ptr + len 视图
 // ---------------------------------------------------------------------------
@@ -232,6 +242,8 @@ struct Options {
   // 为什么需要：A27~A31 的掉电语义必须用 MemEnv（内存文件系统 + fsync 水位 + 固定种子撕裂）
   // 才能确定性验证，而 M2 的恢复路径原来硬编码 Env::Default()，测试无法注入。
   Env* env = nullptr;
+  // M2.3：组提交观察点（nullptr = 无观察者）。见 CommitHook 的注释。
+  CommitHook* commit_hook = nullptr;
 };
 
 // ---------------------------------------------------------------------------

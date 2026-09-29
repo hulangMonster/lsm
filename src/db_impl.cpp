@@ -13,28 +13,14 @@ namespace {
 
 constexpr size_t kRecoverySlack = 1u * 1024 * 1024;      // D12：恢复容量的余量
 constexpr uint32_t kMaxBatchCount = 1u << 20;            // §9.4：防畸形 count 撑爆
+constexpr size_t kMaxGroupBytes = 1u * 1024 * 1024;      // D3：一批的字节上限（1 MiB）
+constexpr size_t kMaxGroupRecs = 64;                     // D3：一批的写者数上限
 
 struct BatchEntry {
   ValueType type = kTypeValue;
   std::string key;
   std::string value;
 };
-
-// §9.4：payload := sequence(8B LE) || count(4B LE) || entry[0..count)
-//        entry   := type(1B) || key_len(varint32) || key || [value_len(varint32) || value]
-std::string EncodeBatch(SequenceNumber seq, ValueType type, const Slice& key, const Slice& value) {
-  std::string out;
-  PutFixed64(&out, seq);
-  PutFixed32(&out, 1);                                   // M2 的一次写 = 一个 entry 的 batch
-  out.push_back(static_cast<char>(type));
-  PutVarint32(&out, static_cast<uint32_t>(key.size()));
-  if (!key.empty()) out.append(key.data(), key.size());
-  if (type == kTypeValue) {
-    PutVarint32(&out, static_cast<uint32_t>(value.size()));
-    if (!value.empty()) out.append(value.data(), value.size());
-  }
-  return out;
-}
 
 // §9.4 的解析：必须**恰好消费完** payload，count 条解完还有剩余字节即损坏
 bool ParseBatch(const Slice& payload, SequenceNumber* seq, std::vector<BatchEntry>* entries,
@@ -255,40 +241,151 @@ Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, cons
     return Status::InvalidArgument("Put/Delete: user key too large", std::to_string(key.size()));
   }
 
-  // M2.2 过渡形态：整条写路径串行化（每写一次 fsync），正确但低吞吐；M2.3 换成组提交。
-  std::lock_guard<std::mutex> log_lock(log_mu_);
-  SequenceNumber seq = 0;
-  std::string batch;
+    // ---- M2.3 组提交（design §6.3）----
+  // 每个写者入队后等待被结算；队首当选 flusher，把一批写者的条目**合并成一条 WAL record**
+  // （一条 record = 一个 CRC = 一个原子单位，I15），并替整批做一次 fsync。
+  Pending w;
+  w.need_sync = options.sync;
+  w.type = type;
+  w.key.assign(key.data(), key.size());
+  w.value.assign(value.data(), value.size());
+  w.entry_bytes = 1 + static_cast<size_t>(VarintLength(w.key.size())) + w.key.size() +
+                  (type == kTypeValue
+                       ? static_cast<size_t>(VarintLength(w.value.size())) + w.value.size()
+                       : 0);
+
+  std::unique_lock<std::mutex> l(commit_mu_);
+  if (!bg_error_.ok()) return bg_error_;                   // 粘性 fail-stop（D11）
   {
-    std::lock_guard<std::mutex> l(mutex_);
-    if (closed_) return Status::IOError("Put/Delete: DB is closed");
-    if (!bg_error_.ok()) return bg_error_;                 // 粘性 fail-stop（D11）
-    if (memtable_->IsFrozen()) {
-      return Status::Frozen("Put/Delete: memtable is full (M2 无 flush)", dbname_);
+    // L11/A31：**入队前**就拒绝关闭后的新写。若只在 RunFlusher 里判 closed_，
+    // 关闭期间源源不断的新写者会不断把 flusher_active_ 置回 true，Close 等待 !flusher_active_
+    // 就会活锁（实测：Close.RejectsNewWriters 挂住）。顺序必须是"先拒绝新写 → 再等在途批"。
+    std::lock_guard<std::mutex> ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
+    if (closed_) return Status::IOError("Put/Delete: DB is closed", dbname_);
+  }
+  queue_.push_back(&w);
+  while (!w.done) {
+    // 谓词必须同时覆盖「我已经完成」与「**我能否接手当 flusher**」——只等"完成"会让最后一个写者
+    // 睡满超时后才能当 flusher（raft-kv 的 P2a 丢唤醒复盘，L9/L10）。这里用 while + 无谓词 wait
+    // 重查，语义等价且不会丢唤醒。
+    if (!flusher_active_ && queue_.front() == &w) {
+      flusher_active_ = true;
+      l.unlock();
+      const Status s = RunFlusher();
+      l.lock();
+      // D4 窗口放开时机：RunFlusher 已经「结算并唤醒组内成员」，此处才清 flusher_active_，
+      // 紧接着唤醒新队首。顺序不可交换：先清标志会让下一批与本次收尾并发，多出一次排队中的 fsync。
+      flusher_active_ = false;
+      commit_cv_.notify_all();   // 交接（L10）；用 notify_all 是因为 Close() 也在这把 cv 上等
+      if (!s.ok() && !w.done) return s;
+      continue;
     }
-    seq = last_sequence_ + 1;
-    batch = EncodeBatch(seq, type, key, value);
+    commit_cv_.wait(l);
+  }
+  return w.status;
+}
+
+std::string PersistentDBImpl::EncodeGroup(SequenceNumber begin,
+                                          const std::vector<Pending*>& members) {
+  // §9.4 的 batch 编码：sequence(8B LE) || count(4B LE) || entry[0..count)
+  std::string out;
+  PutFixed64(&out, begin);
+  PutFixed32(&out, static_cast<uint32_t>(members.size()));
+  for (const Pending* p : members) {
+    out.push_back(static_cast<char>(p->type));
+    PutVarint32(&out, static_cast<uint32_t>(p->key.size()));
+    out.append(p->key);
+    if (p->type == kTypeValue) {
+      PutVarint32(&out, static_cast<uint32_t>(p->value.size()));
+      out.append(p->value);
+    }
+  }
+  return out;
+}
+
+Status PersistentDBImpl::RunFlusher() {
+  std::string payload;
+  std::vector<Pending*> members;
+  bool need_sync = false;
+  SequenceNumber begin = 0;
+  Status reject;
+
+  {
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    if (queue_.empty()) return Status::OK();               // 已被别的 flusher 处理
+    std::lock_guard<std::mutex> ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
+    // **先取批，再决定拒绝**：无论后面是否拒绝，都必须把成员从队列摘出来并在下面结算。
+    // 否则被拒的队首会永远留在队列里，后面的写者永远等不到自己成为队首（实测：A31 挂住）。
+    size_t bytes = 0;
+    begin = last_sequence_ + 1;
+    for (Pending* p : queue_) {
+      if (!members.empty() &&
+          (members.size() >= kMaxGroupRecs || bytes + p->entry_bytes > kMaxGroupBytes)) {
+        break;                                             // 单个超大 value 会独占一批，不饿死别人
+      }
+      p->begin = begin + static_cast<SequenceNumber>(members.size());
+      members.push_back(p);
+      bytes += p->entry_bytes;
+      need_sync = need_sync || p->need_sync;               // D3：sync 取组内 OR（优于 LevelDB 只看队首）
+    }
+    for (size_t i = 0; i < members.size(); ++i) queue_.pop_front();
+    if (closed_) {
+      reject = Status::IOError("Put/Delete: DB is closed", dbname_);
+    } else if (!bg_error_.ok()) {
+      reject = bg_error_;
+    } else if (memtable_->IsFrozen()) {
+      reject = Status::Frozen("Put/Delete: memtable is full (M2 无 flush)", dbname_);
+    } else {
+      last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+      payload = EncodeGroup(begin, members);
+    }
   }
 
-  // 锁外做 IO（I17/L7）：Append 永远做，Sync 只在 sync=true 时做（I11）
-  Status s = log_->Append(Slice(batch));
-  if (s.ok() && options.sync) s = log_->Sync();
-  if (!s.ok()) {
-    std::lock_guard<std::mutex> l(mutex_);
-    bg_error_ = s;                                         // 偏移已不可信 ⇒ 写只读
-    return s;
+  if (!reject.ok()) {
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    for (Pending* p : members) {
+      p->status = reject;
+      p->done = true;
+    }
+    commit_cv_.notify_all();
+    return reject;
+  }
+
+  if (options_.commit_hook != nullptr) options_.commit_hook->OnGroupTaken();
+
+  // ---- 锁外做 IO（I17/L7）：Append 永远做，fsync 只在组内有人要求时做（I11/D3）----
+  Status s = log_->Append(Slice(payload));
+  if (s.ok() && need_sync) s = log_->Sync();
+  if (s.ok()) {
+    if (options_.commit_hook != nullptr) options_.commit_hook->OnAfterSyncBeforePublish();
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    durable_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+  } else {
+    std::lock_guard<std::mutex> ml(mutex_);
+    bg_error_ = s;                                         // 粘性：偏移已不可信（D11）；I16 传播给整批
+  }
+
+  if (s.ok()) {
+    std::lock_guard<std::mutex> ml(mutex_);
+    for (Pending* p : members) {
+      const Status a = memtable_->Add(p->begin, p->type, p->key, p->value);
+      if (!a.ok()) {
+        bg_error_ = a;
+        s = a;
+        break;
+      }
+    }
   }
 
   {
-    std::lock_guard<std::mutex> l(mutex_);
-    const Status a = memtable_->Add(seq, type, key, value);
-    if (!a.ok()) {
-      bg_error_ = a;
-      return a;
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    for (Pending* p : members) {
+      p->status = s;                                       // 同一批拿到**同一个** Status（I16）
+      p->done = true;
     }
-    last_sequence_ = seq;
+    commit_cv_.notify_all();
   }
-  return Status::OK();
+  return s;
 }
 
 Status PersistentDBImpl::Put(const WriteOptions& options, const Slice& key, const Slice& value) {
@@ -322,19 +419,27 @@ Iterator* PersistentDBImpl::NewIterator() {
 }
 
 Status PersistentDBImpl::Sync() {
-  std::lock_guard<std::mutex> log_lock(log_mu_);
+  // 与 flusher 的 fsync 串行；语义 = 把此前全部已返回 kOk 的写刷到磁盘（design §7.4）
+  std::lock_guard<std::mutex> ql(commit_mu_);
   if (log_ == nullptr) return Status::IOError("PersistentDBImpl::Sync: WAL is not open", dbname_);
   if (!bg_error_.ok()) return bg_error_;
-  return log_->Sync();
+  const Status s = log_->Sync();
+  if (s.ok()) {
+    std::lock_guard<std::mutex> ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）
+    durable_seq_ = last_sequence_;
+  }
+  return s;
 }
 
 Status PersistentDBImpl::Close() {
-  std::lock_guard<std::mutex> log_lock(log_mu_);
+  std::unique_lock<std::mutex> ql(commit_mu_);
   {
     std::lock_guard<std::mutex> l(mutex_);
     if (closed_) return Status::OK();                      // 幂等（A30）
     closed_ = true;
   }
+  // L11/A31：不得与在途 flusher 的 IO 交叠（否则可能在它写之前就把 fd 关掉）
+  commit_cv_.wait(ql, [this] { return !flusher_active_; });
   if (log_ == nullptr) return Status::OK();                // 尚未打开 WAL（恢复中途失败）⇒ 没有要刷的东西
   Status s = bg_error_.ok() ? log_->Sync() : bg_error_;    // Close 隐含 Sync（I20/A30）
   const Status c = log_->Close();

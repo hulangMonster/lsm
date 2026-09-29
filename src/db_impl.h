@@ -5,9 +5,12 @@
 #ifndef LSM_DB_IMPL_H_
 #define LSM_DB_IMPL_H_
 
+#include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "common.h"
 #include "db.h"
@@ -32,6 +35,9 @@ class PersistentDBImpl : public DB {
   Status Sync() override;
   Status Close() override;
 
+  // 诊断（测试与证据用）：已 fsync 覆盖到的最大 sequence
+  SequenceNumber durable_seq() const { return durable_seq_; }
+
  private:
   friend Status DB::Open(const Options&, const std::string&, DB**);
 
@@ -49,9 +55,28 @@ class PersistentDBImpl : public DB {
   std::unique_ptr<MemTable> memtable_;
   std::unique_ptr<WALWriter> log_;
 
-  std::mutex mutex_;         // 只保护内存状态（memtable_ / last_sequence_ / closed_ / bg_error_）
-  std::mutex log_mu_;        // 串行化整条写路径（M2.2 过渡形态）；**持它期间不做 DB 锁内的 IO**
-  SequenceNumber last_sequence_ = 0;
+  // 组提交（design §6.3）。锁序（L8）：commit_mu_ → mutex_；且**两把锁都不跨 IO**（I17）。
+  struct Pending {
+    bool need_sync = false;
+    bool done = false;
+    Status status;
+    SequenceNumber begin = 0;    // 本写者拿到的起始 sequence（组内连续）
+    ValueType type = kTypeValue;
+    std::string key;
+    std::string value;
+    size_t entry_bytes = 0;
+  };
+
+  Status RunFlusher();                                   // 队首：组批 → 写 WAL →（必要时）fsync → 发布水位 → 结算并唤醒
+  static std::string EncodeGroup(SequenceNumber begin, const std::vector<Pending*>& members);
+
+  std::mutex mutex_;                  // 只保护内存状态（memtable_ / last_sequence_ / closed_ / bg_error_）
+  std::mutex commit_mu_;              // 保护组提交队列与 flusher 状态（L8 的第一把锁）
+  std::condition_variable commit_cv_; // 谓词：w.done || (!flusher_active_ && queue_.front() == &w)
+  std::deque<Pending*> queue_;
+  bool flusher_active_ = false;
+  SequenceNumber last_sequence_ = 0;  // 受 mutex_ 保护
+  SequenceNumber durable_seq_ = 0;    // 已 fsync 覆盖到的最大 sequence（受 commit_mu_ 保护）
   Status bg_error_;
   // 初始为 true：恢复中途失败时对象会被 unique_ptr 析构，此时 log_ 尚未打开 ——
   // 若不这样，析构会走到 Close() 里对 nullptr 的 log_ 取 Sync（实测段错误，见 docs/m2-evidence.md）
