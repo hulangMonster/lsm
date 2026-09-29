@@ -1,0 +1,11 @@
+# 构建产物（三构建目录互不共享缓存：build / build-asan / build-tsan）
+build*/
+data/
+*.o
+*.a
+core.*
+*.log
+# docs/m1-tdd-red.log 是 #2 阶段必须入库的 RED 证据（design §3），
+# 因此要在 *.log 之后显式取反，否则 git add -A 会把它一起忽略掉。
+!docs/m1-tdd-red.log
+.cache/

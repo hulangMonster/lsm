@@ -1,0 +1,30 @@
+## #2 编译期 RED（实现为零，测试集已就位）
+
+执行时间：见下方命令块首行；主机：tengyujie-virtual-machine；编译器：g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+
+预期（docs/m1-design.md §13 修订）：测试文件 #include 的 src/ 下头文件尚不存在 → 编译期失败。
+这不是方案退让：编译期 RED 证明「测试集已完整表达契约、实现为零」；符号级链接期 RED 在 M1.1 出现。
+
+命令 1：rm -rf build && cmake -S . -B build
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/tengyujie/lsm-kv/build
+
+命令 2：cmake --build build -j8
+[ 33%] Building CXX object CMakeFiles/lsm_tests.dir/tests/memtable_test.cpp.o
+[ 66%] Building CXX object CMakeFiles/lsm_tests.dir/tests/util_test.cpp.o
+In file included from /home/tengyujie/lsm-kv/tests/memtable_test.cpp:17:
+/home/tengyujie/lsm-kv/tests/test_harness.h:46:10: fatal error: common.h: No such file or directory
+   46 | #include "common.h"
+      |          ^~~~~~~~~~
+compilation terminated.
+gmake[2]: *** [CMakeFiles/lsm_tests.dir/build.make:90: CMakeFiles/lsm_tests.dir/tests/memtable_test.cpp.o] Error 1
+gmake[2]: *** Waiting for unfinished jobs....
+In file included from /home/tengyujie/lsm-kv/tests/util_test.cpp:16:
+/home/tengyujie/lsm-kv/tests/test_harness.h:46:10: fatal error: common.h: No such file or directory
+   46 | #include "common.h"
+      |          ^~~~~~~~~~
+compilation terminated.
+gmake[2]: *** [CMakeFiles/lsm_tests.dir/build.make:76: CMakeFiles/lsm_tests.dir/tests/util_test.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:83: CMakeFiles/lsm_tests.dir/all] Error 2
+gmake: *** [Makefile:101: all] Error 2
