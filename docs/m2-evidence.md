@@ -187,3 +187,29 @@ NOTE 每次提交 = 1 条 4096B 记录；本表的 MEDIAN_MS 是 M5 计算组提
   ⇒ 两次相差约 29%。这正是本工具必须打印 machine/load/fs/mount 的原因：
     同一个脚本、同一台机器、不同时间点结果可以差 3 倍，不记环境就无法解释差异（design §9.3 的经验）。
   ⇒ 结论口径：M5 引用分母时必须用**同轮同环境**的实测值，不得跨时间点挪用。
+
+
+
+执行时间：2026-09-29T20:24:53+08:00
+HEAD：21702a8 m2.2d: B07 单次提交延迟微基准（docs/m2-design.md §9.2/§9.3）
+
+命令 1：bash scripts/lsm_build.sh（干净重建，含 B07 新目标）
+$ bash scripts/lsm_build.sh
+[CHECK] 用例计数：
+[==========] 66 tests from 14 test suites ran. (28207 ms total)
+[  PASSED  ] 66 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
+
+命令 2：三条真实门禁的冒烟复核
+$ bash scripts/lsm_crash_test.sh --rounds 20
+TOTAL_ROUNDS 20 MISSING_TOTAL 0 MISMATCH_TOTAL 0
+[OK] 全部 20 轮 missing 0 / mismatch 0
+$ bash scripts/lsm_tail_truncate_test.sh
+TAIL_CASES 1401 TAIL_OK 1401 TAIL_FAIL 0 RECORD_BYTES 40
+退出码: 0
+$ bash scripts/lsm_corrupt_middle_test.sh
+MIDDLE_OPEN_CORRUPTION 1 RECOVERED_PREFIX -1 DETAIL Corruption: RecoverAndOpen: log 中间损坏（其后仍有完好 record）: /tmp/lsm_mid_BpTgtJ/db/000001.log @1960 CRC 不符
+MIDDLE_LOCATABLE 1
+退出码: 0
+
+构建产物：lsm_tests / lsm_crash_writer / lsm_crash_recover / lsm_damage_test / fsbench_commit_latency
