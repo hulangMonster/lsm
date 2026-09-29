@@ -473,8 +473,13 @@ TEST(MemTable, MultiVersionOrderInInternalIterator) {
     EXPECT_EQ(5u, seq);
   }
   // 反向遍历是正向遍历的逆序
-  const std::vector<std::pair<std::string, std::string>> fwd = CollectForward(mem.NewIterator());
-  const std::vector<std::pair<std::string, std::string>> bwd = CollectBackward(mem.NewIterator());
+  // [#3 阶段修订] 原文把 NewIterator() 的裸指针直接传给收集助手，从不 delete ——
+  // 违反 design §4.5 自己声明的「返回值所有权归调用方」，ASan/LSan 门禁抓到 2 处泄漏（64 字节）。
+  // 用 unique_ptr 接管，断言与遍历顺序一字未改。
+  std::unique_ptr<Iterator> fwd_it(mem.NewIterator());
+  std::unique_ptr<Iterator> bwd_it(mem.NewIterator());
+  const std::vector<std::pair<std::string, std::string>> fwd = CollectForward(fwd_it.get());
+  const std::vector<std::pair<std::string, std::string>> bwd = CollectBackward(bwd_it.get());
   const std::vector<std::pair<std::string, std::string>> bwd_reversed(bwd.rbegin(), bwd.rend());
   EXPECT_EQ(fwd, bwd_reversed);
   EXPECT_EQ(entries.size(), fwd.size());
