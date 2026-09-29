@@ -241,3 +241,27 @@ ThreadSanitizer 报告出现次数：0
 口径说明：M2 目前是单写者串行路径（组提交尚未落地），本轮的 TSan 结论只证明
 「现有 WAL/恢复代码没有数据竞争」，不构成并发写正确性的证据；M2.3 引入 commit_mu_ 与
 flusher 交接后必须重跑本门禁（那才是 TSan 真正要抓的场景）。
+
+## M2 门禁唯一入口（scripts/lsm_gate.sh）—— 一次跑完全部验收
+
+执行时间：2026-09-29T20:38:12+08:00
+为什么需要它：M2 的验收由 6 条互相独立的门禁组成，分散跑容易漏、评审者也无法确认"到底跑了哪些"。
+$ bash scripts/lsm_gate.sh --rounds 30 --with-tsan=false
+=== [gate] ASan 全量 ===
+--- [PASS] ASan 全量
+=== [gate] 崩溃对账（kill -9 x 30，sync 模式） ===
+--- [PASS] 崩溃对账（kill -9 x 30，sync 模式）
+=== [gate] 逐字节截断扫描（B03） ===
+--- [PASS] 逐字节截断扫描（B03）
+=== [gate] 中间损坏拒绝启动（B04） ===
+--- [PASS] 中间损坏拒绝启动（B04）
+
+==== lsm_gate 汇总 ====
+PASS  干净重建 + 0 warning + 全量用例
+PASS  ASan 全量
+PASS  崩溃对账（kill -9 x 30，sync 模式）
+PASS  逐字节截断扫描（B03）
+PASS  中间损坏拒绝启动（B04）
+[OK] 全部门禁通过
+
+（TSan 默认关闭：1M 压力在 TSan 下约 6 分钟；需要时加 --with-tsan，其单独证据见上一节。）
