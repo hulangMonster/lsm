@@ -303,8 +303,12 @@ Status PersistentDBImpl::Sync() {
   正准备这么做 ⇒ 必须在 M3 落地前解决）。
 - **修法（约 3 行）**：水位必须按"**当前 log 实际已追加的边界**"发布，而不是按"已分配 sequence 的边界"。
   即 `Sync()` 记录 `durable_seq_ = log_last_appended_seq_`（由 flusher 在 `Append` 成功后、持 `commit_mu_` 时更新）。
-- **本文档的处置**：登记为本设计的 **I32**（§9.1），并在 M3 的代码里修（M3 本来就要重写这段的轮转逻辑），
-  配套回归用例 `M3-A50`。**是否单开一个 M2 补丁由用户决定**（见 §13 Q8）。
+- **处置（已在 M2 闭合，见 §15 R1）**：用户裁决为「单开 M2 补丁」，已于 `a3c85a8` 落地 —— 新增
+  `appended_seq_`（`Append` 成功后持 `mutex_` 推进），`Sync()` 先快照该边界、再 fsync、按 `max()`
+  单调发布，`RecoverAndOpen` 以同一边界起步；回归用例 `GroupCommit.SyncDoesNotClaimInFlightBatch`
+  （RED 原始证据 `docs/m2-tdd-red-i32.log`）。⇒ **M3 不再承担此修复**，`M3-A50` 收窄为「轮转后的
+  per-log 边界」回归；`log_last_appended_seq_` 仍保留，但理由是**轮转**（I33/I34 要区分"当前 log"
+  与"历史 log"的边界），不再是 M2 缺口的补丁。
 
 ### 0.6 探测环境小结（判定这些数字的可信区间）
 
@@ -1215,7 +1219,7 @@ Add(key, value):
 | `next_file_number_` | `mutex_` | §3.1 的分配器 |
 | `version_`（`shared_ptr<const Version>`） | `mutex_` | 不可变版本；注册 = 构造新版本 + 原子替换（L15） |
 | `last_sequence_` / `bg_error_` / `closed_` / `file_lock_` | `mutex_`（`closed_`/`bg_error_` 读时也在 `commit_mu_` 下，同 M2） | 沿用 M2 |
-| `log_`（`WALWriter`）/ `durable_seq_` / `log_last_appended_seq_` | `commit_mu_` | 沿用 M2；**新增 `log_last_appended_seq_`**（I32 的落点） |
+| `log_`（`WALWriter`）/ `durable_seq_` / `log_last_appended_seq_` | `commit_mu_` | 沿用 M2；**新增 `log_last_appended_seq_`**（M3 的 per-log 边界，用于轮转，§15 R1）；M2 的 I32 已在 `a3c85a8` 用 `mutex_` 保护的 `appended_seq_` 修完 |
 | `queue_` / `flusher_active_` / `commit_cv_` | `commit_mu_` | 沿用 M2 组提交 |
 | 后台线程相关：`bg_thread_`、`bg_cv_`、`bg_started_`、`bg_stop_`、`flush_stats_` | `mutex_` + `bg_cv_` | M3 新增 |
 
@@ -1442,7 +1446,7 @@ NewTableCapacity(footprint) := max(options_.write_buffer_size, footprint + kMemT
 阶段 B   持 commit_mu_ → mutex_：begin := last_sequence_ + 1；members[i].begin := begin + i；
                                  last_sequence_ := begin + |members| - 1；payload := EncodeGroup(...)
 阶段 C   锁外：log_->Append(payload)；if (need_sync) log_->Sync()；
-                 if (Append 成功) [commit_mu_] log_last_appended_seq_ := 上面那个上界（I32）
+                 if (Append 成功) [commit_mu_] log_last_appended_seq_ := 上面那个上界（per-log 边界；M2 的 I32 已在 a3c85a8 修完）
                  然后 [mutex_] 逐条 memtable_->Add(...)（失败 ⇒ bg_error_，见 §6.4）
          结算：整批同一个 Status（I16 不变）
 ```
@@ -1884,7 +1888,7 @@ M2 的判据是：`kill -9` 循环 ⇒ 重启 ⇒ "已 ack 集合（sidecar）�
 | **I29** | 读路径不得把 tombstone 返回给用户：`DBIter` 跳过 tombstone，`Get` 遇 tombstone 返回 `NotFound` | §7.1 的 `Get` 步骤（`kDeleted ⇒ NotFound`，不再向下）+ §7.3 的 `DBIter` | `M3-A28`、`M3-A29`、`M3-A32` |
 | **I30** | 文件句柄数量有上限且必须 RAII 释放：table cache 满时按 LRU 释放，任何路径不得泄漏句柄 | D8 的 `TableCache`（容量 `Options::max_open_files`）+ §7.4（淘汰的 `close` 在 `mutex_` 之外）+ `shared_ptr` RAII | `M3-B05`（多轮 flush + Get 后 `/proc/self/fd` 计数不增长）；`M3-A24`（失败路径也不泄漏） |
 | **I31**（新增） | **恢复水位的唯一口径**：`last_sequence_ = max(WAL 重放最大值, 各已注册文件的 `max_sequence`)`；**禁止**用"注册时刻的 `last_sequence_`"当已持久化水位 | §8.2（含三段证明与三条纪律）；`Version::MaxSequenceInFiles()`（§8.1） | `M3-A37`（水位单调 + 下一次分配严格更大）、`M3-A38`（`META.max_sequence` 与全量扫描一致，不符 ⇒ `kCorruption`）、`M3-A36`（SSTable + WAL 尾巴组合） |
-| **I32**（新增） | **`Sync()` 的水位边界**：`Sync()` 返回 `kOk` ⟹ 此前所有已 ack 写的字节已 `fsync` **到当前 log**；水位只按"当前 log **已追加**的边界"（`log_last_appended_seq_`）发布，不得按"已分配 sequence 的边界" | §6.1 的 `log_last_appended_seq_` + §6.6.1 阶段 C（`Append` 成功后持 `commit_mu_` 更新）+ §0.5 的缺陷分析 | `M3-A50`（并发 `Sync` + 写：断言 `Sync` 返回后水位 <= 当前 log 已追加边界；**这是 M2 缺口的回归**） |
+| **I32**（新增） | **`Sync()` 的水位边界**：`Sync()` 返回 `kOk` ⟹ 此前所有已 ack 写的字节已 `fsync` **到当前 log**；水位只按"当前 log **已追加**的边界"（`log_last_appended_seq_`）发布，不得按"已分配 sequence 的边界" | §6.1 的 `log_last_appended_seq_` + §6.6.1 阶段 C（`Append` 成功后持 `commit_mu_` 更新）+ §0.5 的缺陷分析 | M2 侧已由 `GroupCommit.SyncDoesNotClaimInFlightBatch`（`a3c85a8`）覆盖；M3 侧 `M3-A50` 收窄为 **per-log** 边界回归（轮转后不得把旧 log 的未落盘边界当成 durable） |
 | **I33**（新增） | **轮转的原子性位置**：轮转在**分配 sequence 之前**完成；轮转失败 ⇒ 整批以非 `kOk` 拒绝、**不** `Append`、**不**推进 `sequence`、**不** `Add` | §6.6.1 的阶段 A / A' / B 划分（+ M2 阻断项 1 的"判不过整批拒绝"纪律） | `M3-A49`（注入 `SyncDir`/写失败于轮转 ⇒ 断言 sequence 未推进、`log_` 未换、`memtable_` 未变、整批同一 `Status`） |
 | **I34**（新增） | **WAL 回收判据**：`min_log_to_keep = min({pending 表的 log_number})`；只有编号**严格小于**它的 `.log` 可删；删除**必须**在 `META` 的 `rename + SyncDir` 之后 | §6.6.2（判据 + 五步证明 `RecomputeMinLogToKeep()`）+ §6.3 步骤 ⑦→⑨ | `M3-A45`（判据本身：构造多表/多 log 场景断言可删集合）、`M3-A47`（注入 Env 断言删除晚于 `SyncDir`）、`M3-B09`（磁盘效果：log 数有界） |
 
@@ -1976,7 +1980,7 @@ M2 的判据是：`kill -9` 循环 ⇒ 重启 ⇒ "已 ack 集合（sidecar）�
 | M3-A47 | `WalReclaim.DeleteOnlyAfterMetaDurable`（I34） | 事件日志 Env | 删除 `*.log` 的事件**严格晚于** `META` 的 `rename` 与 `SyncDir` 事件 | 事件日志 Env |
 | M3-A48 | `WalReclaim.DisabledByOption`（§1.2 边界 5 的对照） | `MemEnv`，`recycle_log_files = false` | 一个 log 都不删；数据仍全部可读（证明开关双向有效） | `Options` |
 | M3-A49 | `Rotation.BeforeSequenceAssignAndAtomicOnFailure`（I33） | 注入 Env（轮转的 `SyncDir`/建文件失败） | 轮转成功：新 log 编号 == 旧 + 1、`log_sealed_` 清、后续写入落在新 log；轮转失败：整批同一非 `kOk`、`last_sequence_` **未推进**、`log_` **未换**、`memtable_` 内容不变 | 注入 Env + `FlushHook` |
-| M3-A50 | `Sync.BoundaryDoesNotOvershoot`（I32 —— M2 缺口回归） | `CommitHook::OnGroupTaken` 屏障 + 注入慢 `Append` | 在"某批已分配 sequence、`Append` 未完成"的窗口里调用 `Sync()` ⇒ 断言 `durable_seq_ <= log_last_appended_seq_`（**不得**发布到包含未追加批的水位）；`Sync()` 返回后再次 `Put(sync=true)` 的水位单调 | `CommitHook` + 可暂停的 Env |
+| M3-A50 | `Sync.PerLogBoundaryAfterRotation`（I32 已在 M2 修完，本用例收窄为**轮转后的 per-log 边界**） | `CommitHook::OnGroupTaken` 屏障 + 注入慢 `Append` + 轮转 | 轮转后再调用 `Sync()`：断言 `durable_seq_ <= log_last_appended_seq_`（不得发布到当前 log 未追加的部分），且轮转点之前已发布的水位不变；`Sync()` 返回后再次 `Put(sync=true)` 水位单调 | `CommitHook` + 可暂停的 Env |
 | M3-A51 | `Close.AbandonsImmutablesWithCounter`（§6.5） | `MemEnv` + 慢 flush | `Close()` 时有 1 个未落盘 immutable ⇒ 数据仍在 WAL（重开可读）；`immutables_abandoned == 1`；无 UAF/泄漏 | `MemEnv` + ASan |
 | M3-A52 | `Close.DrainsBackgroundThread`（L21） | `MemEnv` | `Close()` 返回后后台线程已 join；`Close()` 幂等；`Close()` 期间并发写返回明确 `Status`（沿用 M2 的 A31） | `MemEnv` + ASan/TSan |
 | M3-A53 | `Options.InvalidRejectedWithoutFailStop`（M2 教训 4） | 无 | `block_size=0/256/2MiB`、`max_open_files=0`、`write_buffer_size=0`、`comparator=nullptr` ⇒ `kInvalidArgument`；**且**在同一个 DB 上先触发一次 `kInvalidArgument` 的 `Put`（超大 entry），随后普通 `Put` **必须**返回 `kOk`（防粘性只读复活） | 无 |
@@ -2044,7 +2048,7 @@ M2 的判据是：`kill -9` 循环 ⇒ 重启 ⇒ "已 ack 集合（sidecar）�
 | 必改 | `src/version_set.{h,cpp}`（`META` 的 `Recover`/`Persist`，§8.1）；`src/db_impl.{h,cpp}`（§8.3 的完整恢复流程、**删除 M3.2 的 5 行 guard**、WAL 轮转 §6.6.1、`min_log_to_keep` §6.6.2、孤儿清理、`RecoveryStats` 新字段）；`scripts/lsm_gate.sh`（追加 M3 腿 + **正向标记断言**）；`.gitignore` |
 | 判据 | `recovery_m3_test` 全绿（`M3-A35~A54`）；`lsm_flush_crash_test.sh` 的 `missing 0` + `SST_FILES_TOTAL > 0` + `LOGS_DELETED_TOTAL > 0`；ASan/TSan 干净；M2 的 4 条腿仍 PASS；tag `m3-sstable` |
 | 证据命令 | `bash scripts/lsm_gate.sh --rounds 100 --with-tsan`（一条命令跑完全部）；<br>`bash scripts/lsm_flush_crash_test.sh --rounds 100 --write-buffer-size 262144`；<br>`bash scripts/lsm_crash_test.sh --rounds 100 --mode sync`（M2 腿共存）；<br>B04 的逐字节翻转扫描输出；B08 的读放大固定格式行；B09 的 `du`/`ls` 输出 |
-| 风险 | `META` 的原子性与"缺失"语义（`M3-A39/A41`）/ I34 判据（`M3-A45/A46`）/ I32 的 M2 缺口（`M3-A50`）/ 与 M2 门禁共存（`M3-B06`） |
+| 风险 | `META` 的原子性与"缺失"语义（`M3-A39/A41`）/ I34 判据（`M3-A45/A46`）/ 轮转后的 per-log 边界（`M3-A50`；M2 的 I32 缺口已在 `a3c85a8` 闭合）/ 与 M2 门禁共存（`M3-B06`） |
 
 **"每步一个判据"的关键**（沿用 M2.2→M2.3 的先例）：M3.2 的"注册只在内存"与 M3.3 的"注册进 `META`"
 **不改变** `Version`/`FlushImmutable` 的签名与不变量，只把"持久化"这一步从"无"变成"§8.1 的 5 行"。
@@ -2161,8 +2165,8 @@ CURRENT / Bloom filter 内容 / `WriteBatch` 公共 API / 块缓存 / 压缩算�
 | **Q5** | **D6 WAL 回收**：M3 就**真删**已完全落盘的 `.log`（默认开、可关）还是只记水位不删？ | **真删**（删在有专属用例 + 可关开关） | 只记水位 ⇒ G7 落空、"纯 SSTable 启动"只能靠测试手工删文件（弱化证据）、100 万写场景磁盘单调增长（§D6） | **★ 是**（唯一带数据丢失能力的新路径） |
 | **Q6** | **§8.7 E4 是否新增公共 `DB::Flush()`** | **不新增**（用小子缓冲驱动 flush，`M3-B03` 覆盖） | 新增 ⇒ 要改 `src/db.h`（**不在** M3 的「必须改」清单里）⇒ 属于超出授权的契约变更；需要用户明确批准 | **★ 是** |
 | **Q7** | ~~**§0.1 的脏工作区**如何处置？~~ | **已关闭：按 ① 执行** —— 该 WIP 已在本文档提交前被回退，`~/lsm-kv` 现为 HEAD `3603696` 的干净树（复核原始输出见 §0.1 的"提交前复核"块）。⇒ M3 的基线就是 `~/lsm-kv` 自身，不需要额外的克隆 | 无（已闭环） | 否（**已闭环**） |
-| **Q8** | **§0.5 的 M2 `Sync()` 水位越界**：① 单开一个 M2 补丁（推荐，因为它是 M2 的缺陷）；② 在 M3 里顺手修（代码本来要改）；③ 登记为已知限制不修 | **② 在 M3 里修**（M3 的 §6.6.1 阶段 C 正好要加 `log_last_appended_seq_`，顺手闭合），并在 `M3-A50` 里回归 | 若选 ③ ⇒ `db.h` 对 `Sync()` 的契约长期不成立，且 **M3 的 WAL 回收判据若误用它会更危险**（§0.5 已注明） | **★ 是** |
-| **Q9** | **M2 基线 rev**：以 `HEAD 3603696`（含 A22/A25 修复 + `GetRecoveryStats`）为准，还是以 tag `m2-wal`（`8189607`，落后两个提交）为准？ | **HEAD `3603696`**（干净树全绿，§0.2） | 以 tag 为准 ⇒ 基线少 2 个提交的修复，且 `GetRecoveryStats` 不可用（§8.4 的可观测性口径要重写） | 是 |
+| **Q8** | **§0.5 的 M2 `Sync()` 水位越界**：① 单开一个 M2 补丁（推荐，因为它是 M2 的缺陷）；② 在 M3 里顺手修（代码本来要改）；③ 登记为已知限制不修 | **① 单开 M2 补丁（用户裁决，已完成：`a3c85a8`）**；原②方案作废，M3 只保留 per-log 边界用于轮转 | 若选 ③ ⇒ `db.h` 对 `Sync()` 的契约长期不成立，且 **M3 的 WAL 回收判据若误用它会更危险**（§0.5 已注明） | **★ 是** |
+| **Q9** | **M2 基线 rev**：以 `HEAD 3603696`（含 A22/A25 修复 + `GetRecoveryStats`）为准，还是以 tag `m2-wal`（`8189607`，落后两个提交）为准？ | **tag `m2-wal` → `a3c85a8`**（= 原 HEAD `3603696` + I32/I35 补丁；用户已批准前移该 tag，§15 R5） | 以 tag 为准 ⇒ 基线少 2 个提交的修复，且 `GetRecoveryStats` 不可用（§8.4 的可观测性口径要重写） | 是 |
 | **Q10** | **§1.2 边界 1 的登记口径**：M3 起 `PersistentDBImpl::Put` **不再**返回 `kFrozen`（容量不足改为冻结 + 停等），这属于 M2 契约的**外部行为变化** | **按本设计接受**（依据 M2 设计 §1.2 边界 1 的原文"M3 引入 flush 后由 `MakeRoomForWrite` 消化"） | 若要保持"容量不足仍返回 `kFrozen`" ⇒ 与"M3 验收口径：自动落盘"直接冲突，且 M2 阻断项 1 的整类 bug 复活 | 是 |
 
 ---
@@ -2186,3 +2190,53 @@ CURRENT / Bloom filter 内容 / `WriteBatch` 公共 API / 块缓存 / 压缩算�
 | `src/util/env.h` / `env_posix.cpp` | `Env` 的能力边界；`SyncDir` 缺失的实证（§0.1 W3） |
 | `tests/memenv.{h,cpp}` | 崩溃语义的唯一 seam（fsync 水位 + 固定种子撕裂）；M3 需补 `RandomAccessFile`/`SyncDir`/句柄计数 |
 | 本设计的探针 `/tmp/m3probe/{scale_probe,block_probe,wal_crc_probe}.cpp` | §0.3/§0.4 的全部原始数字；**throwaway，不进仓库** |
+
+---
+
+## 15. 修订记录（`#1` 完成 → `#2` 开始之前）
+
+本节记录 `#0` 设计冻结（`961343e`）之后发生的、**会改变本设计条文**的事实与裁决。任一条都不得被
+后续实现当作"设计原文"绕过。
+
+### R1 —— I32（M2 的 `Sync()` 水位越界）已在 M2 修完，M3 的责任被取代
+
+- **原设计**：§0.5 登记 I32，Q8 裁决为"在 M3 里顺手修"，回归用例 `M3-A50`。
+- **实际发生**：用户裁决改为「单开 M2 补丁」，已于 `a3c85a8` 落地（新增 `appended_seq_` + 先快照后 fsync +
+  单调发布 + 恢复期同界起步），回归用例 `GroupCommit.SyncDoesNotClaimInFlightBatch`
+  （RED 原始输出 `actual: 1 vs 1` 存档 `docs/m2-tdd-red-i32.log`；M2 的 TSan 同时抓到并修掉了
+  `bg_error_` 的锁纪律缺陷 M2-I35）。
+- **对本设计的修改**：删除"M3 承担 I32 修复"的一切表述（§0.5、§6.1 锁表、§6.6.1 阶段 C、§9.1 I32 行、
+  §10.1 `M3-A50`、M3.3 风险行、§13 Q8）；`M3-A50` 改名为 `Sync.PerLogBoundaryAfterRotation`，
+  只验证**轮转后**的 per-log 边界；`log_last_appended_seq_` 继续保留，理由改为轮转。
+- **同步记录**：`docs/m2-prerequisites.md` §9.1、`docs/m2-evidence.md`（M2 侧证据与验收数字）。
+
+### R2 —— N1 裁决：批准按契约收窄 `tests/crash_test.cpp:456` 的 `kFrozen` 断言
+
+- **冲突**：该用例 `ASSERT_TRUE(last.IsFrozen())`（:474），而本设计 §1.2 边界 1 / Q10 明写 M3 起
+  `PersistentDBImpl::Put` **不再**返回 `kFrozen`（容量不足改为冻结 + 写者停等，由 flush 消化）。
+- **裁决（批准收窄）**：在 M3.2 的同一次提交里把该用例改名为描述新契约者（`DB.PutBlocksUntilFlush`），
+  断言改为「写入最终返回 `kOk` 且数据可读、期间发生了 flush」；旧 `kFrozen` 断言删除。
+  依据 = `m2-prerequisites.md` §9 对 `DB.OpenPersistentMode` 的先例（契约变化 ⇒ 断言随契约更新）。
+- **禁止的替代做法**：为了让旧断言继续绿而保留 `Put` 返回 `kFrozen` —— 与"M3 验收口径：自动落盘"
+  直接冲突，且会复活 M2 阻断项 1 那一整类 bug。
+
+### R3 —— N2 裁决：`SpyEnv` 必须先加宽，否则 `M3-A23` 属"空绿"
+
+- **问题**：现有 `SpyEnv` 只拦 `Append`/`Sync`，看不到 `rename`/`CreateDir`/`SyncDir`/`GetFileSize`/
+  `GetChildren`/`RemoveFile`/`Truncate`/块读 ⇒ `M3-A23`（"注册时才落盘、顺序正确"）会通过但什么都没测。
+- **裁决**：`M3-A23` 与 `M3-A47` 的**前置条件**是探针覆盖上述全部调用，并且**必须**配一条反向自检
+  （把注入点计数断言写反应当失败，或断言每个注入点的计数 `> 0`）。未加宽探针之前，这两个用例的
+  通过**不得**计入 M3 验收。
+
+### R4 —— N3 裁决：`MemEnv` 不建模 dirent ⇒ `SyncDir` 结论只能写成"顺序断言"
+
+- **事实**：`MemEnv::RenameFile` 一次赋值即永久生效，`SimulateCrash()` 不触碰 `dirs_` ⇒ 目录项掉电
+  语义在本机与 VM 上都**没有**验证手段（`Env::SyncDir` 在 `src`/`tests` 里此前零命中，M3 才首次实现）。
+- **裁决**：M3 交付物中所有涉及 `SyncDir` 的结论**只能**写"调用了 `SyncDir` 且顺序位于 `rename` 之后、
+  写 `META` 之前"；**禁止**写"掉电安全已证明"。该缺口登记为 M3 的头号证据强度薄弱点（§12.5）。
+
+### R5 —— 基线重钉
+
+`m2-wal` 已从 `8189607` 前移到 **`a3c85a8`**（force push；远端 tag 对象 `9bde3a6`）。⇒ M3 的实现基线
+= `a3c85a8`（含 A22/A25 + `GetRecoveryStats` + I32/I35）；设计文档本身冻结在 `961343e`，`#1` 前置条件
+文档为 `a83053e`。M3 后续一切"与 M2 基线对比"的证据都必须以 `a3c85a8` 为基准。
