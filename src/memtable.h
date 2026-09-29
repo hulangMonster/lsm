@@ -56,6 +56,15 @@ class MemTable {
 
   bool Freeze();                       // 幂等：true = 本次完成冻结
   bool IsFrozen() const { return frozen_.load(std::memory_order_acquire); }
+
+  // 容量预测（M2 评审阻断项 1 的修复）：**与 Add 内部的前置判据同源**。
+  // extra_bytes = 即将写入的额外占用估计（条目编码 + 跳表节点）；0 表示"再写一条会不会被拒"。
+  // 组提交的取批路径必须用它（而不是只看 IsFrozen()）——否则刚好触顶的那批会
+  // 「WAL 写成功、内存 Add 被拒」，被拒的写会在重启后复活、并让同配置重开返回 Corruption。
+  bool WouldReject(size_t extra_bytes) const {
+    return IsFrozen() || ApproximateMemoryUsage() + extra_bytes >= write_buffer_size_;
+  }
+  size_t write_buffer_size() const { return write_buffer_size_; }
   // 口径（design §8.3 修订）：Arena **累计交出的载荷字节** + sizeof(MemTable)。
   // 不用整块字节：块粒度在 write_buffer_size 与块大小同量级时，光头部节点就吃掉一个 4 KiB 块，
   // 会让小缓冲配置连一次写入都接受不了（与指令「Arena 已用字节 + 条目数」的口径一致）。

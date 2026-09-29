@@ -15,6 +15,9 @@ constexpr size_t kRecoverySlack = 1u * 1024 * 1024;      // D12：恢复容量�
 constexpr uint32_t kMaxBatchCount = 1u << 20;            // §9.4：防畸形 count 撑爆
 constexpr size_t kMaxGroupBytes = 1u * 1024 * 1024;      // D3：一批的字节上限（1 MiB）
 constexpr size_t kMaxGroupRecs = 64;                     // D3：一批的写者数上限
+// 每条 entry 在 MemTable 里的额外占用（跳表节点 ≈ sizeof(Node) + 分配 slop）。
+// 用于把"WAL 侧字节估算"折算成"MemTable 容量占用"，避免两处口径漂移（M2 评审阻断项 1）。
+constexpr size_t kMemTableNodeOverhead = 128;
 
 struct BatchEntry {
   ValueType type = kTypeValue;
@@ -332,11 +335,17 @@ Status PersistentDBImpl::RunFlusher() {
       need_sync = need_sync || p->need_sync;               // D3：sync 取组内 OR（优于 LevelDB 只看队首）
     }
     for (size_t i = 0; i < members.size(); ++i) queue_.pop_front();
+    size_t footprint = 0;
+    for (const Pending* p : members) footprint += p->entry_bytes + kMemTableNodeOverhead;
     if (closed_) {
       reject = Status::IOError("Put/Delete: DB is closed", dbname_);
     } else if (!bg_error_.ok()) {
       reject = bg_error_;
-    } else if (memtable_->IsFrozen()) {
+      // 阻断项 1 的修复：判据必须与 MemTable::Add 同源，且按**整批**预估占用做预留校验。
+      // 只查 IsFrozen() 会让"刚好触顶"的那批走接受路径（WAL 落盘 + 推进 sequence），
+      // 随后 Add 返回 kFrozen ⇒ 被拒的写进了 WAL，重启后复活、同配置重开还会报 Corruption。
+    } else if (memtable_->WouldReject(footprint)) {
+      memtable_->Freeze();   // 触顶即冻结（与 Add 的行为一致）
       reject = Status::Frozen("Put/Delete: memtable is full (M2 无 flush)", dbname_);
     } else {
       last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
@@ -362,7 +371,12 @@ Status PersistentDBImpl::RunFlusher() {
   if (s.ok()) {
     if (options_.commit_hook != nullptr) options_.commit_hook->OnAfterSyncBeforePublish();
     std::lock_guard<std::mutex> ql(commit_mu_);
-    durable_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+    // 阻断项 2 的修复：**只有真的 fsync 过**才推进 durable 水位（design §7.1 用它论证 I11：
+    // w.status.ok() ⟹ durable_seq_ >= w.end_seq）。原来无条件推进，会让只写不 fsync 的批
+    // 也把水位抬高，这条推理链就断了（M3 若拿它当 durable 水位会被误导）。
+    if (need_sync) {
+      durable_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+    }
   } else {
     std::lock_guard<std::mutex> ml(mutex_);
     bg_error_ = s;                                         // 粘性：偏移已不可信（D11）；I16 传播给整批
@@ -446,8 +460,10 @@ Status PersistentDBImpl::Close() {
     if (closed_) return Status::OK();                      // 幂等（A30）
     closed_ = true;
   }
-  // L11/A31：不得与在途 flusher 的 IO 交叠（否则可能在它写之前就把 fd 关掉）
-  commit_cv_.wait(ql, [this] { return !flusher_active_; });
+  // L11/A31 + 阻断项 6：必须等「没有在途 flusher」**且「队列已排空」**。
+  // 只看 !flusher_active_ 会漏掉"批边界之外被留在队列里的写者"——它随后仍会成为 flusher，
+  // 若调用方按惯例 Close() 后立刻 delete db，就会落在已析构对象上（UAF 窗口）。
+  commit_cv_.wait(ql, [this] { return !flusher_active_ && queue_.empty(); });
   if (log_ == nullptr) return Status::OK();                // 尚未打开 WAL（恢复中途失败）⇒ 没有要刷的东西
   Status s = bg_error_.ok() ? log_->Sync() : bg_error_;    // Close 隐含 Sync（I20/A30）
   const Status c = log_->Close();

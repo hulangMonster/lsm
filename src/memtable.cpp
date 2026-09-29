@@ -165,7 +165,8 @@ Status MemTable::Add(SequenceNumber seq, ValueType type, const Slice& key, const
 
   // 写前判（design §8.1）：先看是否已冻结或本次是否触顶；触顶则冻结并返回 kFrozen。
   // 因此最后一次成功写入可以让用量略微超过上限（与 LevelDB 同口径），而被拒这次绝不写入。
-  if (IsFrozen() || ApproximateMemoryUsage() >= write_buffer_size_) {
+  // 判据走 WouldReject(0) —— 组提交侧用同一个函数预测整批（避免两处漂移）。
+  if (WouldReject(0)) {
     Freeze();
     return Status::Frozen("MemTable: write buffer full, memtable is read-only",
                           std::to_string(write_buffer_size_));
