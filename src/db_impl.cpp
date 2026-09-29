@@ -2,6 +2,7 @@
 #include "db_impl.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -18,6 +19,8 @@ constexpr size_t kMaxGroupRecs = 64;                     // D3：一批的写者
 // 每条 entry 在 MemTable 里的额外占用（跳表节点 ≈ sizeof(Node) + 分配 slop）。
 // 用于把"WAL 侧字节估算"折算成"MemTable 容量占用"，避免两处口径漂移（M2 评审阻断项 1）。
 constexpr size_t kMemTableNodeOverhead = 128;
+// 截断量超过这个阈值就打 WARN（design §5.3/§5.4 承诺"截断与被跳过的 record 必须计数上报"）
+constexpr uint64_t kMaxTailCorruptWarnBytes = 2 * 1024 * 1024;   // 2 MiB
 
 struct BatchEntry {
   ValueType type = kTypeValue;
@@ -544,6 +547,8 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   std::vector<Plan> plans;
   uint64_t total_payload = 0;
   uint64_t total_entries = 0;
+  RecoveryStats stats;
+  stats.log_files = logs.size();
 
   for (uint64_t n : logs) {
     const std::string path = LogFileName(name, n);
@@ -600,8 +605,15 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   for (const Plan& p : plans) {
     if (!p.truncate) continue;
     const std::string path = LogFileName(name, p.number);
+    uint64_t before_size = 0;
+    if (env->GetFileSize(path, &before_size).ok() && before_size > p.truncate_at) {
+      stats.tail_truncated_bytes += before_size - p.truncate_at;
+    }
     s = env->Truncate(path, p.truncate_at);
     if (!s.ok()) return s;
+    if (stats.truncation_note.empty()) {
+      stats.truncation_note = path + " @ " + std::to_string(p.truncate_at);
+    }
     // 设计 §5.2 要求截断后 ReopenAndSync（评审阻断项 5 的代码级偏差）：
     // 不 fsync 的话掉电后 truncate 的元数据可能回滚，而进程已用 O_APPEND 在截断点之后
     // 追加了新 record ⇒ 老尾部字节"复活"并夹在新数据之前 ⇒ 恢复时正好撞上
@@ -635,7 +647,13 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
       if (!ParseBatch(Slice(rec), &seq, &entries, &why)) {
         return Status::Corruption("RecoverAndOpen: batch 解析失败", why);
       }
-      if (seq <= last) continue;                     // D7 幂等 + 拒绝 sequence 回退
+      if (seq <= last) {
+        // §5.4 承诺：跳过必须**计数上报**，不得静默（评审优化项）
+        ++stats.records_skipped;
+        continue;                                      // D7 幂等 + 拒绝 sequence 回退
+      }
+      ++stats.records_replayed;
+      stats.entries_replayed += entries.size();
       for (size_t i = 0; i < entries.size(); ++i) {
         const Status a = db->memtable_->Add(seq + static_cast<SequenceNumber>(i), entries[i].type,
                                             entries[i].key, entries[i].value);
@@ -647,6 +665,18 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
     }
   }
   db->last_sequence_ = last;
+  stats.last_sequence = last;
+  db->recovery_stats_ = stats;
+  if (stats.tail_truncated_bytes > kMaxTailCorruptWarnBytes) {
+    std::fprintf(stderr,
+                 "[WARN] recovery: truncated %llu bytes of tail corruption at %s\n",
+                 static_cast<unsigned long long>(stats.tail_truncated_bytes),
+                 stats.truncation_note.c_str());
+  }
+  if (stats.records_skipped > 0) {
+    std::fprintf(stderr, "[WARN] recovery: skipped %llu record(s) with non-increasing sequence\n",
+                 static_cast<unsigned long long>(stats.records_skipped));
+  }
 
   // ---- 打开 log 继续追加 ----
   const uint64_t log_number = logs.empty() ? 1 : hi;

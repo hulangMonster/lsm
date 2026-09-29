@@ -19,6 +19,18 @@
 
 namespace lsm {
 
+// M2 的恢复报告（design §8.2 明写"这个接口 M2 就要有"；A13 的判据含"可读"）。
+// 它同时承载 §5.3/§5.4 承诺的"截断量与被跳过的 record 必须**计数上报**，不得静默"。
+struct RecoveryStats {
+  uint64_t log_files = 0;               // 扫描到的 *.log 数
+  uint64_t records_replayed = 0;        // 实际重放的 batch 数
+  uint64_t entries_replayed = 0;        // 重放的条目数
+  uint64_t records_skipped = 0;         // 因 seq <= last 被跳过（幂等 / 拒绝 sequence 回退）
+  uint64_t tail_truncated_bytes = 0;    // 尾部截断掉的字节数（>0 表示发生过残骸截断）
+  SequenceNumber last_sequence = 0;     // 恢复后的 last_sequence_
+  std::string truncation_note;          // 截断原因（可定位）
+};
+
 // 用户视图迭代器（三态状态机，design §4.4）：内存模式与持久模式共用，避免两份实现漂移。
 // 返回值所有权归调用方。
 Iterator* NewMemTableUserIterator(const MemTable* mem, const InternalKeyComparator& icmp);
@@ -39,6 +51,8 @@ class PersistentDBImpl : public DB {
   SequenceNumber durable_seq() const { return durable_seq_; }
   // 诊断：当前等待结算的写者数（A20 的确定性屏障靠轮询它来等"整批就位"）
   size_t pending_writers();
+  // 恢复报告（只读；由 RecoverAndOpen 在恢复期间填好）
+  RecoveryStats GetRecoveryStats() const { return recovery_stats_; }
 
  private:
   friend Status DB::Open(const Options&, const std::string&, DB**);
@@ -83,6 +97,7 @@ class PersistentDBImpl : public DB {
   std::deque<Pending*> queue_;
   bool flusher_active_ = false;
   SequenceNumber last_sequence_ = 0;  // 受 mutex_ 保护
+  RecoveryStats recovery_stats_;      // 恢复期填好，之后只读
   SequenceNumber durable_seq_ = 0;    // 已 fsync 覆盖到的最大 sequence（受 commit_mu_ 保护）
   Status bg_error_;
   // 初始为 true：恢复中途失败时对象会被 unique_ptr 析构，此时 log_ 尚未打开 ——

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "db.h"
+#include "db_impl.h"   // RecoveryStats / GetRecoveryStats（恢复报告，A13 判据含"可读"）
 #include "filename.h"
 #include "util/coding.h"
 #include "util/env.h"
@@ -18,6 +19,17 @@ namespace lsm {
 namespace {
 
 using test::TempDir;
+
+std::string Key(int i) {
+  char b[32];
+  std::snprintf(b, sizeof(b), "k%06d", i);
+  return b;
+}
+std::string Val(int i) {
+  char b[32];
+  std::snprintf(b, sizeof(b), "v%06d", i);
+  return b;
+}
 
 WriteOptions Synced() {
   WriteOptions wo;
@@ -319,6 +331,68 @@ TEST(Recovery, SameKeyManyVersionsReplaysLatest) {
   EXPECT_EQ(1u, n) << "用户视图里同一 user key 只能出现一次";
   db->Close();
   delete db;
+}
+
+
+// A13 补充 + §5.3/§5.4 的"必须计数上报"：RecoveryStats 可读且语义正确
+TEST(Recovery, StatsAreReadableAndReportTruncationAndSkips) {
+  TempDir dir("lsm_rec_");
+  Env* env = Env::Default();
+  Options options;
+  {
+    DB* db = nullptr;
+    ASSERT_TRUE(DB::Open(options, dir.path(), &db).ok());
+    for (int i = 1; i <= 3; ++i) {
+      ASSERT_TRUE(db->Put(Synced(), Key(i), Val(i)).ok());
+    }
+    db->Close();
+    delete db;
+  }
+  // 1) 干净恢复：计数正确、无截断
+  {
+    DB* db = nullptr;
+    ASSERT_TRUE(DB::Open(options, dir.path(), &db).ok());
+    const RecoveryStats st = static_cast<PersistentDBImpl*>(db)->GetRecoveryStats();
+    EXPECT_EQ(1u, st.log_files);
+    EXPECT_EQ(3u, st.records_replayed);
+    EXPECT_EQ(3u, st.entries_replayed);
+    EXPECT_EQ(0u, st.records_skipped);
+    EXPECT_EQ(0u, st.tail_truncated_bytes);
+    EXPECT_EQ(3u, st.last_sequence);
+    db->Close();
+    delete db;
+  }
+  // 2) 撕裂尾：必须计数上报截断量并给出可定位说明
+  {
+    const std::string log = LogFileName(dir.path(), 1);
+    WritableFile* raw = nullptr;
+    ASSERT_TRUE(env->NewAppendableFile(log, &raw).ok());
+    std::unique_ptr<WritableFile> f(raw);
+    const char half[7] = {9, 9, 9, 9, 99, 0, static_cast<char>(kFullType)};
+    ASSERT_TRUE(f->Append(Slice(half, 7)).ok());
+    ASSERT_TRUE(f->Append(Slice("short")).ok());
+    ASSERT_TRUE(f->Close().ok());
+    DB* db = nullptr;
+    ASSERT_TRUE(DB::Open(options, dir.path(), &db).ok());
+    const RecoveryStats st = static_cast<PersistentDBImpl*>(db)->GetRecoveryStats();
+    EXPECT_GT(st.tail_truncated_bytes, 0u) << "截断量必须被计数（不得静默）";
+    EXPECT_FALSE(st.truncation_note.empty()) << "必须给出可定位的截断说明";
+    EXPECT_EQ(3u, st.records_replayed);
+    db->Close();
+    delete db;
+  }
+  // 3) sequence 回退被跳过：必须计数上报（D7 的可观察后果）
+  {
+    WriteRawRecord(env, LogFileName(dir.path(), 2), EncodeBatch(1, kTypeValue, "stale", "x"), false);
+    DB* db = nullptr;
+    ASSERT_TRUE(DB::Open(options, dir.path(), &db).ok());
+    const RecoveryStats st = static_cast<PersistentDBImpl*>(db)->GetRecoveryStats();
+    EXPECT_GE(st.records_skipped, 1u) << "seq 回退的 record 必须被跳过并计数（不得静默）";
+    std::string v;
+    EXPECT_TRUE(db->Get("stale", &v).IsNotFound()) << "被跳过的 record 不得生效";
+    db->Close();
+    delete db;
+  }
 }
 
 }  // namespace lsm
