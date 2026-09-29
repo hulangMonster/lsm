@@ -983,7 +983,12 @@ TEST(InternalKey, ParseMalformed) {
     const int bad_types[] = {2, 3, 0x10, 0x7F, 0x80, 0xFE, 0xFF};
     for (int t : bad_types) {
       std::string raw = ManualInternalKey("userkey", 42, kTypeValue);
-      raw[raw.size() - 1] = static_cast<char>(t);  // trailer 最低物理字节 = type
+      // trailer 是 8 字节**小端**：最低物理字节 = raw[size-8] 才是 type 字段（protocol §6）。
+      // [#3 阶段修订] 原文写的是 raw[size-1]（最高字节，属 sequence）：
+      //   该下标把 b7 改成 {2,3,0x10,0x7F,0x80,0xFE,0xFF}，而 seq=kMaxSequenceNumber(2^56-1)
+      //   的 b7 恰好也是 0xFF 且被 InternalKey.BuildParseRoundTrip 要求必须解析成功 ——
+      //   同一解析器无法既接受又拒绝 b7=0xFF，两条断言互斥。此处按本行注释的原意改成 type 字节。
+      raw[raw.size() - 8] = static_cast<char>(t);
       Slice user_key("keep");
       SequenceNumber seq = 12345;
       ValueType type = kTypeValue;
