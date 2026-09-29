@@ -236,17 +236,45 @@ class InternalKeyComparator : public Comparator {
 };
 
 // ---------------------------------------------------------------------------
-// Options：M1 只有这两个字段（design §4.3：禁止出现「看起来能用但没实现」的字段）
+// M3：flush 路径的注入点（docs/m3-design.md §8.7 E8）。
+// 与 CommitHook 同纪律：生产恒为 nullptr，测试用它把「落盘三步」的时序确定化，
+// 不靠 sleep 赌调度。三个点逐字对应 M3-B02 的三个进程级 kill -9 注入点。
+// ---------------------------------------------------------------------------
+class FlushHook {
+ public:
+  virtual ~FlushHook() = default;
+  // TableBuilder 已把 footer 写进 .sst.tmp（内容完整、尚未 fsync）。
+  virtual void OnSSTableWritten() {}
+  // rename(.sst.tmp -> .sst) 之前。
+  virtual void OnBeforeRename() {}
+  // SyncDir 已完成、版本注册（内存替换）尚未发生之前。
+  virtual void OnBeforeRegister() {}
+};
+
+// ---------------------------------------------------------------------------
+// Options（M1 定义 + M2/M3 只增不改；docs/m3-design.md §8.5/§8.7、M3.2 交付表）
+//   * block_size / verify_checksums 是 SSTable 读写的格式层参数（M3.1 曾以 TableOptions
+//     承载；M3.2 按设计统一回 Options，TableOptions 保留为别名以免动 M3.1 既有用例）。
+//   * max_open_files 是 TableCache 的容量（§D8 的默认值 64）。
+//   * flush_hook 见 FlushHook。
+//   * 仍然禁止出现「看起来能用但没实现」的字段。
 // ---------------------------------------------------------------------------
 struct Options {
   const Comparator* comparator = BytewiseComparator();
-  size_t write_buffer_size = 4 * 1024 * 1024;   // 4 MiB
+  size_t write_buffer_size = 4 * 1024 * 1024;   // 4 MiB（目标值，见 design §1.3.2/E5）
   // M2 增补（登记于 docs/m2-prerequisites.md §9 第 7 条）：注入 Env。nullptr = Env::Default()。
   // 为什么需要：A27~A31 的掉电语义必须用 MemEnv（内存文件系统 + fsync 水位 + 固定种子撕裂）
   // 才能确定性验证，而 M2 的恢复路径原来硬编码 Env::Default()，测试无法注入。
   Env* env = nullptr;
   // M2.3：组提交观察点（nullptr = 无观察者）。见 CommitHook 的注释。
   CommitHook* commit_hook = nullptr;
+  // M3 增补（docs/m3-design.md §8.5）：block_size 的目标值/合法区间 [512, 1 MiB]。
+  size_t block_size = 4096;
+  bool verify_checksums = true;
+  // M3 增补（§D8）：TableCache 打开文件句柄的上界；0/过大的非法值在 DB::Open 拒绝。
+  size_t max_open_files = 64;
+  // M3 增补（§8.7 E8）：flush 路径观察点。
+  FlushHook* flush_hook = nullptr;
 };
 
 // ---------------------------------------------------------------------------

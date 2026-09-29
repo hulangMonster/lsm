@@ -62,6 +62,11 @@ add_library(lsm STATIC
   # M2.2：文件命名 + 持久化实现与恢复（docs/m2-design.md §5/§6/§7）
   src/filename.cpp
   src/db_impl.cpp
+  # M3.2：版本/缓存 + 归并 + 用户视图迭代器（docs/m3-design.md §11.2 的「新增」列）
+  src/version_edit.cpp
+  src/version_set.cpp
+  src/merging_iterator.cpp
+  src/db_iter.cpp
 )
 target_include_directories(lsm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(lsm PUBLIC Threads::Threads)
@@ -108,6 +113,9 @@ add_executable(lsm_tests
   tests/memenv.cpp
   # M2.2e：掉电语义（MemEnv 崩溃注入）
   tests/crash_test.cpp
+  # M3.2：flush / 读路径（A20~A30）与迭代器（A31~A34）
+  tests/flush_test.cpp
+  tests/iterator_test.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}

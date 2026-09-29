@@ -21,24 +21,22 @@ namespace lsm {
 
 namespace {
 
-// 按 (offset, n) 读文件。Env 没有 RandomAccessFile（见 table.h 顶部的偏离说明），
-// 所以每次读块打开一个 SequentialFile 并 Skip 到目标偏移；读满 n 字节或返回 kCorruption。
+// 按 (offset, n) 读文件。M3.2 / R6-e：改用 Env::NewRandomAccessFile +
+// RandomAccessFile::Read（pread 语义），不再「打开顺序文件再 Skip」。
+// 说明：本函数每次调用打开一个只读句柄；Table 本身不持有句柄，这保证 M3-A19 的
+// 「范围内 key 必须真的打开随机读文件、范围外一次都不打开」计数断言仍然可观测。
 Status ReadExactFile(Env* env, const std::string& filename, uint64_t offset, size_t n,
                      std::string* out) {
   out->clear();
-  SequentialFile* raw = nullptr;
-  Status s = env->NewSequentialFile(filename, &raw);
+  RandomAccessFile* raw = nullptr;
+  Status s = env->NewRandomAccessFile(filename, &raw);
   if (!s.ok()) return s;
-  std::unique_ptr<SequentialFile> file(raw);
-  if (offset > 0) {
-    s = file->Skip(offset);
-    if (!s.ok()) return s;
-  }
+  std::unique_ptr<RandomAccessFile> file(raw);
   out->resize(n);
   size_t got = 0;
   while (got < n) {
     Slice piece;
-    s = file->Read(n - got, &piece, &(*out)[got]);
+    s = file->Read(offset + got, n - got, &piece, &(*out)[got]);
     if (!s.ok()) return s;
     if (piece.size() == 0) break;   // EOF
     got += piece.size();
@@ -55,7 +53,8 @@ Status ReadExactFile(Env* env, const std::string& filename, uint64_t offset, siz
 Table::~Table() = default;
 
 Status Table::Open(const TableOptions& options, Env* env, const std::string& filename,
-                   std::shared_ptr<Table>* out) {
+                   std::shared_ptr<Table>* out, const std::string* known_smallest,
+                   const std::string* known_largest) {
   if (env == nullptr || out == nullptr) {
     return Status::InvalidArgument("Table::Open", "null env or null out");
   }
@@ -112,24 +111,30 @@ Status Table::Open(const TableOptions& options, Env* env, const std::string& fil
   s = t->ParseIndexBlock(Slice(index_payload));
   if (!s.ok()) return s;
 
-  // ④ 第一个数据块：取最小 internal key，供 §5.4 ① 的零 IO key range 过滤。
-  if (!t->index_entries_.empty()) {
-    std::string first_payload;
-    s = t->ReadBlock(t->index_entries_.front().handle, kBlockTypeData, &first_payload, nullptr);
-    if (!s.ok()) return s;
-    std::unique_ptr<BlockReader> reader;
-    s = BlockReader::Open(Slice(first_payload), &reader);
-    if (!s.ok()) return s;
-    s = reader->SeekToFirst();
-    if (!s.ok()) return s;
-    if (!reader->Valid()) {
-      return Status::Corruption("Table::Open", "first data block has no entries");
+  // ④ key range：M3.2 的 Version 已从 TableBuilder 带了 smallest/largest，调用方给出时
+  //    直接采用（不预读首块）；否则退到 M3.1 的「预读第一个数据块取 smallest_」。
+  if (known_smallest != nullptr && known_largest != nullptr) {
+    t->smallest_ = *known_smallest;
+    t->largest_ = *known_largest;
+  } else {
+    if (!t->index_entries_.empty()) {
+      std::string first_payload;
+      s = t->ReadBlock(t->index_entries_.front().handle, kBlockTypeData, &first_payload, nullptr);
+      if (!s.ok()) return s;
+      std::unique_ptr<BlockReader> reader;
+      s = BlockReader::Open(Slice(first_payload), &reader, &t->icmp_);
+      if (!s.ok()) return s;
+      s = reader->SeekToFirst();
+      if (!s.ok()) return s;
+      if (!reader->Valid()) {
+        return Status::Corruption("Table::Open", "first data block has no entries");
+      }
+      t->smallest_ = reader->key().ToString();
     }
-    t->smallest_ = reader->key().ToString();
-  }
 
-  // ⑤ 最大 internal key = 最后一个索引项的 key（索引项 key 是该块最后一条 key，§3.3）。
-  t->largest_ = t->index_entries_.empty() ? std::string() : t->index_entries_.back().key;
+    // ⑤ 最大 internal key = 最后一个索引项的 key（索引项 key 是该块最后一条 key，§3.3）。
+    t->largest_ = t->index_entries_.empty() ? std::string() : t->index_entries_.back().key;
+  }
 
   *out = t;
   return Status::OK();
@@ -137,7 +142,7 @@ Status Table::Open(const TableOptions& options, Env* env, const std::string& fil
 
 Status Table::ParseMetaIndexBlock(const Slice& payload) {
   std::unique_ptr<BlockReader> reader;
-  Status s = BlockReader::Open(payload, &reader);
+  Status s = BlockReader::Open(payload, &reader, &icmp_);
   if (!s.ok()) return s;
   for (s = reader->SeekToFirst(); reader->Valid(); s = reader->Next()) {
     if (!s.ok()) return s;
@@ -158,7 +163,7 @@ Status Table::ParseMetaIndexBlock(const Slice& payload) {
 
 Status Table::ParseIndexBlock(const Slice& payload) {
   std::unique_ptr<BlockReader> reader;
-  Status s = BlockReader::Open(payload, &reader);
+  Status s = BlockReader::Open(payload, &reader, &icmp_);
   if (!s.ok()) return s;
   index_entries_.clear();
   for (s = reader->SeekToFirst(); reader->Valid(); s = reader->Next()) {
@@ -243,30 +248,43 @@ Status Table::ReadBlock(const BlockHandle& handle, BlockType expected, std::stri
 }
 
 Status Table::Get(const Slice& lookup_key, std::string* value, ReadStats* stats) const {
-  if (value == nullptr) return Status::InvalidArgument("Table::Get", "null value");
+  TableGetResult r = TableGetResult::kNotFound;
+  const Status s = GetEntry(lookup_key, value, &r, stats);
+  if (!s.ok()) return s;
+  if (r == TableGetResult::kFound) return Status::OK();
+  if (r == TableGetResult::kDeleted) return Status::NotFound("Table::Get", "tombstone");
+  return Status::NotFound("Table::Get", "not found");
+}
+
+Status Table::GetEntry(const Slice& lookup_key, std::string* value, TableGetResult* result,
+                       ReadStats* stats) const {
+  if (value == nullptr || result == nullptr) {
+    return Status::InvalidArgument("Table::GetEntry", "null value or result");
+  }
+  *result = TableGetResult::kNotFound;
   Slice lookup_user;
   SequenceNumber lookup_seq = 0;
   ValueType lookup_type = kTypeValue;
   if (!ParseInternalKey(lookup_key, &lookup_user, &lookup_seq, &lookup_type)) {
-    return Status::InvalidArgument("Table::Get", "malformed lookup key");
+    return Status::InvalidArgument("Table::GetEntry", "malformed lookup key");
   }
 
   // ① key range 过滤：**零 IO**（key range 来自 Open 时载入的 first/last internal key）。
   if (index_entries_.empty()) {
     if (stats != nullptr) ++stats->key_range_skipped;
-    return Status::NotFound("Table::Get", "empty table");
+    return Status::OK();
   }
   Slice min_user, max_user;
   SequenceNumber tmp_seq = 0;
   ValueType tmp_type = kTypeValue;
   if (!ParseInternalKey(Slice(smallest_), &min_user, &tmp_seq, &tmp_type) ||
       !ParseInternalKey(Slice(largest_), &max_user, &tmp_seq, &tmp_type)) {
-    return Status::Corruption("Table::Get", "cached key range is not a valid internal key");
+    return Status::Corruption("Table::GetEntry", "cached key range is not a valid internal key");
   }
   const Comparator* user_cmp = icmp_.user_comparator();
   if (user_cmp->Compare(lookup_user, min_user) < 0 || user_cmp->Compare(lookup_user, max_user) > 0) {
     if (stats != nullptr) ++stats->key_range_skipped;
-    return Status::NotFound("Table::Get", "key outside this file's range");
+    return Status::OK();
   }
 
   // ② 内存索引上找第一个 key >= lookup_key 的索引项（§3.3 的 >= 语义）。
@@ -275,7 +293,7 @@ Status Table::Get(const Slice& lookup_key, std::string* value, ReadStats* stats)
       [this](const IndexEntry& e, const Slice& target) {
         return icmp_.Compare(Slice(e.key), target) < 0;
       });
-  if (it == index_entries_.end()) return Status::NotFound("Table::Get", "past last index entry");
+  if (it == index_entries_.end()) return Status::OK();
 
   // ③ 一次数据块读（statistics 的唯一数据块来源）。
   std::string payload;
@@ -284,23 +302,25 @@ Status Table::Get(const Slice& lookup_key, std::string* value, ReadStats* stats)
 
   // ④ 块内 Seek + ⑤ user key 相等校验（走 user_comparator，不得退化成逐字节比较）。
   std::unique_ptr<BlockReader> reader;
-  s = BlockReader::Open(Slice(payload), &reader);
+  s = BlockReader::Open(Slice(payload), &reader, &icmp_);
   if (!s.ok()) return s;
   s = reader->Seek(lookup_key);
   if (!s.ok()) return s;
-  if (!reader->Valid()) return Status::NotFound("Table::Get", "not found in data block");
+  if (!reader->Valid()) return Status::OK();
 
   Slice found_user;
   SequenceNumber found_seq = 0;
   ValueType found_type = kTypeValue;
   if (!ParseInternalKey(reader->key(), &found_user, &found_seq, &found_type)) {
-    return Status::Corruption("Table::Get", "data block key is not a valid internal key");
+    return Status::Corruption("Table::GetEntry", "data block key is not a valid internal key");
   }
-  if (user_cmp->Compare(found_user, lookup_user) != 0) {
-    return Status::NotFound("Table::Get", "user key mismatch");
+  if (user_cmp->Compare(found_user, lookup_user) != 0) return Status::OK();
+  if (found_type == kTypeDeletion) {
+    *result = TableGetResult::kDeleted;
+    return Status::OK();
   }
-  if (found_type == kTypeDeletion) return Status::NotFound("Table::Get", "tombstone");
   *value = reader->value().ToString();
+  *result = TableGetResult::kFound;
   return Status::OK();
 }
 
@@ -423,7 +443,7 @@ class Table::TableIterator : public Iterator {
       status_ = s;
       return false;
     }
-    s = BlockReader::Open(Slice(payload_), &reader_);
+    s = BlockReader::Open(Slice(payload_), &reader_, &table_->icmp_);
     if (!s.ok()) {
       status_ = s;
       return false;

@@ -746,8 +746,8 @@ TEST(Table, KeyRangeFilterDoesZeroIo) {
   EXPECT_EQ(Status::kNotFound, g.code()) << g.ToString();
   EXPECT_EQ(0u, stats.blocks_read);
   EXPECT_EQ(1u, stats.key_range_skipped);
-  EXPECT_EQ(0u, counting.sequential_files_opened()) << "范围外 key 不得打开任何文件";
-  EXPECT_EQ(0u, counting.read_calls()) << "范围外 key 不得发生任何 Read";
+  EXPECT_EQ(0u, counting.random_access_files_opened()) << "范围外 key 不得打开任何随机读文件";
+  EXPECT_EQ(0u, counting.random_read_calls()) << "范围外 key 不得发生任何随机 Read";
 
   // 对照：范围内的 key 必须真的读块（否则"零 IO"可能只是因为根本没实现过滤）。
   counting.ResetCounters();
@@ -756,7 +756,9 @@ TEST(Table, KeyRangeFilterDoesZeroIo) {
   ASSERT_TRUE(g2.ok()) << g2.ToString();
   EXPECT_EQ(Val(5), v);
   EXPECT_GE(stats2.blocks_read, 1u);
-  EXPECT_GE(counting.sequential_files_opened(), 1u);
+  // R6-e：seam 的对象由顺序文件改为随机读文件，强度不变（必须真的打开并读一次块）。
+  EXPECT_GE(counting.random_access_files_opened(), 1u);
+  EXPECT_GE(counting.random_read_calls(), 1u);
 }
 
 }  // namespace lsm

@@ -64,7 +64,10 @@ class BlockBuilder {
 class BlockReader {
  public:
   // 解析 payload（**不含** header 与 crc）。任何结构违规 ⇒ kCorruption（不得越界读）。
-  static Status Open(const Slice& payload, std::unique_ptr<BlockReader>* out);
+  // icmp：非空时块内 Seek 一律走 InternalKeyComparator（design §5.3 的二分规则）；
+  // 为空时退化为整条 key 的字节序（仅用于 M3.1 的纯格式层用例与不含 internal key 的块）。
+  static Status Open(const Slice& payload, std::unique_ptr<BlockReader>* out,
+                     const InternalKeyComparator* icmp = nullptr);
 
   Status SeekToFirst();
   Status SeekToLast();
@@ -95,7 +98,10 @@ class BlockReader {
   static const size_t kNoEntry = static_cast<size_t>(-1);
   size_t PrevOffset(size_t cur) const;
 
+  int CompareKey(const std::string& a, const std::string& b) const;
+
   Slice payload_;
+  const InternalKeyComparator* icmp_ = nullptr;
   std::vector<uint32_t> restarts_;
   size_t entry_area_end_;    // entry 区的结束偏移（restart 数组起点）
   size_t entry_offset_;      // 当前 entry 的起始偏移

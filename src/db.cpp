@@ -92,6 +92,16 @@ Status DB::Open(const Options& options, const std::string& name, DB** dbptr) {
   if (options.write_buffer_size == 0) {
     return Status::InvalidArgument("DB::Open: write_buffer_size must be greater than 0");
   }
+  // M3 §8.5：block_size / max_open_files 的合法性在 Open 第一步一次性校验（输入校验不得触发
+  // fail-stop；非法值返回 kInvalidArgument 且不写任何状态）。
+  if (options.block_size < 512 || options.block_size > 1024 * 1024) {
+    return Status::InvalidArgument("DB::Open: block_size must be within [512, 1 MiB]",
+                                   std::to_string(options.block_size));
+  }
+  if (options.max_open_files == 0 || options.max_open_files > 1000000) {
+    return Status::InvalidArgument("DB::Open: max_open_files out of range",
+                                   std::to_string(options.max_open_files));
+  }
   if (name.empty()) {
     *dbptr = new MemoryDBImpl(options, InternalKeyComparator(options.comparator));
     return Status::OK();

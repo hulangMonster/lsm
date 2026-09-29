@@ -453,41 +453,36 @@ TEST(GroupCommit, NWritersOneFsyncDeterministic) {
 
 // ==== 评审回归（阻断项 1/2/6）====
 
-// 阻断项 1：被 kFrozen 拒绝的写**不得**进 WAL；同配置重开必须成功（评审给的判据）
-TEST(DB, PutAfterFreezeIsNotPersisted) {
+// M3 契约变更（docs/m3-design.md §15 R2）：容量不足不再返回 kFrozen，而是「冻结 + 后台 flush
+// + 写者停等」。本用例按新契约收窄为：自动落盘必须真的发生、写全部 kOk、数据可读。
+// 为什么不能保留重开断言：M3.2 的显式过渡妥协②——Open 时目录里存在 *.sst 一律 kCorruption
+// （SSTable 恢复属 M3.3），因此本阶段不重开已 flush 的库。
+TEST(DB, PutBlocksUntilFlush) {
   MemEnv env;
   Options options;
-  options.env = &env;   // 用默认 write_buffer_size（4 MiB）——小容量会被 kRecoverySlack 掩盖后果
+  options.env = &env;
+  options.write_buffer_size = 64 * 1024;   // 强制在 2000 条内触发多次 flush
   DB* db = nullptr;
   ASSERT_TRUE(DB::Open(options, kDBName, &db).ok());
-  int accepted = 0;
-  Status last;
-  const int kMaxAttempts = 200000;
-  for (int i = 1; i <= kMaxAttempts; ++i) {
-    last = db->Put(WriteOptions(), Key(i), Val(i));
-    if (!last.ok()) {
-      EXPECT_TRUE(last.IsFrozen()) << last.ToString();
-      break;
-    }
-    ++accepted;
+  const int kCount = 2000;
+  for (int i = 1; i <= kCount; ++i) {
+    const Status s = db->Put(WriteOptions(), Key(i), Val(i));
+    ASSERT_TRUE(s.ok()) << "M3 起容量不足必须靠 flush 消化，不得返回 kFrozen：" << s.ToString();
   }
-  ASSERT_GT(accepted, 0);
-  ASSERT_TRUE(last.IsFrozen()) << "必须真的撞到容量上限（否则本用例没意义）";
-  const std::string rejected_key = Key(accepted + 1);
+  PersistentDBImpl* impl = static_cast<PersistentDBImpl*>(db);
+  for (int spin = 0; spin < 200000; ++spin) {
+    if (impl->GetFlushStats().flushes_completed >= 1 && impl->immutables_size() == 0) break;
+    std::this_thread::yield();
+  }
+  const FlushStats stats = impl->GetFlushStats();
+  EXPECT_GE(stats.flushes_completed, 1u) << "小 write_buffer_size 下必须真的发生 flush";
+  std::string v;
+  ASSERT_TRUE(db->Get(Key(1), &v).ok()) << "落盘后的 key 必须仍可读";
+  EXPECT_EQ(Val(1), v);
+  ASSERT_TRUE(db->Get(Key(kCount), &v).ok());
+  EXPECT_EQ(Val(kCount), v);
   EXPECT_TRUE(db->Close().ok());
   delete db;
-
-  // 同配置重开：必须成功（修复前是 Corruption: 重放 Add 失败: Frozen）
-  DB* db2 = nullptr;
-  const Status reopened = DB::Open(options, kDBName, &db2);
-  ASSERT_TRUE(reopened.ok()) << "同配置重开必须成功：" << reopened.ToString();
-  std::string v;
-  EXPECT_TRUE(db2->Get(rejected_key, &v).IsNotFound())
-      << "被 kFrozen 拒绝的写绝不能进 WAL（否则重启后复活）";
-  ASSERT_TRUE(db2->Get(Key(accepted), &v).ok()) << "最后一条被接受的写必须还在";
-  EXPECT_EQ(Val(accepted), v);
-  db2->Close();
-  delete db2;
 }
 
 // 阻断项 2：没有 fsync 时 durable 水位不得前进（design §7.1 的结构证据）

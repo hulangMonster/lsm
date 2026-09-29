@@ -188,13 +188,15 @@ Status ValidatePayload(const Slice& payload) {
 
 // ============================ BlockReader ============================
 
-Status BlockReader::Open(const Slice& payload, std::unique_ptr<BlockReader>* out) {
+Status BlockReader::Open(const Slice& payload, std::unique_ptr<BlockReader>* out,
+                         const InternalKeyComparator* icmp) {
   if (out == nullptr) return Status::InvalidArgument("BlockReader::Open", "null out");
   const Status v = ValidatePayload(payload);
   if (!v.ok()) return v;
 
   std::unique_ptr<BlockReader> r(new BlockReader());
   r->payload_ = payload;
+  r->icmp_ = icmp;
   const uint32_t count = DecodeFixed32(payload.data() + payload.size() - 4);
   r->entry_area_end_ = payload.size() - 4 * (static_cast<size_t>(count) + 1);
   r->restarts_.reserve(count);
@@ -328,6 +330,11 @@ Status BlockReader::SeekToLast() {
   return SetTo(off);
 }
 
+int BlockReader::CompareKey(const std::string& a, const std::string& b) const {
+  if (icmp_ != nullptr) return icmp_->Compare(Slice(a), Slice(b));
+  return a.compare(b);
+}
+
 Status BlockReader::Seek(const Slice& target) {
   valid_ = false;
   status_ = Status::OK();
@@ -346,7 +353,7 @@ Status BlockReader::Seek(const Slice& target) {
       status_ = s;
       return s;
     }
-    if (k < t) {
+    if (CompareKey(k, t) < 0) {
       left = mid + 1;
     } else {
       right = mid;
@@ -365,7 +372,7 @@ Status BlockReader::Seek(const Slice& target) {
       status_ = s;
       return s;
     }
-    if (k >= t) {
+    if (CompareKey(k, t) >= 0) {
       key_ = k;
       value_ = v;
       entry_offset_ = off;

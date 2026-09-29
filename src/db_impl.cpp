@@ -4,9 +4,13 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 #include <vector>
 
+#include "db_iter.h"
 #include "filename.h"
+#include "merging_iterator.h"
+#include "sstable/table_builder.h"
 #include "util/coding.h"
 
 namespace lsm {
@@ -27,6 +31,8 @@ constexpr size_t kRecoverySlack = 1u * 1024 * 1024;      // D12：恢复容量�
 constexpr uint32_t kMaxBatchCount = 1u << 20;            // §9.4：防畸形 count 撑爆
 constexpr size_t kMaxGroupBytes = 1u * 1024 * 1024;      // D3：一批的字节上限（1 MiB）
 constexpr size_t kMaxGroupRecs = 64;                     // D3：一批的写者数上限
+// M3 §6.5：未落盘 immutable 的上限。达到该值后写者在取批前停等后台 flush（不是 kFrozen）。
+constexpr size_t kMaxImmutableMemTables = 2;
 // 每条 entry 在 MemTable 里的额外占用（跳表节点 ≈ sizeof(Node) + 分配 slop）。
 // 用于把"WAL 侧字节估算"折算成"MemTable 容量占用"，避免两处口径漂移（M2 评审阻断项 1）。
 constexpr size_t kMemTableNodeOverhead = 128;
@@ -101,139 +107,13 @@ bool ParseBatch(const Slice& payload, SequenceNumber* seq, std::vector<BatchEntr
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// 用户视图迭代器（三态状态机，design §4.4）：与 M1 §9 的行为逐条一致
+// 用户视图迭代器：M3 起由 DBIter + 单 child MergingIterator 提供（§7.3），
+// 避免 M1 的 UserIterator 与 M3 的 DBIter 两份可见性实现漂移。
 // ---------------------------------------------------------------------------
-namespace {
-
-class UserIterator : public Iterator {
- public:
-  UserIterator(const MemTable* mem, const InternalKeyComparator& icmp)
-      : internal_(mem->NewIterator()), user_comparator_(icmp.user_comparator()), state_(kBeforeFirst) {}
-  ~UserIterator() override { delete internal_; }
-  UserIterator(const UserIterator&) = delete;
-  UserIterator& operator=(const UserIterator&) = delete;
-
-  bool Valid() const override { return state_ == kValid; }
-
-  void SeekToFirst() override {
-    internal_->SeekToFirst();
-    ScanForwardToVisible();
-  }
-  void SeekToLast() override {
-    internal_->SeekToLast();
-    if (!internal_->Valid()) {
-      state_ = kBeforeFirst;
-      return;
-    }
-    RewindToRunStart();
-    ScanBackwardToVisible();
-  }
-  void Seek(const Slice& target) override {
-    internal_->Seek(BuildLookupKey(target, kMaxSequenceNumber));
-    ScanForwardToVisible();
-  }
-  void Next() override {
-    if (state_ != kValid) return;
-    SkipCurrentRunForwardWithKey(Slice(current_user_key_));
-    ScanForwardToVisible();
-  }
-  void Prev() override {
-    if (state_ == kBeforeFirst) return;
-    if (state_ == kPastEnd) {
-      SeekToLast();
-      return;
-    }
-    RewindToRunStart();
-    internal_->Prev();
-    if (!internal_->Valid()) {
-      state_ = kBeforeFirst;
-      return;
-    }
-    RewindToRunStart();
-    ScanBackwardToVisible();
-  }
-
-  Slice key() const override { return Slice(current_user_key_); }
-  Slice value() const override { return internal_->value(); }
-  Status status() const override { return Status::OK(); }
-
- private:
-  enum State { kBeforeFirst, kValid, kPastEnd };
-
-  static bool ParseEntry(const Slice& internal_key, Slice* user_key, ValueType* type) {
-    SequenceNumber seq = 0;
-    return ParseInternalKey(internal_key, user_key, &seq, type);
-  }
-  bool SameUserKey(const Slice& a, const Slice& b) const {
-    return user_comparator_->Compare(a, b) == 0;
-  }
-  void RewindToRunStart() {
-    Slice user_key;
-    ValueType type = kTypeValue;
-    if (!ParseEntry(internal_->key(), &user_key, &type)) return;
-    internal_->Seek(BuildLookupKey(user_key, kMaxSequenceNumber));
-  }
-  void SkipCurrentRunForwardWithKey(const Slice& user_key) {
-    while (internal_->Valid()) {
-      Slice uk;
-      ValueType type = kTypeValue;
-      if (!ParseEntry(internal_->key(), &uk, &type)) break;
-      if (!SameUserKey(uk, user_key)) break;
-      internal_->Next();
-    }
-  }
-  void ScanForwardToVisible() {
-    while (internal_->Valid()) {
-      Slice user_key;
-      ValueType type = kTypeValue;
-      if (!ParseEntry(internal_->key(), &user_key, &type)) {
-        internal_->Next();
-        continue;
-      }
-      if (type == kTypeValue) {
-        SetValid(user_key);
-        return;
-      }
-      SkipCurrentRunForwardWithKey(user_key);
-    }
-    state_ = kPastEnd;
-  }
-  void ScanBackwardToVisible() {
-    while (internal_->Valid()) {
-      Slice user_key;
-      ValueType type = kTypeValue;
-      if (!ParseEntry(internal_->key(), &user_key, &type)) {
-        state_ = kPastEnd;
-        return;
-      }
-      if (type == kTypeValue) {
-        SetValid(user_key);
-        return;
-      }
-      internal_->Prev();
-      if (!internal_->Valid()) {
-        state_ = kBeforeFirst;
-        return;
-      }
-      RewindToRunStart();
-    }
-    state_ = kBeforeFirst;
-  }
-  void SetValid(const Slice& user_key) {
-    current_user_key_.assign(user_key.data(), user_key.size());
-    state_ = kValid;
-  }
-
-  Iterator* internal_;
-  const Comparator* user_comparator_;
-  State state_;
-  std::string current_user_key_;
-};
-
-}  // namespace
-
 Iterator* NewMemTableUserIterator(const MemTable* mem, const InternalKeyComparator& icmp) {
-  return new UserIterator(mem, icmp);
+  Iterator** kids = new Iterator*[1];
+  kids[0] = mem->NewIterator();
+  return new DBIter(&icmp, new MergingIterator(&icmp, kids, 1), kMaxSequenceNumber);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +125,9 @@ PersistentDBImpl::PersistentDBImpl(const Options& options, const InternalKeyComp
     : options_(options),
       internal_comparator_(icmp),
       dbname_(std::move(dbname)),
-      memtable_(new MemTable(internal_comparator_, memtable_capacity)) {}
+      memtable_(std::make_shared<MemTable>(internal_comparator_, memtable_capacity)) {
+  table_cache_.reset(new TableCache(EnvOf(), dbname_, options_, options_.max_open_files));
+}
 
 PersistentDBImpl::~PersistentDBImpl() {
   if (!closed_) Close();
@@ -351,6 +233,17 @@ std::string PersistentDBImpl::EncodeGroup(SequenceNumber begin,
   return out;
 }
 
+void PersistentDBImpl::WaitForImmutableCapacity() {
+  std::unique_lock<std::mutex> l(mutex_);
+  // 谓词必须覆盖三个退出条件（docs/m3-design.md §6.5）：容量让出、bg_error_、closed_。
+  while (immutables_.size() >= kMaxImmutableMemTables && bg_error_.ok() && !closed_) {
+    ++flush_stats_.stall_events;
+    const uint64_t t0 = EnvOf()->NowMicros();
+    bg_cv_.wait(l);
+    flush_stats_.stall_micros += EnvOf()->NowMicros() - t0;
+  }
+}
+
 Status PersistentDBImpl::RunFlusher() {
   std::string payload;
   std::vector<Pending*> members;
@@ -360,6 +253,10 @@ Status PersistentDBImpl::RunFlusher() {
 
   // 取批**之前**的观察点：此处不持锁，其他写者仍可入队（A20 的确定性屏障）
   if (options_.commit_hook != nullptr) options_.commit_hook->OnBeforeGroupAssemble();
+
+  // M3 §6.5 的写者停等：在取批前做，且**不持 commit_mu_** —— 这样 Close() 仍能拿到
+  // commit_mu_ 置 closed_ 并 notify bg_cv_，不会与停等形成死锁（A25 的 ③/④）。
+  WaitForImmutableCapacity();
 
   {
     std::lock_guard<std::mutex> ql(commit_mu_);
@@ -386,13 +283,27 @@ Status PersistentDBImpl::RunFlusher() {
       reject = Status::IOError("Put/Delete: DB is closed", dbname_);
     } else if (!bg_error_.ok()) {
       reject = bg_error_;
-      // 阻断项 1 的修复：判据必须与 MemTable::Add 同源，且按**整批**预估占用做预留校验。
-      // 只查 IsFrozen() 会让"刚好触顶"的那批走接受路径（WAL 落盘 + 推进 sequence），
-      // 随后 Add 返回 kFrozen ⇒ 被拒的写进了 WAL，重启后复活、同配置重开还会报 Corruption。
-    } else if (memtable_->WouldReject(footprint)) {
-      memtable_->Freeze();   // 触顶即冻结（与 Add 的行为一致）
-      reject = Status::Frozen("Put/Delete: memtable is full (M2 无 flush)", dbname_);
     } else {
+      // §6.2：容量不足**不再**是写的失败原因。旧表冻结进 immutables_（所有权事实代替 frozen_），
+      // 新表容量由 NewTableCapacity 保证「本批的 Add 在结构上不可能返回 kFrozen」。
+      if (memtable_->WouldReject(footprint)) {
+        if (memtable_->NumEntries() > 0) {
+          std::shared_ptr<Immutable> imm(new Immutable());
+          imm->mem = memtable_;
+          imm->log_number = log_number_;
+          immutables_.push_back(imm);
+          memtable_ = std::make_shared<MemTable>(
+              internal_comparator_,
+              std::max(options_.write_buffer_size, footprint + kMemTableNodeOverhead));
+          log_sealed_ = true;   // M3.2 不轮转（§11.2 的过渡妥协③），仅为对齐 §6.1 的状态位
+        } else {
+          // 空表：不必制造空 SSTable，直接换一个容量足够的新表。
+          memtable_ = std::make_shared<MemTable>(
+              internal_comparator_,
+              std::max(options_.write_buffer_size, footprint + kMemTableNodeOverhead));
+        }
+        bg_cv_.notify_all();    // 唤醒后台线程（L13）
+      }
       last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
       payload = EncodeGroup(begin, members);
     }
@@ -467,23 +378,170 @@ Status PersistentDBImpl::Delete(const WriteOptions& options, const Slice& key) {
 Status PersistentDBImpl::Get(const Slice& key, std::string* value) {
   if (value == nullptr) return Status::InvalidArgument("PersistentDBImpl::Get: null value pointer");
   value->clear();
-  DbMutexGuard l(mutex_);
-  const std::string lookup_key = BuildLookupKey(key, last_sequence_);
-  switch (memtable_->Get(Slice(lookup_key), value)) {
-    case MemTable::GetResult::kFound:
-      return Status::OK();
-    case MemTable::GetResult::kDeleted:
-      value->clear();
-      return Status::NotFound("PersistentDBImpl::Get: key is deleted", key.size() < 64 ? key.ToString() : key.ToString().substr(0, 64));
-    case MemTable::GetResult::kNotFound:
-      return Status::NotFound("PersistentDBImpl::Get: key not found", key.size() < 64 ? key.ToString() : key.ToString().substr(0, 64));
+  DbReadStats delta;
+  const Status s = GetInternal(key, value, &delta);
+  MergeReadStats(delta);
+  return s;
+}
+
+Status PersistentDBImpl::GetInternal(const Slice& key, std::string* value, DbReadStats* delta) {
+  std::shared_ptr<const MemTable> mt;
+  std::vector<std::shared_ptr<const MemTable>> imms;
+  std::shared_ptr<const Version> ver;
+  SequenceNumber snapshot = 0;
+  {
+    // L19：mutex_ 内只做「取 shared_ptr 引用 + 取快照」；所有 IO 与比较在锁外。
+    DbMutexGuard l(mutex_);
+    snapshot = last_sequence_;
+    mt = memtable_;
+    imms.reserve(immutables_.size());
+    for (const std::shared_ptr<Immutable>& im : immutables_) imms.push_back(im->mem);
+    ver = version_;
   }
-  return Status::NotFound("PersistentDBImpl::Get: unreachable", key.ToString());
+
+  const std::string lookup_key = BuildLookupKey(key, snapshot);
+  const auto lookup_mem = [&](const std::shared_ptr<const MemTable>& m, HitLayer layer) -> int {
+    std::string tmp;
+    switch (m->Get(Slice(lookup_key), &tmp)) {
+      case MemTable::GetResult::kFound:
+        *value = std::move(tmp);
+        delta->hit_layer = layer;
+        return 1;
+      case MemTable::GetResult::kDeleted:
+        delta->hit_layer = layer;
+        return -1;
+      case MemTable::GetResult::kNotFound:
+        return 0;
+    }
+    return 0;
+  };
+
+  int r = lookup_mem(mt, HitLayer::kMemTable);
+  if (r == 1) return Status::OK();
+  if (r == -1) return Status::NotFound("PersistentDBImpl::Get: key is deleted in memtable");
+  for (auto it = imms.rbegin(); it != imms.rend(); ++it) {   // 新→旧（deque 的 back 最新）
+    r = lookup_mem(*it, HitLayer::kImmutable);
+    if (r == 1) return Status::OK();
+    if (r == -1) return Status::NotFound("PersistentDBImpl::Get: key is deleted in immutable");
+  }
+
+  if (ver != nullptr) {
+    const Comparator* user_cmp = internal_comparator_.user_comparator();
+    for (const FileMetaData& f : ver->files()) {   // 文件号降序 = 新→旧（§7.1 规则 2）
+      Slice min_user;
+      Slice max_user;
+      SequenceNumber tmp_seq = 0;
+      ValueType tmp_type = kTypeValue;
+      if (!ParseInternalKey(Slice(f.smallest), &min_user, &tmp_seq, &tmp_type) ||
+          !ParseInternalKey(Slice(f.largest), &max_user, &tmp_seq, &tmp_type)) {
+        return Status::Corruption("PersistentDBImpl::Get", "file metadata key range is malformed");
+      }
+      if (user_cmp->Compare(key, min_user) < 0 || user_cmp->Compare(key, max_user) > 0) {
+        ++delta->key_range_skipped;   // 零 IO（§5.4 ① / A19 的 DB 层口径）
+        continue;
+      }
+      // M3-A30 的口径：files_checked 只数**真的进了 Table::GetEntry** 的文件；
+      // 递增归属是 DB 层（不是 Table 层），避免双重计数。
+      ++delta->files_checked;
+      std::string file_value;
+      TableGetResult tr = TableGetResult::kNotFound;
+      ReadStats tstats;
+      bool opened = false;
+      const Status fs =
+          table_cache_->Get(f, Slice(lookup_key), &file_value, &tr, &tstats, &opened);
+      if (opened) ++delta->index_blocks_read;
+      delta->data_blocks_read += tstats.data_blocks_read;
+      delta->blocks_read += tstats.blocks_read;
+      delta->bytes_read += tstats.bytes_read;
+      delta->crc_checked += tstats.crc_checked;
+      delta->crc_failed += tstats.crc_failed;
+      if (!fs.ok()) return fs;
+      if (tr == TableGetResult::kFound) {
+        *value = std::move(file_value);
+        delta->hit_layer = HitLayer::kSSTable;
+        return Status::OK();
+      }
+      if (tr == TableGetResult::kDeleted) {
+        delta->hit_layer = HitLayer::kSSTable;
+        return Status::NotFound("PersistentDBImpl::Get: key is deleted in sstable");
+      }
+    }
+  }
+
+  delta->hit_layer = HitLayer::kNone;
+  return Status::NotFound("PersistentDBImpl::Get: key not found");
+}
+
+void PersistentDBImpl::MergeReadStats(const DbReadStats& delta) {
+  DbMutexGuard l(mutex_);
+  read_stats_.files_checked += delta.files_checked;
+  read_stats_.key_range_skipped += delta.key_range_skipped;
+  read_stats_.index_blocks_read += delta.index_blocks_read;
+  read_stats_.data_blocks_read += delta.data_blocks_read;
+  read_stats_.blocks_read += delta.blocks_read;
+  read_stats_.bytes_read += delta.bytes_read;
+  read_stats_.crc_checked += delta.crc_checked;
+  read_stats_.crc_failed += delta.crc_failed;
+  last_hit_layer_ = delta.hit_layer;
+}
+
+DbReadStats PersistentDBImpl::GetReadStats() const {
+  DbMutexGuard l(mutex_);
+  DbReadStats out = read_stats_;
+  out.hit_layer = last_hit_layer_;
+  return out;
+}
+
+FlushStats PersistentDBImpl::GetFlushStats() const {
+  DbMutexGuard l(mutex_);
+  return flush_stats_;
+}
+
+size_t PersistentDBImpl::immutables_size() const {
+  DbMutexGuard l(mutex_);
+  return immutables_.size();
 }
 
 Iterator* PersistentDBImpl::NewIterator() {
+  std::shared_ptr<const MemTable> mt;
+  std::vector<std::shared_ptr<const MemTable>> imms;
+  std::shared_ptr<const Version> ver;
+  SequenceNumber snapshot = 0;
+  {
+    DbMutexGuard l(mutex_);
+    snapshot = last_sequence_;
+    mt = memtable_;
+    imms.reserve(immutables_.size());
+    for (const std::shared_ptr<Immutable>& im : immutables_) imms.push_back(im->mem);
+    ver = version_;
+  }
+
+  // 迭代器必须持住每一个 MemTable / Version 的引用（L19/L21），否则迭代中途 flush 注册并
+  // 释放 Arena 会造成 UAF（M3-A33 在 ASan 下钉住）。
+  std::vector<std::shared_ptr<const void>> refs;
+  refs.push_back(mt);
+  for (const std::shared_ptr<const MemTable>& m : imms) refs.push_back(m);
+  if (ver != nullptr) refs.push_back(ver);
+
+  std::vector<Iterator*> kids_vec;
+  kids_vec.push_back(mt->NewIterator());
+  for (auto it = imms.rbegin(); it != imms.rend(); ++it) kids_vec.push_back((*it)->NewIterator());
+  if (ver != nullptr) {
+    for (const FileMetaData& f : ver->files()) {
+      std::unique_ptr<Iterator> child = table_cache_->NewIterator(f, nullptr);
+      kids_vec.push_back(child.release());
+    }
+  }
+  const int n = static_cast<int>(kids_vec.size());
+  Iterator** kids = new Iterator*[n];
+  for (int i = 0; i < n; ++i) kids[i] = kids_vec[static_cast<size_t>(i)];
+  MergingIterator* merged = new MergingIterator(&internal_comparator_, kids, n);
+  return new DBIter(&internal_comparator_, merged, snapshot, std::move(refs));
+}
+
+void PersistentDBImpl::RunHoldingDbMutexForTest(const std::function<void()>& fn) {
   DbMutexGuard l(mutex_);
-  return NewMemTableUserIterator(memtable_.get(), internal_comparator_);
+  fn();
 }
 
 // A25 探针的访问器：必须定义在 namespace lsm 正体（外部链接），与 db_impl.h 的声明匹配
@@ -520,6 +578,110 @@ Status PersistentDBImpl::Sync() {
   return s;
 }
 
+void PersistentDBImpl::StartBackgroundThread() {
+  {
+    DbMutexGuard l(mutex_);
+    if (bg_started_) return;
+    bg_started_ = true;
+    bg_stop_ = false;
+  }
+  bg_thread_ = std::thread([this] { BackgroundLoop(); });
+}
+
+void PersistentDBImpl::BackgroundLoop() {
+  std::unique_lock<std::mutex> l(mutex_);
+  while (true) {
+    bg_cv_.wait(l, [this] { return bg_stop_ || !immutables_.empty(); });
+    // §6.5：Close() 置 bg_stop_ 后必须**放弃**剩余 immutables 并退出（数据仍在 WAL + 内存，
+    // 由 Close 计数 immutables_abandoned）；不能继续循环，否则会在 closed_ 下空转、join 挂死。
+    if (bg_stop_) break;
+    if (immutables_.empty()) continue;
+    std::shared_ptr<Immutable> imm = immutables_.front();   // 不弹出；成功注册后才 pop（§6.3）
+    l.unlock();
+    FlushImmutable(imm);
+    l.lock();
+    if (!bg_error_.ok()) {
+      // fail-stop 是粘性的：不再重试（否则忙等），等 Close() 置 bg_stop_ 后退出。
+      bg_cv_.wait(l, [this] { return bg_stop_; });
+      break;
+    }
+  }
+}
+
+void PersistentDBImpl::FlushImmutable(const std::shared_ptr<Immutable>& imm) {
+  uint64_t number = 0;
+  {
+    DbMutexGuard l(mutex_);
+    if (!bg_error_.ok() || closed_) return;
+    ++flush_stats_.flushes_started;
+    number = next_file_number_++;
+  }
+  const std::string tmp = TempFileName(dbname_, number);
+  const std::string final = TableFileName(dbname_, number);
+
+  Status s = Status::OK();
+  uint64_t index_warn = 0;
+  FileMetaData meta;
+  meta.number = number;
+  {
+    WritableFile* raw = nullptr;
+    s = EnvOf()->NewWritableFile(tmp, &raw);
+    if (s.ok()) {
+      std::unique_ptr<WritableFile> file(raw);
+      TableBuilder builder(options_, file.get());
+      std::unique_ptr<Iterator> it(imm->mem->NewIterator());
+      for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        s = builder.Add(it->key(), it->value());
+        if (!s.ok()) break;
+      }
+      if (s.ok() && !it->status().ok()) s = it->status();
+      if (s.ok()) s = builder.Finish();
+      if (s.ok()) {
+        if (options_.flush_hook != nullptr) options_.flush_hook->OnSSTableWritten();
+        s = file->Sync();   // ★ 步骤 ④ 的 fsync（I22）
+      }
+      const Status close_status = file->Close();
+      if (s.ok() && !close_status.ok()) s = close_status;
+      if (s.ok()) {
+        if (options_.flush_hook != nullptr) options_.flush_hook->OnBeforeRename();
+        s = EnvOf()->RenameFile(tmp, final);   // ★ 步骤 ⑤
+      }
+      if (s.ok()) s = EnvOf()->SyncDir(dbname_);   // ★ 步骤 ⑥（R4：只证明调用顺序）
+      if (s.ok()) {
+        meta.file_size = builder.FileSize();
+        meta.max_sequence = builder.MaxSequence();
+        meta.smallest = builder.smallest();
+        meta.largest = builder.largest();
+        index_warn = builder.index_size_warn_count();
+      }
+    }
+  }
+
+  if (!s.ok()) {
+    EnvOf()->DeleteFile(tmp);   // 未注册的 tmp 尽力删除；final 若存在则是未注册孤儿（M3.3 清理）
+    DbMutexGuard l(mutex_);
+    bg_error_ = s;              // 粘性 fail-stop（§6.4）
+    ++flush_stats_.flushes_failed;
+    flush_stats_.last_error = s.ToString();
+    bg_cv_.notify_all();
+    return;
+  }
+
+  if (options_.flush_hook != nullptr) options_.flush_hook->OnBeforeRegister();
+  {
+    DbMutexGuard l(mutex_);
+    if (!bg_error_.ok() || closed_) return;   // 与 Close/失败的竞态：不注册，数据仍在 WAL+内存
+    if (version_ == nullptr) {
+      version_ = VersionSet::Empty(log_number_, next_file_number_);
+    }
+    version_ = VersionSet::RegisterFile(*version_, meta, log_number_, next_file_number_);
+    immutables_.pop_front();
+    ++flush_stats_.flushes_completed;
+    flush_stats_.index_size_warn += index_warn;
+    bg_cv_.notify_all();
+  }
+}
+
 Status PersistentDBImpl::Close() {
   std::unique_lock<std::mutex> ql(commit_mu_);
   bool already_closed = false;
@@ -527,6 +689,9 @@ Status PersistentDBImpl::Close() {
     DbMutexGuard l(mutex_);
     already_closed = closed_;
     closed_ = true;                                        // 幂等（A30）
+    // §6.5：立即唤醒可能停在 WaitForImmutableCapacity 的写者（谓词含 !closed_）；
+    // 否则 Close 会卡在 commit_cv_ 上等 flusher 结束，而 flusher 正等这个通知 ⇒ 死锁。
+    bg_cv_.notify_all();
   }
   if (already_closed) {
     // 幂等路径也必须确保 LOCK 已释放（恢复期失败可能留下未释放的锁）
@@ -540,6 +705,17 @@ Status PersistentDBImpl::Close() {
   if (log_ == nullptr) {                                   // 尚未打开 WAL（恢复中途失败）
     if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());
     return Status::OK();
+  }
+  // §6.5 的关闭顺序：置 bg_stop_ → join（必须在关 log/释放对象之前）。
+  {
+    DbMutexGuard ml(mutex_);
+    bg_stop_ = true;
+    bg_cv_.notify_all();
+  }
+  if (bg_thread_.joinable()) bg_thread_.join();
+  {
+    DbMutexGuard ml(mutex_);
+    flush_stats_.immutables_abandoned += immutables_.size();   // 放弃必须计数（§6.4 表末行）
   }
   Status sticky;                                        // M2-I35：bg_error_ 只在 mutex_ 下读
   {
@@ -571,6 +747,15 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   std::vector<std::string> children;
   Status s = env->GetChildren(name, &children);
   if (!s.ok()) return s;
+  // M3.2 的显式过渡妥协②（docs/m3-design.md §11.2）：本子里程碑尚未实现 SSTable 恢复，
+  // 目录里若存在 *.sst 一律拒绝启动（不许静默忽略）。5 行 guard，M3.3 删除。
+  for (const std::string& c : children) {
+    uint64_t ignored_number = 0;
+    if (ParseTableFileName(c, &ignored_number)) {
+      return Status::Corruption(
+          "RecoverAndOpen: 本子里程碑尚未实现 SSTable 恢复（目录里存在已落盘的 SSTable）", c);
+    }
+  }
   std::vector<uint64_t> logs;
   for (const std::string& c : children) {
     uint64_t n = 0;
@@ -672,11 +857,16 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   }
 
   // ---- 第二遍：按 D12 放大容量后重放 ----
-  // 保守估计 MemTable 实际占用：编码字节 ×2（长度前缀/对齐/分配 slop）+ 每条节点开销 ×2 + 余量
-  const size_t cap = std::max(
-      options.write_buffer_size,
+  // 保守估计 MemTable 实际占用：编码字节 ×2（长度前缀/对齐/分配 slop）+ 每条节点开销 ×2 + 余量。
+  // M3.2：**没有重放到任何条目时**（新库 / 只有空 log）必须回到 write_buffer_size，
+  // 否则 kRecoverySlack(1 MiB) 会把小 write_buffer_size 的 flush 触发点整个盖住
+  // （M3-A20~A30 全都依赖小 buffer 真的能触发 flush）。
+  const size_t recovered_cap =
       static_cast<size_t>(total_payload) * 2 +
-          static_cast<size_t>(total_entries) * kMemTableNodeOverhead * 2 + kRecoverySlack);
+      static_cast<size_t>(total_entries) * kMemTableNodeOverhead * 2 + kRecoverySlack;
+  const size_t cap = (total_entries == 0)
+                         ? options.write_buffer_size
+                         : std::max(options.write_buffer_size, recovered_cap);
   std::unique_ptr<PersistentDBImpl> db(
       new PersistentDBImpl(options, InternalKeyComparator(options.comparator), name, cap));
   SequenceNumber last = 0;
@@ -727,8 +917,13 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   db->log_.reset(new WALWriter(env, hi_path));
   s = db->log_->Open(env->FileExists(hi_path));
   if (!s.ok()) return s;
+  // M3.2：版本注册只在内存；M3.3 会从 META 恢复出同一结构。next_file_number 与 log 共享空间。
+  db->log_number_ = log_number;
+  db->next_file_number_ = std::max<uint64_t>(1, hi + 1);
+  db->version_ = VersionSet::Empty(db->log_number_, db->next_file_number_);
   db->file_lock_.reset(lock_guard.release());   // 所有权交给 DB（Close/析构时释放）
   db->closed_ = false;
+  db->StartBackgroundThread();                  // L12：恢复成功后、发布 *dbptr 之前启动
   *dbptr = db.release();
   return Status::OK();
 }

@@ -33,11 +33,10 @@
 
 namespace lsm {
 
-// ---- 读路径选项（语义与设计 §4 的 Options::block_size / verify_checksums 一致）----
-struct TableOptions {
-  size_t block_size = 4096;        // 数据块 payload 的**目标值**，不是硬上限（§3.2）
-  bool verify_checksums = true;    // 默认开；关掉只跳过 payload CRC，结构校验永不跳过（§5.4）
-};
+// ---- 读路径选项 ----
+// M3.2：按设计把 block_size / verify_checksums 统一进 common.h 的 Options（§8.5）；
+// 这里保留 TableOptions 作为**别名**，使 M3.1 的既有用例与 TableBuilder/Table 的签名零改动。
+using TableOptions = Options;
 
 // ---- D8/A19 的读放大口径：全部是原始计数，不做聚合 ----
 struct ReadStats {
@@ -53,6 +52,16 @@ struct ReadStats {
   void Clear() { *this = ReadStats(); }
 };
 
+// M3.2 的三态结果（设计 §5.4 的 ⑥：tombstone 与「不存在」必须能区分，
+// 否则 DB 层在 L0 按新→旧查文件时会把「本文件里的 tombstone」误当成「本文件没有该 key」
+// 而继续向更旧文件查，造成删除复活）。链路上层（db_impl/TableCache）只使用 GetEntry；
+// Get() 保留 M3.1 的 Status 语义（两者都映射为 kNotFound）以保持格式层契约稳定。
+enum class TableGetResult {
+  kFound,
+  kDeleted,
+  kNotFound,
+};
+
 // Table 是只读视图：不拥有文件名与 Env（Env 必须比 Table 长寿）；迭代器通过
 // shared_from_this 持住 Table，所以 Table 必须用 std::shared_ptr 创建。
 class Table : public std::enable_shared_from_this<Table> {
@@ -61,17 +70,23 @@ class Table : public std::enable_shared_from_this<Table> {
   // 读第一个数据块取最小 key（供 D8/A19 的零 IO key range 过滤）。
   // 失败：footer/块结构/CRC 问题 ⇒ kCorruption；version != 1 ⇒ kNotSupported；
   //       IO 失败 ⇒ kIOError；参数非法 ⇒ kInvalidArgument。
+  // known_smallest / known_largest 非空时，Open 直接采用调用方给出的 key range
+  // （M3.2 的 Version/FileMetaData 已持有 TableBuilder 统计出的 internal key），
+  // 从而跳过「预读第一个数据块取 smallest_」这一步（docs/m3-evidence §4 未闭合项 5）。
+  // 传 nullptr（默认）保持 M3.1 行为：预读首块。空表可传两个非空但为空串的指针。
   static Status Open(const TableOptions& options, Env* env, const std::string& filename,
-                     std::shared_ptr<Table>* table);
+                     std::shared_ptr<Table>* table, const std::string* known_smallest = nullptr,
+                     const std::string* known_largest = nullptr);
 
   ~Table();
 
-  // §5.4 的 Get 路径：① key range 过滤（零 IO，key_range_skipped++）
-  //                      ② 内存索引上 lower_bound（第一个 key >= lookup_key）
-  //                      ③ 读一个数据块（blocks_read++）
-  //                      ④ 块内 Seek ⑤ user key 相等校验 ⑥ tombstone/miss ⇒ kNotFound
-  // 注意：本格式层的 kNotFound 同时覆盖"不存在"与"tombstone"；M3.2 的 DBIter 需要三态时
-  // 会在上层再区分（不改变本函数的块读取与校验纪律）。
+  // M3.2 的三态入口：返回值仍用 Status 传结构/IO/CRC 错误，命中种类走 *result。
+  // ① key range 过滤（零 IO，key_range_skipped++）② 内存索引 lower_bound
+  // ③ 读一个数据块（blocks_read++）④ 块内 Seek ⑤ user key 相等校验
+  // ⑥ tombstone ⇒ kDeleted；值 ⇒ kFound；其余 ⇒ kNotFound。
+  Status GetEntry(const Slice& lookup_key, std::string* value, TableGetResult* result,
+                  ReadStats* stats = nullptr) const;
+  // M3.1 的兼容包装：kFound ⇒ kOk，kDeleted/kNotFound ⇒ kNotFound（信息里保留 tombstone 字样）。
   Status Get(const Slice& lookup_key, std::string* value, ReadStats* stats = nullptr) const;
 
   // 内部 key 迭代器（归并/DBIter 的 child）；迭代器持住 Table 的 shared_ptr。
