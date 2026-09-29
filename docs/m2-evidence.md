@@ -265,3 +265,27 @@ PASS  中间损坏拒绝启动（B04）
 [OK] 全部门禁通过
 
 （TSan 默认关闭：1M 压力在 TSan 下约 6 分钟；需要时加 --with-tsan，其单独证据见上一节。）
+
+## M2.2e —— 掉电语义（A27~A30）：MemEnv 按 fsync 水位回滚 + 固定种子撕裂
+
+执行时间：2026-09-29T20:55:27+08:00
+
+为什么只能用 MemEnv：M2 #0 实测证明 kill -9 打断不了一次 write()（裸 write 逐条 100 轮 TAIL_TORN 0），
+所以「掉电丢多少」只能靠内存文件系统按 fsync 水位 + 固定种子撕裂确定性复现。
+
+命令 1：掉电语义四条用例（3 个种子 x 3 档撕裂概率 + 50 轮连续崩溃 + Sync/Close 持久性）
+$ ./build/bin/lsm_tests --gtest_filter=CrashSim.*:Sync.*
+[       OK ] Sync.CloseIsDurable (0 ms)
+[----------] 2 tests from Sync (1 ms total)
+
+[----------] Global test environment tear-down
+[==========] 4 tests from 2 test suites ran. (18 ms total)
+[  PASSED  ] 4 tests.
+
+命令 2：干净重建 + 全量
+$ bash scripts/lsm_build.sh
+[  PASSED  ] 70 tests.
+[CHECK] 用例计数：
+[==========] 70 tests from 16 test suites ran. (26014 ms total)
+[  PASSED  ] 70 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）

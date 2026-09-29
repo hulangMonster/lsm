@@ -84,6 +84,8 @@ add_executable(lsm_tests
   tests/faulty_env.cpp
   tests/recovery_test.cpp
   tests/memenv.cpp
+  # M2.2e：掉电语义（MemEnv 崩溃注入）
+  tests/crash_test.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}
