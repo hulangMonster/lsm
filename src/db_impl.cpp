@@ -257,6 +257,14 @@ Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, cons
                        ? static_cast<size_t>(VarintLength(w.value.size())) + w.value.size()
                        : 0);
 
+  // 评审优化项：超过 WAL 单条 record 上限的输入必须在**入队之前**拒绝。
+  // 否则批次会被接受、Append 返回 kInvalidArgument、RunFlusher 把它当持久化失败写进
+  // bg_error_ ⇒ 整个库转粘性写只读（连 Close 都返回错误）。输入校验不该触发 fail-stop。
+  if (w.entry_bytes + 16 > kMaxLogicalRecordSize) {
+    return Status::InvalidArgument("Put/Delete: record exceeds kMaxLogicalRecordSize",
+                                   std::to_string(w.entry_bytes + 16));
+  }
+
   std::unique_lock<std::mutex> l(commit_mu_);
   if (!bg_error_.ok()) return bg_error_;                   // 粘性 fail-stop（D11）
   {
@@ -594,6 +602,20 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
     const std::string path = LogFileName(name, p.number);
     s = env->Truncate(path, p.truncate_at);
     if (!s.ok()) return s;
+    // 设计 §5.2 要求截断后 ReopenAndSync（评审阻断项 5 的代码级偏差）：
+    // 不 fsync 的话掉电后 truncate 的元数据可能回滚，而进程已用 O_APPEND 在截断点之后
+    // 追加了新 record ⇒ 老尾部字节"复活"并夹在新数据之前 ⇒ 恢复时正好撞上
+    // §5.3 的"其后存在完好 record ⇒ 中间损坏 ⇒ 拒绝启动"。
+    WritableFile* tf = nullptr;
+    s = env->NewAppendableFile(path, &tf);
+    if (!s.ok()) return s;
+    {
+      std::unique_ptr<WritableFile> guard(tf);
+      s = guard->Sync();
+      if (!s.ok()) return s;
+      s = guard->Close();
+      if (!s.ok()) return s;
+    }
   }
 
   // ---- 第二遍：按 D12 放大容量后重放 ----
