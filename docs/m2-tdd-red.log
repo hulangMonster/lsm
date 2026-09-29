@@ -1,0 +1,40 @@
+# M2 TDD 骨架的实测 RED（docs/m2-prerequisites.md §8）
+
+执行时间：2026-09-29T19:53:55+08:00
+
+本阶段的 RED 是**编译期失败**：测试已完整表达契约，而 src/wal.{h,cpp} 与 Env 的 M2 增补尚未实现。
+（M1 的同类证据见 docs/m1-tdd-red.log；此处同样保留原始输出，不转述。）
+
+## RED 1：WAL 实现头文件尚不存在
+
+$ g++ -std=c++17 -Wall -Wextra -I src -I tests -I /usr/local/include -fsyntax-only tests/wal_test.cpp
+tests/wal_test.cpp:18:10: fatal error: wal.h: No such file or directory
+   18 | #include "wal.h"
+      |          ^~~~~~~
+compilation terminated.
+
+## RED 2：Env 缺少 M2 需要的虚函数（NewAppendableFile / GetChildren / LockFile / Truncate）
+
+$ cat /tmp/fe_check.cpp
+#include "faulty_env.h"
+$ g++ -std=c++17 -I src -I tests -I /usr/local/include -fsyntax-only /tmp/fe_check.cpp
+tests/faulty_env.h:55:41: error: ‘FileLock’ has not been declared
+tests/faulty_env.h:56:21: error: ‘FileLock’ has not been declared
+tests/faulty_env.h:37:10: error: ‘lsm::Status lsm::test::FaultyEnv::NewAppendableFile(const string&, lsm::WritableFile**)’ marked ‘override’, but does not override
+tests/faulty_env.h:50:10: error: ‘lsm::Status lsm::test::FaultyEnv::GetChildren(const string&, std::vector<std::__cxx11::basic_string<char> >*)’ marked ‘override’, but does not override
+tests/faulty_env.h:53:10: error: ‘lsm::Status lsm::test::FaultyEnv::RemoveFile(const string&)’ marked ‘override’, but does not override
+tests/faulty_env.h:54:10: error: ‘lsm::Status lsm::test::FaultyEnv::Truncate(const string&, uint64_t)’ marked ‘override’, but does not override
+tests/faulty_env.h:55:10: error: ‘lsm::Status lsm::test::FaultyEnv::LockFile(const string&, int**)’ marked ‘override’, but does not override
+tests/faulty_env.h:56:10: error: ‘lsm::Status lsm::test::FaultyEnv::UnlockFile(int*)’ marked ‘override’, but does not override
+tests/faulty_env.h:51:19: error: ‘class lsm::Env’ has no member named ‘GetChildren’
+tests/faulty_env.h:53:68: error: ‘class lsm::Env’ has no member named ‘RemoveFile’; did you mean ‘RenameFile’?
+
+## 同期必须成立的事实：M1 的 47 例不得回归（本阶段未改 CMakeLists，M1 目标不受影响）
+
+$ bash scripts/lsm_build.sh
+[==========] 47 tests from 12 test suites ran. (25245 ms total)
+[  PASSED  ] 47 tests.
+[CHECK] 用例计数：
+[==========] 47 tests from 12 test suites ran. (25245 ms total)
+[  PASSED  ] 47 tests.
+[OK] 干净重建 + 0 warning + lsm_tests 全绿（日志：build/build.log）
