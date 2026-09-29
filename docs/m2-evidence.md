@@ -130,3 +130,23 @@ timeout: the monitored command dumped core    # 退出码 134（SIGSEGV）
 unique_ptr 析构 → Close() → 此时 log_ 仍是 nullptr（WAL 在重放的**后面**才打开）→ 对 nullptr 取 Sync 段错误。
 修复：closed_ 初值改为 true（未完全打开就不做关闭动作）+ Sync/Close 对 log_ == nullptr 做显式判断。
 影响面：任何「恢复中途失败」的路径（畸形 batch、重放 Add 失败）都会踩到，属阻断级。
+
+## M2.2c —— 损坏注入的端到端判据（B03 逐字节截断扫描 / B04 中间损坏）
+
+执行时间：2026-09-29T20:17:39+08:00
+
+命令 1：B03 逐字节截断扫描（每条 record 边界 ±3 字节，共  个截断点）
+$ bash scripts/lsm_tail_truncate_test.sh
+== lsm_tail_truncate_test: dir=/tmp/lsm_tail_odWZQm ==
+TAIL_CASES 1401 TAIL_OK 1401 TAIL_FAIL 0 RECORD_BYTES 40
+退出码: 0
+  判据：Open 必须成功；恢复出的 key 集合必须恰好是前缀 [1..k]（k 由截断长度决定），不得多也不得少。
+
+命令 2：B04 中间损坏（翻转第 50 条 record 的 payload 首字节，其后仍有 150 条完好 record）
+$ bash scripts/lsm_corrupt_middle_test.sh
+== lsm_corrupt_middle_test: dir=/tmp/lsm_mid_ZYezpS ==
+MIDDLE_OPEN_CORRUPTION 1 RECOVERED_PREFIX -1 DETAIL Corruption: RecoverAndOpen: log 中间损坏（其后仍有完好 record）: /tmp/lsm_mid_ZYezpS/db/000001.log @1960 CRC 不符
+MIDDLE_LOCATABLE 1
+退出码: 0
+  判据：必须返回 kCorruption（拒绝启动）、错误信息含文件名与字节偏移（可定位）——
+  这正是「尾部残骸可安全截断」与「中间损坏必须拒绝」的分界线（design §5.3）。
