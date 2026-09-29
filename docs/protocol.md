@@ -133,3 +133,72 @@ internal_key := user_key || trailer(8B)
 | value 大小 | M1 不单独设上限，仅受 `write_buffer_size` 与内存约束；1 MiB value 必须可用 |
 | `internal_key.size() < 8` | 解析失败（`false`），不越界读 |
 | `sequence > kMaxSequenceNumber` | 打包前由调用方保证；测试须覆盖上界往返 |
+
+---
+
+## 9. WAL record 编码（M2 定稿）
+
+> 追加章节。§1~§8 为 M1 冻结内容，本节不得反向修改它们。
+> 本节的所有多字节整数一律**小端**，逐字节拼装/解析，禁止 `reinterpret_cast`（§1）。
+
+### 9.1 物理块与 record 头
+
+WAL 文件划分为固定 **32 KiB（32768 B）** 的物理块；一条逻辑 record 可跨多个块，
+每个块内片段带 7 字节头：
+
+```
+record := header(7B) || payload(length B)
+header := crc32c(4B, LE) || length(2B, LE) || type(1B)
+```
+
+| 字段 | 字节数 | 字节序 | 取值 |
+|---|---|---|---|
+| `crc32c` | 4 | LE | CRC32C（§5），覆盖面见 §9.3 |
+| `length` | 2 | LE | `1 .. 32761`（= 32768 − 7）；`0` 非法 |
+| `type` | 1 | — | `0x00` padding 哨兵；`0x01` kFullType；`0x02` kFirstType；`0x03` kMiddleType；`0x04` kLastType |
+| `payload` | `length` | — | 本片段，内容为 §9.4 的 batch 编码 |
+
+常量：`kWALBlockSize = 32768`、`kWALHeaderSize = 7`、`kWALMaxPayload = 32761`。
+
+### 9.2 跨块切分与 padding
+
+- 若块内剩余不足 7 字节，写者用 `0x00` 补齐到块边界，再在新块起始写下一个片段。
+- `type` 状态机：单块 record = `kFullType`；跨块 = `kFirstType` / `kMiddleType`* / `kLastType`。
+- 每个片段的 `length >= 1`（写者在分片时保证 `end` 判据为 `payload.size() == frag`）。
+- reader：块内剩余 < 7 字节 ⇒ 跳过 padding 到块边界；7 字节头全零（`crc==0 && length==0 && type==0`）
+  ⇒ 视为 padding 跳到块边界。真实 record 的 `length >= 1` 且 `type ∈ {1..4}`，与哨兵**不相交**，故二者在字节形态上可判定区分。
+- reader 对 `type ∉ {1..4}` 或 `length ∉ [1, 32761]` 一律判为损坏，**不得**用该 `length` 推进偏移（防越界读）。
+- 跨块重组缓冲设上限 `kMaxLogicalRecordSize = 64 MiB`，超限判损坏（可定位）。
+
+### 9.3 CRC 覆盖面
+
+```
+crc_input := length(2B LE) || type(1B) || payload(length B)     # 即 crc 字段之后的全部字节
+crc       := crc32c(crc_input)                                  # §5 的 crc32c(0, data) 口径
+```
+
+- **与 LevelDB 的有意差异**：LevelDB 只覆盖 `type || payload`，本节额外覆盖 `length` 的 2 字节。
+  理由：让 `length` 的完整性成为 CRC 契约的一部分，而不是依赖"用错长度取到错 payload ⇒ CRC 碰巧失败"的间接推断。
+- 跨块流式累加：`c = Value(prefix3)`，随后逐段 `c = Extend(c, frag, n)`（§5 的 `Extend` 语义）。
+  `prefix3` 的字节序为 `{length_lo, length_hi, type}`（磁盘顺序），是契约的一部分。
+
+### 9.4 WAL batch payload 编码
+
+一条逻辑 record 的 payload 是**一个 batch**（M2 的一次写 = 一个 batch；组提交把整批合并为一条 record）：
+
+```
+payload := sequence(8B, LE) || count(4B, LE) || entry[0..count)
+entry   := type(1B) || key_len(varint32) || key || [ value_len(varint32) || value ]
+```
+
+| 字段 | 编码 | 约束 |
+|---|---|---|
+| `sequence` | 8B LE | batch 中第一条 entry 的 sequence；`sequence + count - 1 <= kMaxSequenceNumber` |
+| `count` | 4B LE | `1 .. kMaxBatchCount`（`kMaxBatchCount = 1 << 20`，防畸形撑爆） |
+| `type` | 1B | `0x0 = kTypeDeletion`（无 value 字段）、`0x1 = kTypeValue` |
+| `key_len` / `key` | varint32 + 字节（§4） | `1 .. kMaxUserKeySize` |
+| `value_len` / `value` | varint32 + 字节（§4） | 仅 `kTypeValue`；空 value 合法 |
+
+- 第 `i` 条 entry 的 sequence = `sequence + i`。
+- 解析必须**恰好消费完** payload：`count` 条 entry 解完后仍有剩余字节 ⇒ 损坏。
+- 本编码与 M5 的 `WriteBatch` 落盘布局同构（M2 只作为 WAL 内部组织，**不提供公共 API**）。
