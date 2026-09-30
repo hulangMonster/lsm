@@ -14,6 +14,10 @@
 #include "db_impl.h"
 #include "filename.h"
 #include "memenv.h"
+#include "db_iter.h"
+#include "memtable.h"
+#include "merging_iterator.h"
+#include "sstable/table_builder.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "version_edit.h"
@@ -1082,6 +1086,90 @@ TEST(Merge, ConcurrentIteratorVsBackgroundCompaction) {
   held.reset();
   ASSERT_TRUE(db->Close().ok());
   delete db;
+}
+
+// ===== A20-RED 候选：2 个内存表 + 1 个文件，同 user key 的 tombstone 与旧值混合 =====
+// 构造不依赖 DB 时序；断言 全量扫描 / Seek / 语义真值 三者一致（tombstone 必须屏蔽旧值）。
+namespace {
+std::shared_ptr<Table> MakeTableFile(MemEnv* env, const std::string& path, const std::string& user,
+                                     SequenceNumber seq, const std::string& value) {
+  Options o;
+  WritableFile* raw = nullptr;
+  EXPECT_TRUE(env->NewWritableFile(path, &raw).ok());
+  if (raw == nullptr) return nullptr;
+  {
+    std::unique_ptr<WritableFile> f(raw);
+    TableBuilder b(o, f.get());
+    EXPECT_TRUE(b.Add(Slice(BuildInternalKey(user, seq, kTypeValue)), Slice(value)).ok());
+    EXPECT_TRUE(b.Finish().ok());
+    EXPECT_TRUE(f->Close().ok());
+  }
+  std::shared_ptr<Table> t;
+  EXPECT_TRUE(Table::Open(o, env, path, &t).ok());
+  return t;
+}
+}  // namespace
+
+TEST(Merge, MixedMemTablesAndFileTombstoneVisibility) {
+  const InternalKeyComparator icmp(BytewiseComparator());
+  const std::string key = "mix-key";
+  MemEnv env;
+  auto make_it = [&](std::vector<Iterator*> kids) -> Iterator* {
+    Iterator** arr = new Iterator*[kids.size()];
+    for (size_t i = 0; i < kids.size(); ++i) arr[i] = kids[i];
+    MergingIterator* m = new MergingIterator(&icmp, arr, static_cast<int>(kids.size()));
+    return new DBIter(&icmp, m, 100, {});
+  };
+  // 方向 0：旧值在文件、tombstone 在内存（两个内存表 + 一个文件）
+  MemTable m1(icmp, 1u << 20);
+  MemTable m2(icmp, 1u << 20);
+  ASSERT_TRUE(m1.Add(10, kTypeValue, key, "old").ok());
+  ASSERT_TRUE(m2.Add(20, kTypeDeletion, key, "").ok());
+  std::shared_ptr<Table> tf = MakeTableFile(&env, "/f0.sst", key, 5, "oldest");
+  ASSERT_TRUE(tf != nullptr);
+  {
+    std::unique_ptr<Iterator> it(make_it({m1.NewIterator(), m2.NewIterator(), tf->NewIterator().release()}));
+    it->SeekToFirst();
+    EXPECT_FALSE(it->Valid()) << "方向0 全量扫描：内存 tombstone 必须屏蔽文件旧值";
+  }
+  {
+    std::unique_ptr<Iterator> it(make_it({m1.NewIterator(), m2.NewIterator(), tf->NewIterator().release()}));
+    it->Seek(Slice(key));
+    EXPECT_FALSE(it->Valid()) << "方向0 Seek：内存 tombstone 必须屏蔽文件旧值";
+  }
+  // 方向 1：tombstone 在文件、旧值在两个内存表
+  MemTable m3(icmp, 1u << 20);
+  MemTable m4(icmp, 1u << 20);
+  ASSERT_TRUE(m3.Add(10, kTypeValue, key, "old").ok());
+  ASSERT_TRUE(m4.Add(5, kTypeValue, key, "oldest").ok());
+  {
+    Options o;
+    WritableFile* raw = nullptr;
+    ASSERT_TRUE(env.NewWritableFile("/f1.sst", &raw).ok());
+    {
+      std::unique_ptr<WritableFile> f(raw);
+      TableBuilder b(o, f.get());
+      ASSERT_TRUE(b.Add(Slice(BuildInternalKey(key, 20, kTypeDeletion)), Slice()).ok());
+      ASSERT_TRUE(b.Finish().ok());
+      ASSERT_TRUE(f->Close().ok());
+    }
+  }
+  std::shared_ptr<Table> tt;
+  {
+    Options o;
+    ASSERT_TRUE(Table::Open(o, &env, "/f1.sst", &tt).ok());
+  }
+  ASSERT_TRUE(tt != nullptr);
+  {
+    std::unique_ptr<Iterator> it(make_it({m3.NewIterator(), m4.NewIterator(), tt->NewIterator().release()}));
+    it->SeekToFirst();
+    EXPECT_FALSE(it->Valid()) << "方向1 全量扫描：文件 tombstone 必须屏蔽内存旧值";
+  }
+  {
+    std::unique_ptr<Iterator> it(make_it({m3.NewIterator(), m4.NewIterator(), tt->NewIterator().release()}));
+    it->Seek(Slice(key));
+    EXPECT_FALSE(it->Valid()) << "方向1 Seek：文件 tombstone 必须屏蔽内存旧值";
+  }
 }
 
 }  // namespace lsm
