@@ -467,3 +467,131 @@ field                := tag(varint32) ‖ value(tag 依赖)
 `rename(CURRENT.tmp, CURRENT)` → `SyncDir`，然后删除 `META` / `META.tmp`。
 两者都不存在时：目录中若有 `*.sst` 或 `MANIFEST-*` ⇒ `kCorruption`（"元数据丢失但目录非空"），
 否则按空库处理。**稳态只写 MANIFEST + CURRENT，永不写 `META`。**
+
+## 12. filter block 编码（M5 定稿）
+
+### 12.1 常量与名字空间
+
+| 常量 | 值 | 说明 |
+|---|---|---|
+| `kBuiltinBloomFilterName` | `"filter.leveldb.BuiltinBloomFilter2"` | metaindex 的 `name`；footer 不变、`kTableFormatVersion` 不升 |
+| `kFilterBaseLg` | `11` | filter 覆盖粒度 = 2 KiB（`1 << 11`） |
+| `kBlockTypeFilter` | `0x04` | §10.2 已预留的块类型；M5 开始产出 |
+| `kBloomMinBits` | `64` | 单个 filter 的最小位数（向上取整到整字节） |
+| `kBloomMaxK` | `30` | 单个 filter 的 k 上界 |
+
+- filter **不是**独立文件，也不是新文件类型：它是 SSTable 内的一个块，块外壳与 §10.3 完全相同。
+- 每个 SSTable **至多一个** filter 块；`name` 在 metaindex 里至多出现一次。
+- 读方必须容忍未知 `name`（§10.6）；本节的 `name` 对 M3 的 reader 就是「未知」，只计数、不报错。
+
+### 12.2 filter block 的 payload
+
+```
+filter_block_payload := filter[0] ‖ filter[1] ‖ … ‖ filter[n-1]
+                        ‖ offset[0] ‖ … ‖ offset[n-1]      # uint32 LE × n
+                        ‖ array_offset                       # uint32 LE
+                        ‖ n                                  # uint32 LE
+
+filter[i]             := bitset_i ‖ k_i(1B)
+```
+
+| 字段 | 编码 | 约束 |
+|---|---|---|
+| `filter[i]` | bitset 字节 + 1 B `k` | bitset 长度 = `ceil(m_i / 8)`；`m_i` 是 8 的倍数；`m_i = max(64, n_i * bits_per_key)`（`n_i` = 该桶 key 数） |
+| `offset[i]` | 4 B LE | `filter[i]` 相对 payload 起点的绝对偏移；`offset[0] == 0`；非递减 |
+| `array_offset` | 4 B LE | `offset[0]` 的偏移；`array_offset + 4*n + 8 == payload.size()` |
+| `n` | 4 B LE | filter 个数；`n == 0` 时 `payload` 恰 8 B（`array_offset=0`、`n=0`） |
+
+- **空 filter**：`filter[i]` 长度可以为 0（`offset[i] == offset[i+1]`），表示该 2 KiB 桶内没有 key；
+  读方对长度 0 返回 `false`（该桶无数据块，安全）。
+- **长度 1 的 filter**：只有 `k` 没有 bitset；读方必须视为不可用（按「可能存在」处理并计数），
+  **不得**按「不存在」返回。理由：这属于结构异常，不能冒假阴性风险。
+- bitset 的位序：`bitset[bitpos / 8] |= (1u << (bitpos % 8))`（字节内 LSB-first）。
+- `k` 与 `bits` 一样是 **每个 filter 自己的**，不是全局的；读方必须使用存储的 `k`。
+
+### 12.3 哈希与 Double Hashing
+
+```
+uint32_t Hash(const char* data, size_t n, uint32_t seed);   // LevelDB util/hash.cc 的 32 位哈希
+BloomHash(key) = Hash(key.data(), key.size(), 0xbc9f1d34)
+
+CreateFilter(keys, n, dst):
+  bits = max(64, n * bits_per_key); bytes = (bits + 7) / 8; bits = bytes * 8;
+  k = max(1, min(30, round(bits_per_key * 0.693147)));
+  append bytes 个 0；append k 字节；
+  for each key:
+    h = BloomHash(key); delta = (h >> 17) | (h << 15);
+    for i in [0, k): bitpos = h % bits; set bit; h += delta;
+
+KeyMayMatch(key, filter):
+  len = filter.size(); if (len < 2) return (len == 0 ? false : true);   # 见 12.2 的「长度 1」
+  bits = (len - 1) * 8; k = (uint8_t)filter[len - 1];
+  h = BloomHash(key); delta = (h >> 17) | (h << 15);
+  for i in [0, k): bitpos = h % bits; if bit not set return false; h += delta;
+  return true;
+```
+
+- Double Hashing 的正确性依赖 `delta ≠ 0` 且 `delta` 与 `2` 的幂互质；`(h >> 17) | (h << 15)` 是
+  `h` 的循环右移 17 位，若结果为 0 则 `h` 本身为 0（此时 `BloomHash` 对空 key 也给非 0 种子结果），
+  实现里应对 `delta == 0` 做一次保护（如 `delta = 0x9e3779b9`）。
+- `bits_per_key` 的默认值由 `Options::bloom_bits` 决定（默认 10）；协议只规定编码，不规定默认值。
+
+### 12.4 filter 与数据块的对应
+
+- 写方在写一个数据块之前调用 `StartBlock(block_offset)`，其中 `block_offset` = 该数据块的文件起始偏移；
+  该数据块内**每一条 entry**（含 tombstone）的 **user key** 加入当前桶。
+- 读方对将要读取的数据块（由索引 `lower_bound` 选中）计算
+  `index = block_offset >> kFilterBaseLg`，用 `filter[index]` 做否定判断。
+- 对应关系必须满足：`index < n`；否则读方必须按「可能存在」处理（不得按不存在）。
+- **错位等同于假阴性**：任何 offset/桶对应不自洽的 filter block 必须被读方判定为不可用，
+  按「可能存在」处理并计数；不得用它做否定判断。
+
+### 12.5 版本兼容
+
+- M5 写 filter 时 **不升** `kTableFormatVersion`、**不改** footer：`version` 仍为 `1`。
+- 旧文件（无 `filter.leveldb.BuiltinBloomFilter2` 条目）⇒ 读方按「无 filter」处理，照常读。
+- 未来 filter 策略演进（例如 `BuiltinBloomFilter3`）通过 **metaindex 的新 name** 表达；
+  读方对不认识的 name 只计数、不使用；旧 reader 对新 name 也只会计数（§10.6）。
+- filter 块自身损坏（CRC/结构/错位）⇒ 读方**降级**为「无 filter」，**不得**让 SSTable 打开失败。
+
+## 13. WriteBatch 编码（M5 定稿）
+
+### 13.1 batch payload
+
+```
+batch_payload := sequence(8B, LE) ‖ count(4B, LE) ‖ entry[0..count)
+entry         := type(1B) ‖ key_len(varint32) ‖ key ‖ [ value_len(varint32) ‖ value ]
+```
+
+| 字段 | 编码 | 约束 |
+|---|---|---|
+| `sequence` | 8 B LE | 本 batch 第一条 entry 的 sequence；`sequence + count - 1 <= kMaxSequenceNumber` |
+| `count` | 4 B LE | `1 .. kMaxBatchCount`（`kMaxBatchCount = 1 << 20`）；`count == 0` 非法 |
+| `type` | 1 B | `0x0 = kTypeDeletion`（无 value 字段）、`0x1 = kTypeValue` |
+| `key_len` / `key` | varint32 + 字节（§4） | `1 .. kMaxUserKeySize` |
+| `value_len` / `value` | varint32 + 字节（§4） | 仅 `kTypeValue`；空 value 合法 |
+
+- 第 `i` 条 entry 的 sequence = `sequence + i`。
+- 解析必须**恰好消费完** payload：`count` 条 entry 解完后仍有剩余字节 ⇒ 损坏。
+- 本编码与 §9.4 的 WAL batch payload **逐字相同**；M5 的 `WriteBatch` 提供公共 API，但**不改编码**。
+
+### 13.2 一个 WriteBatch = 一条 WAL record
+
+- `DB::Write(const WriteOptions&, WriteBatch*)` 的**一个调用**所携带的全部 entry 必须落在**同一条** WAL
+  逻辑 record 的 payload 内；禁止把一个 `WriteBatch` 拆到两条 record。
+- M2 的组提交可以把**多个**并发写者（含多个 `WriteBatch`）合并到同一条 record：此时 payload 仍是一个
+  `batch_payload`，`count` = 组内所有 entry 总数，`sequence` = 组内第一条 entry 的 sequence；
+  每个原 `WriteBatch` 的 entry 在 payload 内保持**连续且顺序不变**。
+- 批内 sequence 连续：同一 `WriteBatch` 的第 `i` 条 entry 的 sequence = `batch 起始 sequence + i`。
+- 崩溃恢复按 §9.4 的解析器逐条重放；一条 record 的完整性由 M2 的物理层保证（一个 record = 一个 CRC = 一个原子单位）。
+- `sync = true` 的 durable-before-ack 按**组**生效：返回任一写者前完成 fsync；批粒度继承 M2 的 I11。
+
+### 13.3 批大小上限与超限处理
+
+- `WriteBatch::kMaxCount = 1 << 20`（= §9.4 的 `kMaxBatchCount`）。
+- `WriteBatch::kMaxBytes = kMaxLogicalRecordSize`（= 64 MiB，`src/wal.h:23`）；
+  `DB::Write` 在**编码/入队之前**校验 `ByteSize() + 16 <= kMaxLogicalRecordSize`（与单条写的既有校验同形，
+  `src/db_impl.cpp:160` 稳定 rev）。
+- 超限 ⇒ `DB::Write` 返回 `kInvalidArgument`，**不得**做任何 WAL/内存写入；
+  `count == 0` 同样返回 `kInvalidArgument`。
+- 上限是**协议层防御**；benchmark 与推荐用法应使用远小于上限的批（默认 `batch=1`，可配）。

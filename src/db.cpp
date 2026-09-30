@@ -6,6 +6,7 @@
 
 #include "db_impl.h"
 #include "memtable.h"
+#include "write_batch.h"
 
 namespace lsm {
 namespace {
@@ -15,6 +16,23 @@ std::string ShortKey(const Slice& key) {
   return std::string(key.data(), n);
 }
 
+// M5.2：把 WriteBatch 解码成结构化条目（内存模式的批写路径用；预校验已在锁外完成）。
+class BatchCollector : public WriteBatch::Handler {
+ public:
+  struct Entry {
+    ValueType type = kTypeValue;
+    std::string key;
+    std::string value;
+  };
+  void Put(const Slice& key, const Slice& value) override {
+    entries.push_back(Entry{kTypeValue, key.ToString(), value.ToString()});
+  }
+  void Delete(const Slice& key) override {
+    entries.push_back(Entry{kTypeDeletion, key.ToString(), std::string()});
+  }
+  std::vector<Entry> entries;
+};
+
 class MemoryDBImpl : public DB {
  public:
   MemoryDBImpl(const Options& options, const InternalKeyComparator& icmp)
@@ -23,10 +41,45 @@ class MemoryDBImpl : public DB {
         memtable_(new MemTable(internal_comparator_, options.write_buffer_size)) {}
 
   Status Put(const WriteOptions&, const Slice& key, const Slice& value) override {
-    return Write(kTypeValue, key, value);
+    return WriteEntry(kTypeValue, key, value);
   }
   Status Delete(const WriteOptions&, const Slice& key) override {
-    return Write(kTypeDeletion, key, Slice());
+    return WriteEntry(kTypeDeletion, key, Slice());
+  }
+
+  // M5.2（docs/m5-design.md §5.2/§5.4）：内存模式的整批提交。与持久模式同形——
+  // **先做无副作用预校验（锁外）**，再在锁内逐条 Add。I51（整批原子可见）在这里由
+  // 「输入已全部校验 + Add 在输入合法时不会失败」共同保证。
+  Status Write(const WriteOptions&, WriteBatch* updates) override {
+    if (updates == nullptr) {
+      return Status::InvalidArgument("MemoryDBImpl::Write: null WriteBatch");
+    }
+    uint32_t count = 0;
+    size_t entry_bytes = 0;
+    uint64_t user_bytes = 0;
+    const Status vs = updates->Validate(&count, &entry_bytes, &user_bytes);
+    if (!vs.ok()) return vs;
+    // 批大小上限已由 Validate 统一校验（§13.3，单一真相源），此处不重复。
+    // 锁外解码（纯内存、无 IO）：畸形 rep_ 在这里就被 Iterate 判为 kCorruption。
+    BatchCollector c;
+    const Status is = updates->Iterate(&c);
+    if (!is.ok()) return is;
+    if (c.entries.size() != count) {
+      return Status::Corruption("MemoryDBImpl::Write", "Iterate 条数与 count 不一致");
+    }
+    std::lock_guard<std::mutex> l(mu_);
+    if (closed_) return Status::IOError("MemoryDBImpl::Write: DB is closed");
+    if (last_sequence_ + static_cast<SequenceNumber>(count) > kMaxSequenceNumber) {
+      return Status::InvalidArgument("MemoryDBImpl::Write: sequence space exhausted");
+    }
+    for (const BatchCollector::Entry& e : c.entries) {
+      // Validate 已保证 key 非空/不超限、type 合法；Add 的剩余拒绝条件只有「已冻结」，
+      // 而内存模式的 MemTable 从不冻结 ⇒ 这里不会中途失败（失败会破坏 I51，故不吞掉）。
+      const Status s = memtable_->Add(last_sequence_ + 1, e.type, e.key, e.value);
+      if (!s.ok()) return s;
+      ++last_sequence_;
+    }
+    return Status::OK();
   }
 
   Status Get(const Slice& key, std::string* value) override {
@@ -60,7 +113,8 @@ class MemoryDBImpl : public DB {
   }
 
  private:
-  Status Write(ValueType type, const Slice& key, const Slice& value) {
+  // M5.2（M5-R7）：改名 WriteEntry，避免与 Write(const WriteOptions&, WriteBatch*) 重载歧义。
+  Status WriteEntry(ValueType type, const Slice& key, const Slice& value) {
     if (key.empty()) return Status::InvalidArgument("MemoryDBImpl::Put/Delete: empty user key");
     if (key.size() > kMaxUserKeySize) {
       return Status::InvalidArgument("MemoryDBImpl::Put/Delete: user key too large",
@@ -101,6 +155,12 @@ Status DB::Open(const Options& options, const std::string& name, DB** dbptr) {
   if (options.max_open_files == 0 || options.max_open_files > 1000000) {
     return Status::InvalidArgument("DB::Open: max_open_files out of range",
                                    std::to_string(options.max_open_files));
+  }
+  // M5.1（docs/m5-design.md §5.6）：bloom_bits ∈ {0} ∪ [1,64]；0 = 关闭（对照实验必须显式传 0
+  // 并把该参数打印进结果文件头）。非法值在这里一次性拒绝，**不**写任何状态。
+  if (options.bloom_bits < 0 || options.bloom_bits > 64) {
+    return Status::InvalidArgument("DB::Open: bloom_bits must be within [0, 64]",
+                                   std::to_string(options.bloom_bits));
   }
   if (name.empty()) {
     *dbptr = new MemoryDBImpl(options, InternalKeyComparator(options.comparator));

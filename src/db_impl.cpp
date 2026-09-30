@@ -14,6 +14,7 @@
 #include "merging_iterator.h"
 #include "sstable/table_builder.h"
 #include "util/coding.h"
+#include "write_batch.h"
 
 namespace lsm {
 namespace {
@@ -55,6 +56,32 @@ struct BatchEntry {
   std::string value;
 };
 
+// M5.2：解一条 entry（§9.4 / §13.1 的 entry 编码）。成功时 input 前进，失败时**不修改** input。
+// 单条写路径（Pending::entries）与 WAL 恢复路径（ParseBatch）共用这一份实现，避免两处口径漂移。
+bool ParseOneEntry(Slice* input, BatchEntry* e) {
+  Slice in = *input;
+  if (in.empty()) return false;
+  const uint8_t t = static_cast<uint8_t>(in[0]);
+  in = Slice(in.data() + 1, in.size() - 1);
+  if (t != kTypeValue && t != kTypeDeletion) return false;
+  e->type = static_cast<ValueType>(t);
+  uint32_t klen = 0;
+  if (!GetVarint32(&in, &klen) || klen == 0 || klen > kMaxUserKeySize || klen > in.size()) {
+    return false;
+  }
+  e->key.assign(in.data(), klen);
+  in = Slice(in.data() + klen, in.size() - klen);
+  e->value.clear();
+  if (e->type == kTypeValue) {
+    uint32_t vlen = 0;
+    if (!GetVarint32(&in, &vlen) || vlen > in.size()) return false;
+    e->value.assign(in.data(), vlen);
+    in = Slice(in.data() + vlen, in.size() - vlen);
+  }
+  *input = in;
+  return true;
+}
+
 // §9.4 的解析：必须**恰好消费完** payload，count 条解完还有剩余字节即损坏
 bool ParseBatch(const Slice& payload, SequenceNumber* seq, std::vector<BatchEntry>* entries,
                 std::string* why) {
@@ -81,28 +108,9 @@ bool ParseBatch(const Slice& payload, SequenceNumber* seq, std::vector<BatchEntr
       return false;
     }
     BatchEntry e;
-    const uint8_t t = static_cast<uint8_t>(input[0]);
-    input = Slice(input.data() + 1, input.size() - 1);
-    if (t != kTypeValue && t != kTypeDeletion) {
-      *why = "entry type 非法：" + std::to_string(static_cast<int>(t));
+    if (!ParseOneEntry(&input, &e)) {
+      *why = "entry " + std::to_string(i) + " 解析失败（type / key_len / value_len 非法）";
       return false;
-    }
-    e.type = static_cast<ValueType>(t);
-    uint32_t klen = 0;
-    if (!GetVarint32(&input, &klen) || klen == 0 || klen > kMaxUserKeySize || klen > input.size()) {
-      *why = "key_len 非法";
-      return false;
-    }
-    e.key.assign(input.data(), klen);
-    input = Slice(input.data() + klen, input.size() - klen);
-    if (e.type == kTypeValue) {
-      uint32_t vlen = 0;
-      if (!GetVarint32(&input, &vlen) || vlen > input.size()) {
-        *why = "value_len 非法";
-        return false;
-      }
-      e.value.assign(input.data(), vlen);
-      input = Slice(input.data() + vlen, input.size() - vlen);
     }
     entries->push_back(std::move(e));
   }
@@ -143,34 +151,18 @@ PersistentDBImpl::~PersistentDBImpl() {
   if (!closed_) Close();
 }
 
-Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, const Slice& key,
-                              const Slice& value) {
-  if (key.empty()) return Status::InvalidArgument("Put/Delete: empty user key");
-  if (key.size() > kMaxUserKeySize) {
-    return Status::InvalidArgument("Put/Delete: user key too large", std::to_string(key.size()));
+Status PersistentDBImpl::SubmitPending(Pending* w) {
+  // 评审优化项（M2 起的既有语义，逐字保留）：超过 WAL 单条 record 上限的输入必须在**入队之前**
+  // 拒绝。否则批次会被接受、Append 返回 kInvalidArgument、RunFlusher 把它当持久化失败写进
+  // bg_error_ ⇒ 整个库转粘性写只读（连 Close 都返回错误）。输入校验不该触发 fail-stop。
+  if (w->entry_bytes + 16 > kMaxLogicalRecordSize) {
+    return Status::InvalidArgument("Put/Delete: record exceeds kMaxLogicalRecordSize",
+                                   std::to_string(w->entry_bytes + 16));
   }
 
-    // ---- M2.3 组提交（design §6.3）----
+  // ---- M2.3 组提交（design §6.3）----
   // 每个写者入队后等待被结算；队首当选 flusher，把一批写者的条目**合并成一条 WAL record**
   // （一条 record = 一个 CRC = 一个原子单位，I15），并替整批做一次 fsync。
-  Pending w;
-  w.need_sync = options.sync;
-  w.type = type;
-  w.key.assign(key.data(), key.size());
-  w.value.assign(value.data(), value.size());
-  w.entry_bytes = 1 + static_cast<size_t>(VarintLength(w.key.size())) + w.key.size() +
-                  (type == kTypeValue
-                       ? static_cast<size_t>(VarintLength(w.value.size())) + w.value.size()
-                       : 0);
-
-  // 评审优化项：超过 WAL 单条 record 上限的输入必须在**入队之前**拒绝。
-  // 否则批次会被接受、Append 返回 kInvalidArgument、RunFlusher 把它当持久化失败写进
-  // bg_error_ ⇒ 整个库转粘性写只读（连 Close 都返回错误）。输入校验不该触发 fail-stop。
-  if (w.entry_bytes + 16 > kMaxLogicalRecordSize) {
-    return Status::InvalidArgument("Put/Delete: record exceeds kMaxLogicalRecordSize",
-                                   std::to_string(w.entry_bytes + 16));
-  }
-
   std::unique_lock<std::mutex> l(commit_mu_);
   {
     // L11/A31：**入队前**就拒绝关闭后的新写。若只在 RunFlusher 里判 closed_，
@@ -183,12 +175,12 @@ Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, cons
     if (!bg_error_.ok()) return bg_error_;   // 粘性 fail-stop（D11）
     if (closed_) return Status::IOError("Put/Delete: DB is closed", dbname_);
   }
-  queue_.push_back(&w);
-  while (!w.done) {
+  queue_.push_back(w);
+  while (!w->done) {
     // 谓词必须同时覆盖「我已经完成」与「**我能否接手当 flusher**」——只等"完成"会让最后一个写者
     // 睡满超时后才能当 flusher（raft-kv 的 P2a 丢唤醒复盘，L9/L10）。这里用 while + 无谓词 wait
     // 重查，语义等价且不会丢唤醒。
-    if (!flusher_active_ && queue_.front() == &w) {
+    if (!flusher_active_ && queue_.front() == w) {
       flusher_active_ = true;
       l.unlock();
       const Status s = RunFlusher();
@@ -197,12 +189,60 @@ Status PersistentDBImpl::Write(ValueType type, const WriteOptions& options, cons
       // 紧接着唤醒新队首。顺序不可交换：先清标志会让下一批与本次收尾并发，多出一次排队中的 fsync。
       flusher_active_ = false;
       commit_cv_.notify_all();   // 交接（L10）；用 notify_all 是因为 Close() 也在这把 cv 上等
-      if (!s.ok() && !w.done) return s;
+      if (!s.ok() && !w->done) return s;
       continue;
     }
     commit_cv_.wait(l);
   }
-  return w.status;
+  return w->status;
+}
+
+Status PersistentDBImpl::WriteEntry(ValueType type, const WriteOptions& options, const Slice& key,
+                                    const Slice& value) {
+  if (key.empty()) return Status::InvalidArgument("Put/Delete: empty user key");
+  if (key.size() > kMaxUserKeySize) {
+    return Status::InvalidArgument("Put/Delete: user key too large", std::to_string(key.size()));
+  }
+  // M5.2（§5.3）：Pending 统一承载「entry 编码串」；单条写就是 entry_count == 1 的特例，
+  // 编码口径与 M2/M4 落地实现逐字相同（1B type + varint + key [+ varint + value]）。
+  Pending w;
+  w.need_sync = options.sync;
+  w.entry_count = 1;
+  w.user_bytes = key.size() + (type == kTypeValue ? value.size() : 0);
+  w.entries.reserve(1 + 10 + key.size() + (type == kTypeValue ? 10 + value.size() : 0));
+  w.entries.push_back(static_cast<char>(type));
+  PutVarint32(&w.entries, static_cast<uint32_t>(key.size()));
+  w.entries.append(key.data(), key.size());
+  if (type == kTypeValue) {
+    PutVarint32(&w.entries, static_cast<uint32_t>(value.size()));
+    w.entries.append(value.data(), value.size());
+  }
+  w.entry_bytes = w.entries.size();
+  return SubmitPending(&w);
+}
+
+Status PersistentDBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
+  if (updates == nullptr) {
+    return Status::InvalidArgument("Write: null WriteBatch");
+  }
+  // §5.4 第 1 步：**入队前**的无副作用预校验。任何失败都不得写 WAL、不得碰内存、
+  // 不得触发 fail-stop（bg_error_ 粘性会让整库转只读）。
+  uint32_t count = 0;
+  size_t entry_bytes = 0;
+  uint64_t user_bytes = 0;
+  const Status vs = updates->Validate(&count, &entry_bytes, &user_bytes);
+  if (!vs.ok()) return vs;
+
+  const Slice data = updates->Data();
+  Pending w;
+  w.need_sync = options.sync;
+  w.entry_count = count;
+  w.entry_bytes = entry_bytes;
+  w.user_bytes = user_bytes;
+  // entries = batch_payload 去掉 12B 头；EncodeGroup 只补 12B 头（§13.2：一个 WriteBatch 的
+  // entry 在 payload 内保持连续且顺序不变）。
+  w.entries.assign(data.data() + WriteBatch::kHeaderSize, data.size() - WriteBatch::kHeaderSize);
+  return SubmitPending(&w);
 }
 
 namespace {
@@ -227,19 +267,14 @@ class ScopedFileLock {
 
 std::string PersistentDBImpl::EncodeGroup(SequenceNumber begin,
                                           const std::vector<Pending*>& members) {
-  // §9.4 的 batch 编码：sequence(8B LE) || count(4B LE) || entry[0..count)
+  // §9.4 / §13.2 的 batch 编码：sequence(8B LE) || count(4B LE) || entry[0..count)
+  // M5.2：count = 组内**所有 entry** 的总数（不再等于写者数）；每个成员的 entries 连续且有序。
+  uint32_t total_count = 0;
+  for (const Pending* p : members) total_count += p->entry_count;
   std::string out;
   PutFixed64(&out, begin);
-  PutFixed32(&out, static_cast<uint32_t>(members.size()));
-  for (const Pending* p : members) {
-    out.push_back(static_cast<char>(p->type));
-    PutVarint32(&out, static_cast<uint32_t>(p->key.size()));
-    out.append(p->key);
-    if (p->type == kTypeValue) {
-      PutVarint32(&out, static_cast<uint32_t>(p->value.size()));
-      out.append(p->value);
-    }
-  }
+  PutFixed32(&out, total_count);
+  for (const Pending* p : members) out.append(p->entries);
   return out;
 }
 
@@ -260,6 +295,9 @@ Status PersistentDBImpl::RunFlusher() {
   std::vector<Pending*> members;
   bool need_sync = false;
   SequenceNumber begin = 0;
+  // M5.2：本批覆盖的 **entry 总数**（= Σ p->entry_count）。phase C 的 durable 水位与
+  // log_last_appended_seq 必须用它，而不是写者数（M5-A14 实测的 I52/I54 回归）。
+  uint32_t total_count = 0;
   Status reject;
 
   // 取批**之前**的观察点：此处不持锁，其他写者仍可入队（A20 的确定性屏障）
@@ -283,18 +321,26 @@ Status PersistentDBImpl::RunFlusher() {
           (members.size() >= kMaxGroupRecs || bytes + p->entry_bytes > kMaxGroupBytes)) {
         break;                                             // 单个超大 value 会独占一批，不饿死别人
       }
-      p->begin = begin + static_cast<SequenceNumber>(members.size());
+      // M5.2（I52）：sequence 按 **entry** 数推进，不再是「按写者数」。
+      p->begin = begin + static_cast<SequenceNumber>(total_count);
       members.push_back(p);
       bytes += p->entry_bytes;
+      total_count += p->entry_count;
       need_sync = need_sync || p->need_sync;               // D3：sync 取组内 OR（优于 LevelDB 只看队首）
     }
     for (size_t i = 0; i < members.size(); ++i) queue_.pop_front();
+    // §5.4 第 2 步：容量预检的 footprint 按 entry 数折算节点开销（entry_count == 1 时与 M4.3 逐字相同）。
     size_t footprint = 0;
-    for (const Pending* p : members) footprint += p->entry_bytes + kMemTableNodeOverhead;
+    for (const Pending* p : members) {
+      footprint += p->entry_bytes + static_cast<size_t>(p->entry_count) * kMemTableNodeOverhead;
+    }
     if (closed_) {
       reject = Status::IOError("Put/Delete: DB is closed", dbname_);
     } else if (!bg_error_.ok()) {
       reject = bg_error_;
+    } else if (begin + static_cast<SequenceNumber>(total_count) - 1 > kMaxSequenceNumber) {
+      // §5.3：sequence 空间耗尽 ⇒ 整批拒绝（kInvalidArgument），**不写 WAL、不碰内存**。
+      reject = Status::InvalidArgument("RunFlusher", "sequence space exhausted");
     } else {
       // §6.2：容量不足**不再**是写的失败原因。冻结在锁内、纯内存；旧表进 immutables_ 时
       // **保留它自己的 log_number**（§6.6.2），新表容量由 NewTableCapacity 保证本批不可能 kFrozen。
@@ -365,17 +411,22 @@ Status PersistentDBImpl::RunFlusher() {
     std::lock_guard<std::mutex> ql(commit_mu_);
     DbMutexGuard ml(mutex_);
     begin = last_sequence_ + 1;
-    for (size_t i = 0; i < members.size(); ++i) {
-      members[i]->begin = begin + static_cast<SequenceNumber>(i);
+    // M5.2（I52）：组内 sequence 按 entry 连续分配；一个 WriteBatch 的第 j 条 = p->begin + j。
+    uint32_t offset = 0;
+    for (Pending* p : members) {
+      p->begin = begin + static_cast<SequenceNumber>(offset);
+      offset += p->entry_count;
     }
-    last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+    last_sequence_ = begin + static_cast<SequenceNumber>(offset) - 1;
     if (snapshots_.empty()) smallest_snapshot_ = last_sequence_;
     // M4.3：写放大分子（user_logical）与前台延迟样本（FRONT 行）。
+    // M5.2：口径按 **entry** 计；单条写时（entry_count == 1、user_bytes == key+value）
+    // 与 M4.3 的落地公式逐字相同，既有 AMPL 数字不变。
     for (const Pending* p : members) {
-      user_logical_bytes_ += p->key.size() + p->value.size();
-      entry_bytes_ += p->key.size() + p->value.size() + 16;
+      user_logical_bytes_ += p->user_bytes;
+      entry_bytes_ += p->user_bytes + 16ull * static_cast<uint64_t>(p->entry_count);
     }
-    put_ops_ += members.size();
+    put_ops_ += offset;
     front_samples_us_.push_back(EnvOf()->NowMicros() - batch_t0);
     if (front_samples_us_.size() > 20000) front_samples_us_.erase(front_samples_us_.begin());
     payload = EncodeGroup(begin, members);
@@ -387,7 +438,7 @@ Status PersistentDBImpl::RunFlusher() {
     // I32 修复：Append 返回 kOk 即字节已交给文件（fsync 只决定是否落到介质），所以这个边界
     // 只取决于 Append 的结果，与本次是否 fsync 无关。
     DbMutexGuard ml(mutex_);
-    log_last_appended_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+    log_last_appended_seq_ = begin + static_cast<SequenceNumber>(total_count) - 1;
   }
   if (s.ok() && need_sync) s = log_->Sync();
   if (s.ok()) {
@@ -397,7 +448,7 @@ Status PersistentDBImpl::RunFlusher() {
     // w.status.ok() ⟹ durable_seq_ >= w.end_seq）。原来无条件推进，会让只写不 fsync 的批
     // 也把水位抬高，这条推理链就断了（M3 若拿它当 durable 水位会被误导）。
     if (need_sync) {
-      durable_seq_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+      durable_seq_ = begin + static_cast<SequenceNumber>(total_count) - 1;
     }
   } else {
     DbMutexGuard ml(mutex_);
@@ -407,12 +458,26 @@ Status PersistentDBImpl::RunFlusher() {
   if (s.ok()) {
     DbMutexGuard ml(mutex_);
     for (Pending* p : members) {
-      const Status a = memtable_->Add(p->begin, p->type, p->key, p->value);
-      if (!a.ok()) {
-        bg_error_ = a;
-        s = a;
-        break;
+      // §5.4 第 3~4 步：容量预检已在取批时用 footprint 做过，逐条 Add 不可能触顶（kFrozen）。
+      // entries 已在入队前由 WriteBatch::Validate 校验过，这里的解析不会失败（失败即 bg_error_）。
+      Slice input(p->entries);
+      for (uint32_t j = 0; j < p->entry_count; ++j) {
+        BatchEntry e;
+        if (!ParseOneEntry(&input, &e)) {
+          const Status bad = Status::Corruption("RunFlusher", "batch entry 解析失败");
+          bg_error_ = bad;
+          s = bad;
+          break;
+        }
+        const Status a =
+            memtable_->Add(p->begin + static_cast<SequenceNumber>(j), e.type, e.key, e.value);
+        if (!a.ok()) {
+          bg_error_ = a;
+          s = a;
+          break;
+        }
       }
+      if (!s.ok()) break;
     }
   }
 
@@ -428,11 +493,11 @@ Status PersistentDBImpl::RunFlusher() {
 }
 
 Status PersistentDBImpl::Put(const WriteOptions& options, const Slice& key, const Slice& value) {
-  return Write(kTypeValue, options, key, value);
+  return WriteEntry(kTypeValue, options, key, value);
 }
 
 Status PersistentDBImpl::Delete(const WriteOptions& options, const Slice& key) {
-  return Write(kTypeDeletion, options, key, Slice());
+  return WriteEntry(kTypeDeletion, options, key, Slice());
 }
 
 Status PersistentDBImpl::Get(const Slice& key, std::string* value) {
@@ -543,6 +608,16 @@ Status PersistentDBImpl::GetInternal(const Slice& key, SequenceNumber snapshot,
         delta->bytes_read += tstats.bytes_read;
         delta->crc_checked += tstats.crc_checked;
         delta->crc_failed += tstats.crc_failed;
+        // M5.1（§3.6/L34）：filter 的 8 个计数从**线程局部**的 tstats 汇总进本次 Get 的 delta；
+        // delta 在 Get 尾部经 MergeReadStats 在 mutex_ 下累加 ⇒ 读路径无共享自增。
+        delta->filter_checked += tstats.filter_checked;
+        delta->filter_negative += tstats.filter_negative;
+        delta->filter_positive += tstats.filter_positive;
+        delta->filter_unavailable += tstats.filter_unavailable;
+        delta->filter_blocks_read += tstats.filter_blocks_read;
+        delta->filter_bytes_read += tstats.filter_bytes_read;
+        delta->data_blocks_skipped_by_filter += tstats.data_blocks_skipped_by_filter;
+        delta->filter_corrupt += tstats.filter_corrupt;
         if (!fs.ok()) return fs;
         if (tr == TableGetResult::kFound) {
           *value = std::move(file_value);
@@ -573,6 +648,15 @@ void PersistentDBImpl::MergeReadStats(const DbReadStats& delta) {
   read_stats_.bytes_read += delta.bytes_read;
   read_stats_.crc_checked += delta.crc_checked;
   read_stats_.crc_failed += delta.crc_failed;
+  // M5.1（L34）：filter 计数在线程局部 delta 里累好后，只在这里（持 mutex_）落进全局 read_stats_。
+  read_stats_.filter_checked += delta.filter_checked;
+  read_stats_.filter_negative += delta.filter_negative;
+  read_stats_.filter_positive += delta.filter_positive;
+  read_stats_.filter_unavailable += delta.filter_unavailable;
+  read_stats_.filter_blocks_read += delta.filter_blocks_read;
+  read_stats_.filter_bytes_read += delta.filter_bytes_read;
+  read_stats_.data_blocks_skipped_by_filter += delta.data_blocks_skipped_by_filter;
+  read_stats_.filter_corrupt += delta.filter_corrupt;
   last_hit_layer_ = delta.hit_layer;
 }
 

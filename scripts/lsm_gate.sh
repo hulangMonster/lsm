@@ -15,18 +15,21 @@
 #   --with-tsan    额外跑 TSan（默认关闭：全量在 TSan 下约 6 分钟）
 #   --no-asan      跳过 ASan
 #   --require-m3   要求 M3 的腿**必须存在且通过**（缺一即 FAIL）；默认缺失记为 SKIP
+#   --require-m5   要求 M5 的腿**必须存在且通过**（缺一即 FAIL）；默认缺失记为 SKIP（M5.1 追加）
 set -u
 cd "$(dirname "$0")/.."
 ROUNDS=100
 WITH_TSAN=0
 WITH_ASAN=1
 REQUIRE_M3=0
+REQUIRE_M5=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --rounds) ROUNDS="$2"; shift 2;;
     --with-tsan) WITH_TSAN=1; shift;;
     --no-asan) WITH_ASAN=0; shift;;
     --require-m3) REQUIRE_M3=1; shift;;
+    --require-m5) REQUIRE_M5=1; shift;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -101,7 +104,28 @@ run_gate_m3_marked() {
   run_gate_marked "$name" "$marker" bash "$script" "$@"
 }
 
-echo "== lsm_gate: rounds=$ROUNDS asan=$WITH_ASAN tsan=$WITH_TSAN require_m3=$REQUIRE_M3 log=$LOG =="
+# M5 的腿（M5.1 追加）：与 run_gate_m3_marked 同形 —— 脚本缺失时默认记 SKIP（绝不静默变绿），
+# 加 --require-m5 时记 FAIL。**既有 M2/M3/M4 的 18 条腿一行未动。**
+run_gate_m5_marked() {
+  local name="$1"; local script="$2"; local marker="$3"; shift 3
+  if [ ! -f "$script" ]; then
+    if [ "$REQUIRE_M5" = "1" ]; then
+      RESULTS+=("FAIL  $name（缺 $script）")
+      FAILED=1
+      echo "=== [gate] $name ===
+--- [FAIL] $name：$script 不存在（--require-m5 要求必须存在）"
+    else
+      RESULTS+=("SKIP  $name（$script 尚未交付）")
+      SKIPPED=$((SKIPPED + 1))
+      echo "=== [gate] $name ===
+--- [SKIP] $name：$script 尚未交付；加 --require-m5 可把它变成硬失败"
+    fi
+    return
+  fi
+  run_gate_marked "$name" "$marker" bash "$script" "$@"
+}
+
+echo "== lsm_gate: rounds=$ROUNDS asan=$WITH_ASAN tsan=$WITH_TSAN require_m3=$REQUIRE_M3 require_m5=$REQUIRE_M5 log=$LOG =="
 
 # ---------------- M2 腿（不得退化；全部改为"退出码 + 正向标记"） ----------------
 run_gate_marked "干净重建 + 0 warning + 全量用例" '\[  PASSED  \] [1-9][0-9]* tests' bash scripts/lsm_build.sh
@@ -162,6 +186,23 @@ run_gate_m3_marked "M4-B01 compaction 中途 kill -9 对账" scripts/lsm_compact
 run_gate_m3_marked "M4-B02 四注入点 raise(SIGKILL) 对账" scripts/lsm_compaction_crash_test.sh \
   'INJECT_POINTS_OK 4@@MISSING_TOTAL 0@@REF_MISSING_TOTAL 0@@OPEN_CORRUPTION_TOTAL 0@@\[COMPACTION_INJECT_OK\]' --mode b02
 
+# ---------------- M5 腿（docs/m5-design.md §7.5 / §10.3；M5.1 追加）----------------
+# M5.1：Bloom filter + filter block + metaindex + 读路径否定 + 计数器 + 单字节翻转扫描。
+# 标记全部取自 run_gate_m5_marked 的**收尾汇总行**（AND 语义），且含正向计数（M5_TESTS_RAN）防空绿。
+run_gate_m5_marked "M5-B11 filter 单元 + 块读下降 + 零假阴性 + 依赖纪律" scripts/lsm_m5_unit_test.sh \
+  'M5_TESTS_FAILED 0@@M5_FILTER_RAN [1-9][0-9]*@@M5_FILTER_FALSE_NEGATIVE 0@@M5_FILTER_SILENT_FALSE_NEGATIVE 0@@M5_FILTER_BLOCK_READS_WITHOUT [1-9][0-9]*@@M5_FILTER_BLOCKS_SKIPPED [1-9][0-9]*@@M5_FILTER_DAMAGE_CASES [1-9][0-9]*@@M5_FILTER_DAMAGE_FILTER_DEGRADED [1-9][0-9]*@@LSM_SSTABLE_FORBIDDEN 0@@\[FILTER_OK\]@@\[FILTER_DAMAGE_OK\]'
+
+# M5.2（docs/m5-design.md §11 M5.2 / §10.1 的 M5-A11~A17）：
+# WriteBatch 编码 + 批提交 + WAL 一次写 + 崩溃原子性 + 依赖纪律。
+run_gate_m5_marked "M5-B12 WriteBatch 单元 + 整批原子 + WAL 一次写 + 依赖纪律" scripts/lsm_batch_unit_test.sh \
+  'M5_BATCH_TESTS_FAILED 0@@M5_BATCH_TESTS_RAN [1-9][0-9]*@@M5_BATCH_PARTIAL_VISIBLE 0@@M5_BATCH_HALF_VISIBLE 0@@M5_BATCH_CRASH_HALF_VISIBLE 0@@M5_BATCH_LOST_WAKEUPS 0@@M5_BATCH_ONE_RECORD_PER_BATCH 1@@M5_BATCH_TRUNCATE_CASES [1-9][0-9]*@@M5_BATCH_CONCURRENT_WRITERS [1-9][0-9]*@@M5_BATCH_GROUP_FSYNCS [1-9][0-9]*@@M5_BATCH_RECOVERY_RECORDS [1-9][0-9]*@@LSM_BATCH_FORBIDDEN 0@@\[BATCH_OK\]'
+
+# M5-B01（docs/m5-design.md §10.2）：kill -9 落在批写入中途 —— 已 ack 的批不得丢、不得出现半批。
+# 只证明**进程级**一致性（kill -9 不丢 page cache）；掉电语义由 M5-B12 的 MemEnv 用例承担。
+run_gate_m5_marked "M5-B01 批崩溃对账（kill -9 批写入中途）" scripts/lsm_batch_crash_test.sh \
+  'BATCH_KILL9_MISSING 0@@BATCH_MISMATCH 0@@BATCH_HALF_VISIBLE 0@@BATCH_KILL9_ROUNDS [1-9][0-9]*@@BATCH_ACKED [1-9][0-9]*@@BATCHES_SEEN [1-9][0-9]*@@\[BATCH_CRASH_OK\]' \
+  --rounds "$ROUNDS" --batch-size 16 --write-buffer-size 262144
+
 echo
 echo "==== lsm_gate 汇总 ===="
 for line in "${RESULTS[@]}"; do echo "$line"; done
@@ -170,7 +211,7 @@ if [ "$FAILED" -ne 0 ]; then
   exit 1
 fi
 if [ "$SKIPPED" -ne 0 ]; then
-  echo "[PARTIAL] 全部已运行的腿通过，但有 $SKIPPED 条 M3 腿因脚本未交付被跳过（未验证，不是通过）"
+  echo "[PARTIAL] 全部已运行的腿通过，但有 $SKIPPED 条 M3/M5 腿因脚本未交付被跳过（未验证，不是通过）"
   exit 0
 fi
 echo "[OK] 全部门禁通过"

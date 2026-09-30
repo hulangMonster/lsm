@@ -1,7 +1,9 @@
-// src/sstable/table.cpp —— 只读 SSTable 的打开、块读取、Get 与迭代（M3.1）
+// src/sstable/table.cpp —— 只读 SSTable 的打开、块读取、Get 与迭代（M3.1；M5.1 追加 filter）
 //
 // 契约：docs/m3-design.md §3.3/§3.4/§3.5/§3.6/§3.7、§5.4 的块读取 5 步与 Get 路径。
-// 用例编号（§10.1）：M3-A08 后 3 行、M3-A09~A19。
+//       docs/m5-design.md §3.4（metaindex 注册与版本兼容）、§3.6（ReadStats 追加）、
+//       §3.7（读路径接入与降级规则；②.5 是**唯一**允许的否定判断点）、E3（filter CRC 始终校验）。
+// 用例编号（§10.1）：M3-A08 后 3 行、M3-A09~A19；M5-A04/A05/A06/A07/A08/A09。
 //
 // 关键判据（写死，评审逐条核对）：
 //   * 读多少字节**只**看 handle.size；块内 length 只用于"必须等于 handle.size-9"的自检
@@ -9,9 +11,13 @@
 //   * type 必须等于调用方期望的类型，否则 kCorruption（I25 / M3-A16）。
 //   * 关掉 verify_checksums 只跳过 payload CRC；length/length 上界/type/结构校验**永不跳过**（A15）。
 //   * §3.5 的越界/顺序/紧贴 footer 约束在 Open 时逐条检查（M3-A08 后 3 行）。
+//   * **M5.1**：filter 的任何结构/CRC 问题都**不**让 Open 失败；只把 filter_state 置 kCorrupt 降级（I49/§3.7）。
+//   * **M5.1**：filter 的「肯定」结论**不得**跳过 step ③~⑥ 的任何读取或校验（I49）。
+//   * **M5.1**：filter 块 CRC **始终**校验（E3），不受 Options::verify_checksums 影响。
 #include "sstable/table.h"
 
 #include <algorithm>
+#include <cstring>
 #include <utility>
 
 #include "util/coding.h"
@@ -48,13 +54,19 @@ Status ReadExactFile(Env* env, const std::string& filename, uint64_t offset, siz
   return Status::OK();
 }
 
+// M5.1：metaindex 里 filter 条目的名字比对（§3.4/protocol §12.1）。
+bool IsBuiltinBloomFilterName(const Slice& name) {
+  const size_t n = std::strlen(kBuiltinBloomFilterName);
+  return name.size() == n && std::memcmp(name.data(), kBuiltinBloomFilterName, n) == 0;
+}
+
 }  // namespace
 
 Table::~Table() = default;
 
 Status Table::Open(const TableOptions& options, Env* env, const std::string& filename,
                    std::shared_ptr<Table>* out, const std::string* known_smallest,
-                   const std::string* known_largest) {
+                   const std::string* known_largest, ReadStats* open_stats) {
   if (env == nullptr || out == nullptr) {
     return Status::InvalidArgument("Table::Open", "null env or null out");
   }
@@ -98,11 +110,15 @@ Status Table::Open(const TableOptions& options, Env* env, const std::string& fil
   t->footer_ = footer;
 
   // ② metaindex（§3.4）：M3 为空块；未知条目只记录并计数，**不报错**。
+  //    M5.1：已知 name（filter.leveldb.BuiltinBloomFilter2）在这里被**识别**（不再计 unknown）。
   std::string meta_payload;
   s = t->ReadBlock(footer.metaindex_handle, kBlockTypeMetaIndex, &meta_payload, nullptr);
   if (!s.ok()) return s;
   s = t->ParseMetaIndexBlock(Slice(meta_payload));
   if (!s.ok()) return s;
+
+  // ②.5 M5.1：读 filter 块并构造只读 reader。**任何失败都只降级**（M5:35/I49），不返回错误。
+  t->LoadFilterBlock(open_stats);
 
   // ③ index（§3.3）：索引已在内存 ⇒ 后续 Get 的定位零 IO。
   std::string index_payload;
@@ -140,12 +156,61 @@ Status Table::Open(const TableOptions& options, Env* env, const std::string& fil
   return Status::OK();
 }
 
+void Table::LoadFilterBlock(ReadStats* open_stats) {
+  const auto mark_corrupt = [&]() {
+    filter_state_ = FilterState::kCorrupt;
+    filter_.reset();
+    filter_payload_bytes_ = 0;
+    if (open_stats != nullptr) ++open_stats->filter_corrupt;
+  };
+
+  // metaindex 里同名重复注册 ⇒ 已在 ParseMetaIndexBlock 里记为 kCorrupt。
+  if (filter_state_ == FilterState::kCorrupt) {
+    mark_corrupt();
+    return;
+  }
+  if (!has_filter_handle_) {
+    filter_state_ = FilterState::kAbsent;
+    return;
+  }
+  filter_state_ = FilterState::kAbsent;   // 先假定失败；成功路径会改成 kOk
+
+  // §3.1 的 M5 追加布局校验：filter.offset + filter.size <= metaindex.offset。
+  if (filter_handle_.offset > footer_.metaindex_handle.offset ||
+      filter_handle_.size > footer_.metaindex_handle.offset - filter_handle_.offset) {
+    mark_corrupt();
+    return;
+  }
+
+  // E3：filter 块 CRC **始终**校验（不受 Options::verify_checksums 影响）。
+  std::string payload;
+  if (!ReadBlockImpl(filter_handle_, kBlockTypeFilter, &payload, nullptr, true).ok()) {
+    mark_corrupt();
+    return;
+  }
+
+  std::unique_ptr<FilterBlockReader> reader(new FilterBlockReader(Slice(payload)));
+  if (!reader->valid()) {
+    mark_corrupt();
+    return;
+  }
+
+  filter_payload_bytes_ = payload.size();
+  filter_ = std::move(reader);
+  filter_state_ = FilterState::kOk;
+  if (open_stats != nullptr) {
+    ++open_stats->filter_blocks_read;
+    open_stats->filter_bytes_read += filter_payload_bytes_;
+  }
+}
+
 Status Table::ParseMetaIndexBlock(const Slice& payload) {
   std::unique_ptr<BlockReader> reader;
   Status s = BlockReader::Open(payload, &reader, &icmp_);
   if (!s.ok()) return s;
   for (s = reader->SeekToFirst(); reader->Valid(); s = reader->Next()) {
     if (!s.ok()) return s;
+    const Slice name = reader->key();
     const Slice handle_bytes = reader->value();
     if (handle_bytes.size() != kBlockHandleEncodedLength) {
       return Status::Corruption("Table::ParseMetaIndexBlock", "meta handle must be 16 bytes");
@@ -154,9 +219,23 @@ Status Table::ParseMetaIndexBlock(const Slice& payload) {
     size_t consumed = 0;
     const Status hs = handle.DecodeFrom(handle_bytes, &consumed);
     if (!hs.ok()) return hs;
-    // M3 没有任何已知名字；M5 的 filter 名字对 M3 reader 也是"未知"。§3.4 要求只计数不报错。
+
+    // M5.1（§3.4）：唯一已知的 name 是内置 Bloom filter；**最多一条**，重复 ⇒ filter 降级为 kCorrupt。
+    if (IsBuiltinBloomFilterName(name)) {
+      if (filter_handle_seen_) {
+        filter_state_ = FilterState::kCorrupt;
+        has_filter_handle_ = false;
+      } else {
+        filter_handle_seen_ = true;
+        filter_handle_ = handle;
+        has_filter_handle_ = true;
+      }
+      continue;
+    }
+
+    // M3 没有任何已知名字；M5 的其它名字对 M3 reader 也是"未知"。§3.4 要求只计数不报错。
     ++unknown_metaindex_entries_;
-    unknown_metaindex_names_.push_back(reader->key().ToString());
+    unknown_metaindex_names_.push_back(name.ToString());
   }
   return s;
 }
@@ -198,6 +277,11 @@ Status Table::ReadAt(uint64_t offset, size_t n, std::string* out) const {
 
 Status Table::ReadBlock(const BlockHandle& handle, BlockType expected, std::string* payload,
                         ReadStats* stats) const {
+  return ReadBlockImpl(handle, expected, payload, stats, options_.verify_checksums);
+}
+
+Status Table::ReadBlockImpl(const BlockHandle& handle, BlockType expected, std::string* payload,
+                            ReadStats* stats, bool verify_crc) const {
   if (payload == nullptr) return Status::InvalidArgument("Table::ReadBlock", "null payload");
   payload->clear();
   if (handle.size < kBlockOverhead + kBlockMinPayload) {
@@ -216,6 +300,11 @@ Status Table::ReadBlock(const BlockHandle& handle, BlockType expected, std::stri
   if (stats != nullptr) {
     ++stats->blocks_read;
     stats->bytes_read += handle.size;
+    // M5.1 修复（登记于报告）：`ReadStats::data_blocks_read` 在 M3/M4 里**从未被递增**
+    // （`docs/amplification.md` 的 `read_data_blocks_read=0` 是直接证据），而 M5 的 §3.8 门禁
+    // 明确定义在 `data_blocks_read` 上。这里在真正读到数据块时 +1，使该口径与 §3.6/D3:553 一致。
+    // 只影响诊断计数，不改变任何读结果或块校验语义。
+    if (expected == kBlockTypeData) ++stats->data_blocks_read;
   }
 
   const uint32_t length = DecodeFixed32(buf.data());
@@ -230,7 +319,7 @@ Status Table::ReadBlock(const BlockHandle& handle, BlockType expected, std::stri
   if (type != static_cast<uint8_t>(expected)) {
     return Status::Corruption("Table::ReadBlock", "block type mismatch");
   }
-  if (options_.verify_checksums) {
+  if (verify_crc) {
     if (stats != nullptr) ++stats->crc_checked;
     const uint32_t stored = DecodeFixed32(buf.data() + buf.size() - kBlockTrailerSize);
     const uint32_t actual = crc32c::Value(buf.data(), buf.size() - kBlockTrailerSize);
@@ -245,6 +334,25 @@ Status Table::ReadBlock(const BlockHandle& handle, BlockType expected, std::stri
 
   *payload = buf.substr(kBlockHeaderSize, static_cast<size_t>(length));
   return Status::OK();
+}
+
+bool Table::KeyMayMatch(uint64_t block_offset, const Slice& user_key, ReadStats* stats) const {
+  if (filter_state_ != FilterState::kOk || filter_ == nullptr) {
+    // §3.7 硬规则 3：kAbsent / kCorrupt ⇒ 一律按「可能存在」处理，并计数（降级不静默）。
+    if (stats != nullptr) ++stats->filter_unavailable;
+    return true;
+  }
+  const bool maybe = filter_->KeyMayMatch(block_offset, user_key);
+  if (stats != nullptr) {
+    ++stats->filter_checked;
+    if (maybe) {
+      ++stats->filter_positive;
+    } else {
+      ++stats->filter_negative;
+      ++stats->data_blocks_skipped_by_filter;
+    }
+  }
+  return maybe;
 }
 
 Status Table::Get(const Slice& lookup_key, std::string* value, ReadStats* stats) const {
@@ -295,6 +403,14 @@ Status Table::GetEntry(const Slice& lookup_key, std::string* value, TableGetResu
       });
   if (it == index_entries_.end()) return Status::OK();
 
+  // ②.5 M5.1（§3.7）：filter 的**唯一**允许用途 —— 对「将要读的那个数据块」做否定判断。
+  //   false ⇒ 本文件一定没有该 user key ⇒ 只允许映射为 kNotFound（上层继续查更旧文件）。
+  //   true  ⇒ **必须**执行原有 step ③~⑥（I49：禁止用「肯定」跳过读取或校验）。
+  if (!KeyMayMatch(it->handle.offset, lookup_user, stats)) {
+    *result = TableGetResult::kNotFound;
+    return Status::OK();
+  }
+
   // ③ 一次数据块读（statistics 的唯一数据块来源）。
   std::string payload;
   Status s = ReadBlock(it->handle, kBlockTypeData, &payload, stats);
@@ -325,6 +441,9 @@ Status Table::GetEntry(const Slice& lookup_key, std::string* value, TableGetResu
 }
 
 // ============================ 迭代器（内部 key 视图） ============================
+//
+// M5.1 硬规则（§3.7 第 4 条）：**迭代器路径绝不使用 filter** —— 全量迭代必须读所有数据块。
+// 下面的 LoadBlock 直接走 ReadBlock(kBlockTypeData)，不经 KeyMayMatch。
 
 class Table::TableIterator : public Iterator {
  public:

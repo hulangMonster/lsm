@@ -6,6 +6,8 @@
 //   docs/m3-design.md §3.5（文件布局与顺序约束）、§3.6（handle.size 权威 + length 自检 + type 匹配）
 //   docs/m3-design.md §3.7（footer 44B 与失败矩阵）、§5.4（Open/Get 的块读取路径）
 //   docs/m3-design.md §10.1 的 M3-A08 后 3 行、M3-A09~M3-A19
+//   docs/m5-design.md §3.4/§3.6/§3.7（M5.1：metaindex 里的 filter name、读 filter、KeyMayMatch、
+//     GetEntry 的 step ②.5、ReadStats 追加列）、E3（filter 块 CRC 始终校验）、§4 §12（protocol 追加）
 //
 // 与设计的一处显式偏离（已登记，等待裁决）：
 //   §4/§405 要求 Options 增加 `block_size` / `verify_checksums`，但 §11.1 与本任务的文件许可
@@ -26,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include "bloom.h"
 #include "common.h"
 #include "sstable/block.h"
 #include "sstable/format.h"
@@ -49,6 +52,17 @@ struct ReadStats {
   uint64_t crc_checked = 0;          // 真正算过 CRC 的次数
   uint64_t crc_failed = 0;           // CRC 不匹配的次数
 
+  // ---- M5.1 追加（docs/m5-design.md §3.6 的 7 列 + §3.7/§10.1 M5-A08 要求的 filter_corrupt 计数）----
+  // 只追加、不改既有 8 列的语义（D-5）。
+  uint64_t filter_checked = 0;                  // KeyMayMatch 被调用的次数
+  uint64_t filter_negative = 0;                 // KeyMayMatch 返回 false 的次数
+  uint64_t filter_positive = 0;                 // KeyMayMatch 返回 true 的次数
+  uint64_t filter_unavailable = 0;              // 本文件没有可用 filter（kAbsent/kCorrupt）时按 true 处理的次数
+  uint64_t filter_blocks_read = 0;              // 读 filter 块的次数（只在 Table::Open 成功读到 filter 时 +1）
+  uint64_t filter_bytes_read = 0;               // filter payload 字节数
+  uint64_t data_blocks_skipped_by_filter = 0;   // 因 filter 否定而省掉的数据块读次数
+  uint64_t filter_corrupt = 0;                  // filter 存在但结构/CRC 不自洽、被迫禁用的文件数
+
   void Clear() { *this = ReadStats(); }
 };
 
@@ -66,6 +80,12 @@ enum class TableGetResult {
 // shared_from_this 持住 Table，所以 Table 必须用 std::shared_ptr 创建。
 class Table : public std::enable_shared_from_this<Table> {
  public:
+  // ---- M5.1（docs/m5-design.md §3.6/§3.7）----
+  // filter 的三态：kAbsent（metaindex 无该 name：M3/M4 旧文件，或 bloom_bits==0 的新文件）、
+  // kOk（读到且结构自洽）、kCorrupt（存在但 handle 越界 / 读块失败 / payload 不自洽 / 重复注册）。
+  // 三态在读路径上等价（都按「可能存在」处理）；分开只为可观测性，kAbsent 不等于损坏。
+  enum class FilterState { kAbsent, kOk, kCorrupt };
+
   // 打开：读末尾 44B footer → 校验（§3.7 失败矩阵）→ 读 metaindex → 读 index →
   // 读第一个数据块取最小 key（供 D8/A19 的零 IO key range 过滤）。
   // 失败：footer/块结构/CRC 问题 ⇒ kCorruption；version != 1 ⇒ kNotSupported；
@@ -74,14 +94,19 @@ class Table : public std::enable_shared_from_this<Table> {
   // （M3.2 的 Version/FileMetaData 已持有 TableBuilder 统计出的 internal key），
   // 从而跳过「预读第一个数据块取 smallest_」这一步（docs/m3-evidence §4 未闭合项 5）。
   // 传 nullptr（默认）保持 M3.1 行为：预读首块。空表可传两个非空但为空串的指针。
+  //
+  // M5.1 追加：open_stats（默认 nullptr）——传入时，成功读到 filter 块的次数/字节数与
+  // 「filter 存在但损坏」的文件数累加进来。**默认参数保证 M3/M4 既有调用零改动**（D-3）。
+  // 注意：filter 的任何结构/CRC 问题都**不**让 Open 失败（M5:35 的降级纪律）。
   static Status Open(const TableOptions& options, Env* env, const std::string& filename,
                      std::shared_ptr<Table>* table, const std::string* known_smallest = nullptr,
-                     const std::string* known_largest = nullptr);
+                     const std::string* known_largest = nullptr, ReadStats* open_stats = nullptr);
 
   ~Table();
 
   // M3.2 的三态入口：返回值仍用 Status 传结构/IO/CRC 错误，命中种类走 *result。
   // ① key range 过滤（零 IO，key_range_skipped++）② 内存索引 lower_bound
+  // ②.5 filter 否定判断（M5.1；**唯一**允许的否定点，negative ⇒ 直接 kNotFound）
   // ③ 读一个数据块（blocks_read++）④ 块内 Seek ⑤ user key 相等校验
   // ⑥ tombstone ⇒ kDeleted；值 ⇒ kFound；其余 ⇒ kNotFound。
   Status GetEntry(const Slice& lookup_key, std::string* value, TableGetResult* result,
@@ -90,6 +115,7 @@ class Table : public std::enable_shared_from_this<Table> {
   Status Get(const Slice& lookup_key, std::string* value, ReadStats* stats = nullptr) const;
 
   // 内部 key 迭代器（归并/DBIter 的 child）；迭代器持住 Table 的 shared_ptr。
+  // **绝不使用 filter**（M5-design §3.7 硬规则 4：全量迭代必须读所有数据块）。
   std::unique_ptr<Iterator> NewIterator(ReadStats* stats = nullptr) const;
   // 便利入口：等价于 NewIterator() 后 Seek(target)；返回的迭代器可能 Invalid()。
   std::unique_ptr<Iterator> Seek(const Slice& target, ReadStats* stats = nullptr) const;
@@ -111,6 +137,14 @@ class Table : public std::enable_shared_from_this<Table> {
 
   const InternalKeyComparator& internal_comparator() const { return icmp_; }
 
+  // ---- M5.1：filter 的只读视图（构造后不变；L30/I50）----
+  FilterState filter_state() const { return filter_state_; }
+  bool has_filter() const { return filter_state_ == FilterState::kOk; }
+  uint64_t filter_bytes() const { return filter_payload_bytes_; }
+  // 只用于读路径「决定是否读数据块」：false ⇒ 否定（可跳过）；true ⇒ 可能存在/不可用。
+  // 计数写调用方传入的线程局部 ReadStats（L34），本对象不持有任何可变计数器。
+  bool KeyMayMatch(uint64_t block_offset, const Slice& user_key, ReadStats* stats) const;
+
   // 读一个块：按 handle.size 读（**唯一**的读取长度权威）→ length 自检 → type 匹配 →
   // （可选）CRC → length 上界自检。结构校验在关掉 verify_checksums 时**仍然生效**（A15）。
   // 公开是因为 A12/A13/A14/A17 需要逐字节手术后台直接观察"读了多少/算了没有"；
@@ -127,8 +161,14 @@ class Table : public std::enable_shared_from_this<Table> {
   Table() = default;
 
   Status ReadAt(uint64_t offset, size_t n, std::string* out) const;
+  // M5.1（E3）：verify_crc 显式传入，filter 块走 verify_crc=true（不受 verify_checksums 影响），
+  // 数据块仍走 options_.verify_checksums。其余语义与公开 ReadBlock 逐字相同。
+  Status ReadBlockImpl(const BlockHandle& handle, BlockType expected, std::string* payload,
+                       ReadStats* stats, bool verify_crc) const;
   Status ParseIndexBlock(const Slice& payload);
   Status ParseMetaIndexBlock(const Slice& payload);
+  // M5.1：metaindex 解析出 filter handle 之后，读 filter 块并构造 FilterBlockReader（降级不报错）。
+  void LoadFilterBlock(ReadStats* open_stats);
 
   TableOptions options_;
   Env* env_ = nullptr;                    // 不拥有（调用方保证长寿）
@@ -141,6 +181,14 @@ class Table : public std::enable_shared_from_this<Table> {
   uint64_t unknown_metaindex_entries_ = 0;
   std::vector<std::string> unknown_metaindex_names_;
   InternalKeyComparator icmp_{BytewiseComparator()};
+
+  // ---- M5.1：filter 状态（Open 期一次性决定，之后只读）----
+  FilterState filter_state_ = FilterState::kAbsent;
+  bool has_filter_handle_ = false;
+  bool filter_handle_seen_ = false;        // 用于检出「同名重复注册」
+  BlockHandle filter_handle_;
+  uint64_t filter_payload_bytes_ = 0;
+  std::unique_ptr<FilterBlockReader> filter_;
 
   // 迭代器需要 index_entries_ / ReadBlock / options_ / smallest_ 等私有成员。
   class TableIterator;

@@ -49,6 +49,8 @@ add_library(lsm STATIC
   src/sstable/block.cpp
   src/sstable/table_builder.cpp
   src/sstable/table.cpp
+  # M5.1：Bloom filter 与 filter block（docs/m5-design.md §11 M5.1 的「新增」列）
+  src/bloom.cpp
   src/util/status.cpp
   src/util/coding.cpp
   src/util/crc32c.cpp
@@ -57,6 +59,8 @@ add_library(lsm STATIC
   # M1.2：跳表是 header-only（src/skiplist.h），此处只列 .cpp
   src/memtable.cpp
   src/db.cpp
+  # M5.2：WriteBatch 编码容器（docs/m5-design.md §5.1/§4 §13；只依赖 common.h + util/coding.h）
+  src/write_batch.cpp
   # M2.1：WAL writer/reader（docs/m2-design.md §4）
   src/wal.cpp
   # M2.2：文件命名 + 持久化实现与恢复（docs/m2-design.md §5/§6/§7）
@@ -81,6 +85,9 @@ add_library(lsm_sstable STATIC
   src/sstable/block.cpp
   src/sstable/table_builder.cpp
   src/sstable/table.cpp
+  # M5.1：filter 是纯格式层的一部分（bloom.cpp 只依赖 common.h/filter_policy.h/util）⇒ 同时进这里，
+  # 保证 lsm_sstable 的「零越权依赖」判据（nm -C 里 db_impl/wal/version 计数 == 0）仍然成立。
+  src/bloom.cpp
   src/util/status.cpp
   src/util/coding.cpp
   src/util/crc32c.cpp
@@ -140,6 +147,10 @@ add_executable(lsm_tests
   tests/compaction_test.cpp
   # M4.2：compaction 端到端 / 读路径层级化 / 延迟删除 / 独立 CRC
   tests/compaction_db_test.cpp
+  # M5.1：Bloom filter / filter block / metaindex / 读路径否定 / 计数器（M5-A01~A10、A18）
+  tests/filter_test.cpp
+  # M5.2：WriteBatch 编码 / 批提交 / WAL 一次写 / 崩溃原子性（M5-A11~A17）
+  tests/batch_test.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}
@@ -179,4 +190,10 @@ target_link_libraries(lsm_ampl_probe PRIVATE lsm)
 # M4.3：B01/B02 的进程级崩溃驱动
 add_executable(lsm_compaction_crash scripts/lsm_compaction_crash.cpp)
 target_link_libraries(lsm_compaction_crash PRIVATE lsm)
+
+# M5.2 / M5-B01：批崩溃对账（kill -9 落在批写入中途）的写入端与核对端
+add_executable(lsm_batch_crash_writer scripts/batch_crash_writer.cpp)
+target_link_libraries(lsm_batch_crash_writer PRIVATE lsm)
+add_executable(lsm_batch_crash_recover scripts/batch_crash_recover.cpp)
+target_link_libraries(lsm_batch_crash_recover PRIVATE lsm)
 target_link_libraries(lsm_ampl_probe PRIVATE lsm)

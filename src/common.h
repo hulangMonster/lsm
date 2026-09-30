@@ -311,6 +311,12 @@ struct Options {
   // ---- M4.1/M4.2：MANIFEST 重建阈值（不是 §5.6 的 6 个字段）----
   // manifest_bytes_ 超过它 ⇒ 模式 (a) 重建 MANIFEST（§8.1）；测试用小值触发。
   uint64_t manifest_roll_bytes = 1u << 20;             // 1 MiB
+  // ---- M5.1 增补（docs/m5-design.md §5.6 / M5-C7）----
+  // Bloom filter 的每 key 位数：0 = 关闭（新文件不写 filter 块），1..64 合法，默认 10（开）。
+  // 为什么用 int 而不是 `const FilterPolicy*`：保持 common.h **零项目依赖**（roadmap §2 的依赖纪律；
+  // 否则 common.h → filter_policy.h 会成环）。合法性在 DB::Open 第一步校验（§5.6）。
+  // 注意：reader 是否**解析**旧文件里的 filter 与本字段无关（M5-C7(c)）——解析不需要 bloom_bits。
+  int bloom_bits = 10;
 };
 
 // ---------------------------------------------------------------------------

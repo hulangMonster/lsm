@@ -18,6 +18,10 @@ struct WriteOptions {
   bool sync = false;
 };
 
+// M5.2（docs/m5-design.md §5.2）：整批提交接口的类型名；定义在 src/write_batch.h。
+// 这里只前向声明，保持 db.h 的既有依赖面不变（db.h 仍只依赖 common.h）。
+class WriteBatch;
+
 class DB {
  public:
   // name 为空串 = 内存模式（M1 语义）；非空 = 持久模式：目录不存在则创建，
@@ -34,6 +38,12 @@ class DB {
   // 便捷重载：等价于 WriteOptions()（sync=false）
   Status Put(const Slice& key, const Slice& value) { return Put(WriteOptions(), key, value); }
   Status Delete(const Slice& key) { return Delete(WriteOptions(), key); }
+
+  // M5.2（docs/m5-design.md §5.2/§4 §13）：整批提交。一个 WriteBatch = 一条 WAL record（§13.2），
+  // 整批原子可见（I51）；批内 sequence 连续且与提交顺序一致（I52）。
+  // `count == 0`、超出 §13.3 的上限或任何结构性畸形 ⇒ 返回错误，且**不写 WAL、不碰内存**。
+  // updates 的所有权/复用约束见 src/write_batch.h 的头注释（L31）。
+  virtual Status Write(const WriteOptions& options, WriteBatch* updates) = 0;
 
   virtual Status Get(const Slice& key, std::string* value) = 0;
 

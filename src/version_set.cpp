@@ -895,7 +895,7 @@ TableCache::TableCache(Env* env, std::string dbname, Options options, size_t cap
 TableCache::~TableCache() = default;
 
 Status TableCache::Open(uint64_t number, const std::string& smallest, const std::string& largest,
-                        std::shared_ptr<const Table>* out, bool* opened) {
+                        std::shared_ptr<const Table>* out, bool* opened, ReadStats* open_stats) {
   *out = nullptr;
   if (opened != nullptr) *opened = false;
 
@@ -910,8 +910,10 @@ Status TableCache::Open(uint64_t number, const std::string& smallest, const std:
   }
 
   std::shared_ptr<Table> table;
+  // M5.1：open_stats 只在这一次**真的打开**时透传（缓存命中路径不读 filter，因此不计数）。
+  // 本调用在 mu_ **之外**执行（Table::Open 会做 IO），不违反 L18/L35。
   const Status s = Table::Open(options_, env_, TableFileName(dbname_, number), &table, &smallest,
-                               &largest);
+                               &largest, open_stats);
   if (!s.ok()) return s;
   if (opened != nullptr) *opened = true;
 
@@ -945,7 +947,10 @@ Status TableCache::Get(const FileMetaData& f, const Slice& lookup_key, std::stri
                        TableGetResult* result, ReadStats* stats, bool* opened) {
   if (result == nullptr) return Status::InvalidArgument("TableCache::Get", "null result");
   std::shared_ptr<const Table> table;
-  Status s = Open(f.number, f.smallest, f.largest, &table, opened);
+  // M5.1：把本次 Get 的线程局部 stats 透传给 Open ⇒ filter 打开期计数（blocks_read/filter_*）
+  // 汇入同一次 Get 的 delta。注意 Open 内部只对 **filter 块** 的计数写 stats，
+  // metaindex/index/首块读取仍传 nullptr，避免污染既有 data_blocks_read/blocks_read 语义。
+  Status s = Open(f.number, f.smallest, f.largest, &table, opened, stats);
   if (!s.ok()) return s;
   return table->GetEntry(lookup_key, value, result, stats);
 }

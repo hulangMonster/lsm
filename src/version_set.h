@@ -206,8 +206,12 @@ class TableCache {
   size_t size() const;
 
  private:
+  // M5.1（docs/m5-design.md §11 M5.1 的「TableCache::Open 传递 open_stats，若需要」）：
+  // open_stats 只在**缓存未命中、真的打开文件**时透传给 Table::Open，用于累计
+  // filter_blocks_read / filter_bytes_read / filter_corrupt；缓存命中不重复读 filter，因此不计数。
+  // 默认参数保证既有调用点零改动。
   Status Open(uint64_t number, const std::string& smallest, const std::string& largest,
-              std::shared_ptr<const Table>* out, bool* opened);
+              std::shared_ptr<const Table>* out, bool* opened, ReadStats* open_stats = nullptr);
 
   struct Entry {
     std::shared_ptr<const Table> table;

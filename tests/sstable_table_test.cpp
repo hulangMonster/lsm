@@ -344,6 +344,13 @@ TEST(Table, CrcDetectsSingleByteFlipInDataBlock) {
   MemEnv env;
   TableOptions opts;
   opts.block_size = 65536;   // 单块，把翻转扫描限制在一个数据块内
+  // M5.1 契约更新（docs/m5-design.md §3.7 / I49）：本用例的断言是「**数据块区域内**任何单字节
+  // 翻转都必须被检出」。M5 起 Options::bloom_bits 默认 10 ⇒ 新文件会在数据块与 metaindex 之间
+  // 多一个 filter 块，而 filter 块的损坏**按设计只降级、不报错**（否则违反 M5:35 的降级纪律），
+  // 于是扫描落在 filter 块上的那些位置不再是「必须被检出」。这里把本用例固定成 **M3 布局**
+  // （bloom_bits=0），使原有断言逐字成立；M5 的 filter 损坏契约由
+  // `Filter.CorruptFilterDegradesButReadsCorrect` 与 `Filter.FilterDamageScanNoSilentWrongValue` 覆盖。
+  opts.bloom_bits = 0;
   std::vector<std::pair<std::string, std::string>> entries;
   for (int i = 0; i < 300; ++i) entries.emplace_back(Ik(i), Val(i));
   BuildInfo info;
@@ -386,6 +393,9 @@ TEST(Table, CrcDetectsFlipInHeaderLengthAndTrailer) {
   MemEnv env;
   TableOptions opts;
   opts.block_size = 65536;
+  // 同 A12：本用例用 `footer.metaindex_handle.offset` 作为「单数据块的结束」，因此必须固定成
+  // M3 布局（bloom_bits=0），否则 M5 的 filter 块会被算进 data_size。
+  opts.bloom_bits = 0;
   std::vector<std::pair<std::string, std::string>> entries = MakeEntries(3);
   BuildInfo info;
   ASSERT_TRUE(BuildTable(&env, "flip_header.sst", opts, entries, &info).ok());
@@ -662,7 +672,11 @@ TEST(Table, HandleSizeVsBlockLengthMismatch) {
 // ===== M3-A18 =====
 TEST(Table, MetaIndexEmptyBlockParses) {
   MemEnv env;
-  const TableOptions opts;
+  TableOptions opts;
+  // M5.1 契约更新：本用例的断言是「**M3 写出的** metaindex 恰为 0 条」。M5 起
+  // `Options::bloom_bits` 默认 10 ⇒ 新文件会注册一条 filter 条目；这里固定成 M3 布局
+  // （bloom_bits=0）让原断言逐字成立；M5 的注册契约由 `Filter.MetaIndexRegistrationAndFormatVersion` 覆盖。
+  opts.bloom_bits = 0;
 
   // M3 正常写出的 metaindex：0 条、type == kBlockTypeMetaIndex。
   {
@@ -680,9 +694,13 @@ TEST(Table, MetaIndexEmptyBlockParses) {
     EXPECT_EQ(0u, t->unknown_metaindex_entries()) << "M3 的 metaindex 恰为 0 条";
   }
 
-  // 人为塞一条未知 name：必须只计数 unknown_metaindex_entries，不得报错（M5 预留）。
+  // 人为塞一条未知 name：必须只计数 unknown_metaindex_entries，不得报错。
+  // M5.1 契约更新（docs/m5-design.md §3.4）：M3 时代这条用例用的是**预留名**
+  // "filter.leveldb.BuiltinBloomFilter2"；M5 起该名字已被 reader **识别**（解析为 filter handle），
+  // 因此这里换成一个**真正未知**的名字 —— 被测性质不变（未知 name ⇒ 只计数、不报错、不影响读），
+  // 只是把「M5 预留」换成了「M5 之后的未知扩展」。filter 名字的识别路径由 M5-A06/A07 覆盖。
   {
-    const std::string unknown_name = "filter.leveldb.BuiltinBloomFilter2";
+    const std::string unknown_name = "some.unknown.metaindex.extension";
     std::string file;
     BlockHandle data_handle;
     {

@@ -3,6 +3,8 @@
 // 契约来源（逐条对应，禁止各写一套）：
 //   docs/m3-design.md §3.6（块头与 CRC 覆盖面）、§3.7（footer 44B）、§3.3（handle 16B）
 //   docs/protocol.md §10（M3.1 追加，与 §3 同文）
+//   docs/m5-design.md §3.1/§3.3（M5.1 追加 filter 块的常量；footer 与 kTableFormatVersion **不动**）
+//   docs/protocol.md §12（M5.1 追加）
 //
 // 本文件在 `#2` 阶段只提供**声明与常量**：实现留到 `#3`（M3.1）。因此 `#2` 的 RED 表现是
 // 「用例可编译、链接失败」，与 M1 的 `#2` 骨架同形（见 docs/m1-tdd-red.log 的先例）。
@@ -44,6 +46,21 @@ constexpr int kIndexRestartInterval = 1;   // 索引块：restart 间隔 1（精
 constexpr size_t kFooterSize = 44;
 constexpr uint32_t kTableFormatVersion = 1;
 extern const char kTableMagic[4];  // 'L','S','M','1'
+
+// ---- M5.1（docs/m5-design.md §3.3 的常量表 / protocol §12.1）----
+// metaindex 里的 filter 名字空间。**不升** kTableFormatVersion（M5-C3）：版本兼容靠这个 name。
+// M3/M4 的 reader 看到它是「未知 metaindex 条目」，只计数不报错（§3.4）。
+constexpr char kBuiltinBloomFilterName[] = "filter.leveldb.BuiltinBloomFilter2";
+// filter 的覆盖粒度：每个 2 KiB 的数据区段一个 bitset（M5:61 / M5-C2 / E2）。
+// 注意它与 Options::block_size（默认 4096）**独立**：一个 4 KiB 数据块的 key 全部落在
+// 其起始偏移所属的那个 2 KiB 桶（`block_offset >> kFilterBaseLg`）。
+constexpr int kFilterBaseLg = 11;
+constexpr uint32_t kFilterBase = 1u << kFilterBaseLg;   // 2048
+// Bloom 参数口径（§3.3）：每桶位数下限 64；k 的 clamp 上界 30。
+constexpr size_t kBloomMinBits = 64;
+constexpr int kBloomMaxK = 30;
+// Options::bloom_bits 的合法区间（§5.6）：0 = 关闭；1..64 合法。
+constexpr int kBloomBitsMax = 64;
 
 // ---- §3.3 块句柄：offset(8B LE) ‖ size(8B LE) ----
 constexpr size_t kBlockHandleEncodedLength = 16;
