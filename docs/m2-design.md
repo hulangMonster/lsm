@@ -1384,3 +1384,116 @@ flip@55（第 3 条 record 的 payload 内 1 字节）-> COMPLETE 2 LAST_GOOD_EN
 | raft-kv `docs/m5-review.md` §3 / `docs/m5-design.md` v2.10 | 组提交"丢唤醒"与"窗口放开过早"（P2a：0.47× → 1.34×）的复盘 → §6.3 的四场景分析与 D4 |
 | raft-kv `scripts/fsbench_commit_latency.cpp` | 微基准口径（同轮同机、固定输出、median/p90）；本设计 §11.2 用它做了独立交叉核对 |
 | raft-kv `docs/m5-bench.md` §3.6/§3.7 | "绝对判据物理不可达时先测下限、再改同机比值口径"的方法论 → §9.3 的输出格式 |
+
+---
+
+## 14. 修订记录（R1：`Sync()` 的 fsync 不再持 `commit_mu_`）
+
+> 本章为**追加**章：`#0` 冻结的 §1~§13 一行未改。指令原文称「§15」，但本文现有最大章号是 §13
+> （§14 空号），故接续为 §14；内容口径与指令要求一致（缺陷描述 / 最终锁方案 / 残余项 / 负结果）。
+
+### R1 —— `Sync()` 与 `RotateLog()` 在 fsync 窗口内持 `commit_mu_`，挡住所有并发写者
+
+- **缺陷（准确定位，基线 `b1bd050`）**
+  - `PersistentDBImpl::Sync()`（`src/db_impl.cpp:800-824` 稳定 rev）在**整个函数体**内持
+    `commit_mu_`，其中 `log_->Sync()`（`:817`）是真实 fsync。
+  - `SubmitPending()` 的入队需要 `commit_mu_`（`:166`）⇒ 一次显式 `DB::Sync()` 的整个 fsync 窗口内，
+    所有 `sync=false` 的写者都被挡在 `commit_mu_` 外：不能入队、不能与后续批合并。
+  - **同类落点（本次一并修）**：`RotateLog()`（`:891-899` 稳定 rev）的旧 log fsync 同样在
+    `commit_mu_` 之下 ⇒ 每次 memtable 轮转都会停顿整个提交队列。
+  - **一处与指令描述不一致的事实（以代码为准）**：指令提到的「约 L443 的组 fsync」**不在**
+    `commit_mu_` 之下 —— 它在 `RunFlusher()` 的**阶段 C**（`:436` 的 `log_->Append` 与 `:443` 的
+    `log_->Sync()`），M2 起就按 I17/L7 在锁外做 IO。该处**无需改动，也未被改动**。
+- **根因（为什么不能只挪一行）**：`log_` 是 `std::unique_ptr<WALWriter>`（`src/db_impl.h:348`），
+  而 `RotateLog()` 在 `log_ = std::move(fresh)`（`:910`）处**立即析构**旧 `WALWriter`。所以把 fsync
+  挪到锁外会引入 use-after-free：fsync 在飞行中时轮转把对象销毁了。这正是 M3 设计 `L18` 把
+  「`commit_mu_` 下做 `log_->Sync()`」写成"既有例外"的原因，也是本次必须同时改**生命周期**的原因。
+- **最终形态（4 处改动 + WALWriter 内 2 把叶子锁）**
+  1. `log_` 改 `std::shared_ptr<WALWriter>`。`Sync()`/`RotateLog()` 在 `commit_mu_` 内取**副本**
+     （并且 `log_` 与 `log_last_appended_seq_` 必须在**同一个临界区**取出，否则可能"在旧 log 上 fsync
+     却拿新 log 的水位"），放开锁再 `log->Sync()`，最后回锁单调发布。
+  2. `RotateLog()` 用 `log_.swap(fresh)` 取代 `log_ = std::move(fresh)`：旧 log 由局部 `shared_ptr`
+     持有，直到**函数末尾（锁外）**才析构 ⇒ 既不持锁做 IO，也绝不在 fsync 飞行中析构。
+  3. `WALWriter` 内新增两把**叶子锁**（`src/wal.h`）：
+     - `io_mu_`：只保护对象自身的可变状态（`error_`/`closed_`/`file_`/偏移），临界区短、**不含 fsync**；
+     - `sync_mu_`：只串行化**同一文件句柄上的 fsync**（并覆盖 `Close()` 的关文件）。
+     **为什么必须是两把**：一把锁若覆盖整个 `Sync()`，`Append` 就会排在在飞的 fsync 后面 —— 那只是把
+     R1 从 DB 层搬到文件层（`sync=false` 的写仍被 fsync 窗口挡住；实测可复现 RED）。`Append` 只取
+     `io_mu_`，因此永不等待 fsync。本类内部锁序唯一：`sync_mu_ → io_mu_`。
+  4. `Close()` 收尾的 `log->Sync()`/`log->Close()` 也移到 `commit_mu_` 之外（`ql.unlock()` 之后）。
+     此时 `closed_` 已置位、队列已排空、无在途 flusher ⇒ 不可能再接纳写者、也不可能再轮转，
+     取副本后解锁安全。⇒「fsync 永不在 `commit_mu_` 之下」成为**无例外**的不变量。
+- **锁序论证（一句话 + 逐处核对）**：新增的 `sync_mu_`/`io_mu_` 只在**不持任何 DB 锁**时被获取
+  （5 处调用点逐一核对：`RunFlusher` 阶段 C / `Sync()` / `RotateLog()` / `Close()`（已 `ql.unlock()`）/
+  `RecoverAndOpen` 的单线程恢复），而 `WALWriter` 自身绝不获取任何 DB 锁、也不回调 DB
+  ⇒ **不存在反向边**（无环、无 AB-BA）。故唯一全序扩展为：
+  `install_mu_ → commit_mu_ → deletion_mu_ → mutex_ → WALWriter::sync_mu_ → WALWriter::io_mu_`
+  —— M4 §9.4 的前四把一行未动，新锁**接在最右端**，而不是"插进"中间（`docs/m4-design.md:1986` 与
+  `docs/m5-design.md:1761` 的全序表述因此只需追加右端两项）。
+- **I32 未被弱化**：`Sync()` 仍在 `commit_mu_` 内取「已实际 Append 的边界」快照，fsync 之后回锁
+  **单调**发布（`if (snapshot > durable_seq_)`）；在飞批次（sequence 已分配、Append 未执行）仍不得被
+  声称 durable。语义只可能**少报**，绝不许多报。`GroupCommit.SyncDoesNotClaimInFlightBatch` 原样通过。
+
+### R1 的验证证据（RED 原始输出存档：`docs/m2-tdd-red-r1.log`）
+
+新增用例 `tests/sync_isolation_test.cpp`（注入 seam `tests/env_slow_sync.h`：把**唯一**的真实 fsync
+出口 `WritableFile::Sync` 人工持有，判据全部落在"fsync 正在飞行"这一原子事实上）。
+
+| 项 | 结果 |
+|---|---|
+| **RED**（`b1bd050` + 新用例，20 次连跑） | **20/20 全红**（`RED_ROUNDS=20 GREEN_ROUNDS=0`）；异步写者耗时 ≈ **2000 ms**（= 注入窗口），`commit_mu_` 可达耗时 ≈ **1000 ms**（= 轮转注入窗口）；40 条失败信息全部是「被 `commit_mu_` 挡住了」 |
+| **GREEN**（修复后 `SyncIsolation.*` 连跑 200 次） | `GREEN_RUNS_PASS=200` / `GREEN_RUNS_FAIL=0` / `GREEN_RUNS_TOTAL=200` |
+| Release 干净重建（`scripts/lsm_build.sh`） | warning 计数 **0**；`[  PASSED  ] 207 tests.`（205 既有 + 2 新增），73306 ms |
+| ASan（`build-asan`，全量） | `[  PASSED  ] 207 tests.`，420854 ms，**0** sanitizer 报告 |
+| TSan（`build-tsan`，全量，`setarch -R`） | `[  PASSED  ] 207 tests.`，923351 ms，**0** `WARNING: ThreadSanitizer` |
+| 门禁 `--rounds 100 --no-asan --require-m3 --require-m5` | **24/24 PASS** + `[OK] 全部门禁通过`，`GATE_RC=0` |
+
+- **TSan 驱动的一次 seam 修订（如实登记）**：`FsyncGate` 的 v1 用 `mutex + condition_variable` 实现，
+  TSan 在**栈复用的测试 seam** 上给出 6 条报告（`double lock of a mutex … Mutex … is already destroyed`
+  以及随之而来的 data race），全部指向 `tests/env_slow_sync.h`，同一跑法的 `src/` 侧 0 条。
+  改为**纯原子量**（有界轮询 + 兜底到期；判据本身不依赖任何内部同步原语）后 TSan 全量 **0** 报告。
+  该改动的 RED 复验在 `b1bd050` 的独立副本上重跑：仍 **20/20 全红**（同一失败原因）。
+
+### R1 的量效对照（同轮同机；探针 `scripts/sync_isolation_probe.cpp`，只走公共接口）
+
+场景 A = 4 个 `sync=false` 写者 + 1 个显式 `DB::Sync()` 循环（2000 puts，3 轮）：
+
+```
+修复前（b1bd050）：
+SYNCISO writers=4 syncers=1 writers_sync=0 puts=2000 duration_ms=8526 throughput_ops_per_s=235  put_p50_us=15264 put_p99_us=47793 put_max_us=75708 sync_calls=8574 sync_p50_us=90   puts_per_sync_call=0.23
+SYNCISO writers=4 syncers=1 writers_sync=0 puts=2000 duration_ms=7706 throughput_ops_per_s=260  put_p50_us=13426 put_p99_us=48041 put_max_us=65543 sync_calls=7740 sync_p50_us=91   puts_per_sync_call=0.26
+SYNCISO writers=4 syncers=1 writers_sync=0 puts=2000 duration_ms=8066 throughput_ops_per_s=248  put_p50_us=14360 put_p99_us=47132 put_max_us=77200 sync_calls=8194 sync_p50_us=92   puts_per_sync_call=0.24
+修复后：
+SYNCISO writers=4 syncers=1 writers_sync=0 puts=2000 duration_ms=1561 throughput_ops_per_s=1281 put_p50_us=2736  put_p99_us=8734  put_max_us=13119 sync_calls=158  sync_p50_us=9546 puts_per_sync_call=12.66
+SYNCISO writers=4 syncers=1 writers_sync=0 puts=2000 duration_ms=1508 throughput_ops_per_s=1326 put_p50_us=2523  put_p99_us=8912  put_max_us=13756 sync_calls=157  sync_p50_us=9008 puts_per_sync_call=12.74
+SYNCISO writers=4 syncers=1 writers_sync=0 puts=2000 duration_ms=1554 throughput_ops_per_s=1287 put_p50_us=2715  put_p99_us=8449  put_max_us=14941 sync_calls=171  sync_p50_us=8800 puts_per_sync_call=11.70
+```
+
+- **事实**：同一轮同一台机上，显式 `Sync()` 窗口内"每个 fsync 窗口能放过去多少写"从 0.23~0.26
+  提高到 11.7~12.7（≈50×），Put p99 从 47~48 ms 降到 8.4~8.9 ms。
+- **不得外推**：以上是**单机/单块 ext4/VM 级**的同轮对照事实，**不承诺**任何对外吞吐倍数；
+  修复后剩余的 p50 ≈ 2.5 ms 主要来自 ext4 上"fsync 与同一文件并发 write 的内核级互斥"，
+  与本缺陷无关（对照 A 显示无显式 Sync 时两种构型都在 1.1~1.9 ms / 1454~1854 ops/s 区间）。
+- **对照 A（`--syncers 0`，无显式 Sync；负结果）**：修复前 1454/1515/1794 ops/s，修复后
+  1854/1603/1688 ops/s —— 区间重叠，**无改善也无可测回归**（符合预期：R1 只发生在显式 Sync 窗口内）。
+- **对照 B（写者自身 `sync=true`；负结果）**：修复前 179/211/195 ops/s，修复后 242/250/196 ops/s ——
+  量级相近，p99 略有改善（44~53 ms → 32~54 ms）；此时总成本由写者自己的 durable-before-ack fsync
+  主导，R1 窗口占比小。**如实登记为"弱/无显著改善"**。
+- **纯组提交 fsync 路径（`sync=true`、无显式 syncer）4 轮**：修复前 228/255/254/243 ops/s，
+  修复后 256/246/253/267 ops/s —— 区间重叠 ⇒ 新增的两把叶子锁**没有**给 sync 写路径带来可测开销。
+- **标准基准（`scripts/bench_lsm.sh`，`--dataset 20000 --value-size 100 --batch 1 --pipeline 1
+  --sync 0 --filter on --repeats 2`，两构型都 `[BENCH_LSM_OK]`）**：LSM 四格吞吐 2277.9/2201.0/
+  3460.8/3792.8 → 2257.2/1886.7/3402.5/3439.4；同轮 `raw_pwrite`/`std_map` 对照格同样下移
+  （5409.7→4762.1、9173.5→7194.0）⇒ 属**环境抖动**，不是可归因于本改动的回归。
+  `--pipeline 4 --sync 1 --dataset 5000` 同样为 -6.6%/-6.8%（写）与 ±1%（读），与上面"纯组提交
+  路径 4 轮区间重叠"的结论一致：**无可测的 sync 路径回归**。
+
+### R1 的残余项与未验证面
+
+| # | 残余项 | 说明 |
+|---|---|---|
+| R1-a | 并发 fsync 的互斥从 DB 锁降级为**文件级叶子锁** | 语义等价（同一文件句柄上的 fsync 依然串行），但判据从 `commit_mu_` 移到 `WALWriter::sync_mu_`；已被 `GroupCommit.*`/`Sync.*`/`Batch.*` 与新增用例覆盖 |
+| R1-b | `WALWriter::file_size()`/`block_offset()` 仍**无锁** | 生产路径不读；仅 `tests/wal_test.cpp` 单线程使用。登记为未加固项，本次不改 |
+| R1-c | `DB::Sync()` 与 `DB::Close()` **并发调用**仍非文档化用法 | 本次改动后用 `sync_mu_` + `shared_ptr` 兜住了句柄生命周期（不会在飞行中关文件、不会 UAF），但**未新增用例** |
+| R1-d | 未跑 `--with-tsan` 的 26 腿门禁形态 | TSan/ASan 已在上表**单独全量**跑过；门禁按指令用 24 腿形态（`--no-asan`） |
+| R1-e | 未验证「fsync 窗口内写者与后续批合并」的**批大小**直接证据 | `puts_per_sync_call` 是"每个显式 Sync 窗口放过的写"的派生比值，不是"组内成员数"；组大小的直接计数没有公共接口暴露 |

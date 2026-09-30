@@ -101,6 +101,8 @@ Status WALWriter::Open(bool append) {
 }
 
 Status WALWriter::Append(const Slice& record) {
+  // R1：只取 io_mu_（**不**取 sync_mu_）—— Append 绝不允许排在在飞的 fsync 后面。
+  std::lock_guard<std::mutex> l(io_mu_);
   if (!error_.ok()) return error_;                     // 粘性 fail-stop（D11）
   if (closed_ || file_ == nullptr) {
     return Status::IOError("WALWriter::Append: writer is not open", fname_);
@@ -166,16 +168,29 @@ Status WALWriter::Append(const Slice& record) {
 }
 
 Status WALWriter::Sync() {
-  if (!error_.ok()) return error_;
-  if (closed_ || file_ == nullptr) {
-    return Status::IOError("WALWriter::Sync: writer is not open", fname_);
+  // R1：sync_mu_ 覆盖真正的 fsync（并保证与 Close 的关文件互斥）；io_mu_ 只在读状态/写粘性
+  // 错误时短暂持有 ⇒ 并发的 Append 不会排在 fsync 后面（它只取 io_mu_）。
+  // 锁序：sync_mu_ → io_mu_（本类内部唯一顺序，见 wal.h 的注释）。
+  std::lock_guard<std::mutex> sl(sync_mu_);
+  {
+    std::lock_guard<std::mutex> l(io_mu_);
+    if (!error_.ok()) return error_;
+    if (closed_ || file_ == nullptr) {
+      return Status::IOError("WALWriter::Sync: writer is not open", fname_);
+    }
   }
-  const Status s = file_->Sync();
-  if (!s.ok()) error_ = s;   // 粘性：偏移已不可信，绝不允许后续静默恢复
+  const Status s = file_->Sync();      // 持 sync_mu_，**不**持 io_mu_
+  if (!s.ok()) {
+    std::lock_guard<std::mutex> l(io_mu_);
+    error_ = s;   // 粘性：偏移已不可信，绝不允许后续静默恢复
+  }
   return s;
 }
 
 Status WALWriter::Close() {
+  // 与 fsync 互斥：绝不在 in-flight fsync 期间关掉同一个文件句柄。
+  std::lock_guard<std::mutex> sl(sync_mu_);
+  std::lock_guard<std::mutex> l(io_mu_);
   if (closed_) return Status::OK();
   closed_ = true;
   if (file_ == nullptr) return Status::OK();

@@ -345,7 +345,11 @@ class PersistentDBImpl : public DB {
   std::shared_ptr<const Version> version_;
   std::deque<std::shared_ptr<struct Immutable>> immutables_;
   std::unique_ptr<TableCache> table_cache_;
-  std::unique_ptr<WALWriter> log_;
+  // R1：`shared_ptr` —— DB::Sync()/RotateLog() 的 fsync 移出 commit_mu_ 之后，fsync 在飞行中时
+  // 可能发生轮转（RotateLog 替换 log_）。持一个副本即可保证旧 WALWriter 活到 fsync 返回，
+  // 否则就是 use-after-free（旧 `unique_ptr` 在 L910 的赋值处立即析构）。
+  // 保护：写入只发生在 flusher 线程（RotateLog，持 commit_mu_）；其他线程一律在 commit_mu_ 下取副本。
+  std::shared_ptr<WALWriter> log_;
   std::unique_ptr<FileLock> file_lock_;
 
   // M3：文件号空间与当前 log（§6.1 的状态表；log_number_ 只由当前 flusher 修改，L20）
@@ -428,6 +432,13 @@ class PersistentDBImpl : public DB {
     size_t entry_bytes = 0;      // entries.size()：1B type + varint 长度 + key [+ value]
   };
 
+  // ---- R1：全局锁序的**扩展**（唯一全序，只允许从左向右获取）----
+  //   install_mu_ → commit_mu_ → deletion_mu_ → mutex_ → WALWriter::sync_mu_ → WALWriter::io_mu_
+  // M4 §9.4 的前四把一行未动；新增的两把是 **WALWriter 的叶子锁**（src/wal.h）：
+  //   * 它们只在**不持任何 DB 锁**时被获取（5 处调用点逐一核对：RunFlusher 阶段 C / Sync() /
+  //     RotateLog() / Close()（已 ql.unlock()）/ RecoverAndOpen 的单线程恢复）；
+  //   * 它们自身绝不获取任何 DB 锁、也不回调 DB ⇒ **不存在反向边** ⇒ 无环（证明式论证只需这一句）。
+  // 因此这把锁并没有"插进"既有全序，而是接在它的最右端。
   mutable std::mutex mutex_;          // 保护内存状态（memtable_/immutables_/version_/last_sequence_/...）
   std::mutex commit_mu_;              // 保护组提交队列与 flusher 状态（L8 的第一把锁）
   std::condition_variable commit_cv_; // 谓词：w.done || (!flusher_active_ && queue_.front() == &w)

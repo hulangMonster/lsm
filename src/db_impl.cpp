@@ -798,26 +798,34 @@ size_t PersistentDBImpl::pending_writers() {
 }
 
 Status PersistentDBImpl::Sync() {
-  // 与 flusher 的 fsync 串行；语义 = 把此前全部已返回 kOk 的写刷到磁盘（design §7.4）
-  std::lock_guard<std::mutex> ql(commit_mu_);
-  if (log_ == nullptr) return Status::IOError("PersistentDBImpl::Sync: WAL is not open", dbname_);
-  {
-    DbMutexGuard ml(mutex_);                // M2-I35：bg_error_ 只在 mutex_ 下读
-    if (!bg_error_.ok()) return bg_error_;
-  }
-  // I32 修复：**先**取「已实际追加的边界」，**再** fsync。fsync 只能覆盖调用之前已写进文件的
-  // 字节，所以水位只能发布到这个快照；并发在飞批次（sequence 已分配、Append 尚未执行）不得被
-  // 声称 durable。代价是可能少报（保守），绝不许多报 —— 契约仍然成立：任何在本次 Sync 之前
-  // 已返回 kOk 的写，其 Append 必然早于本次快照点，因而被这次 fsync 覆盖。
+  // 语义 = 把此前全部已返回 kOk 的写刷到磁盘（design §7.4）。
+  // R1 修复：fsync **不在 commit_mu_ 之下**发生 —— 锁内只做「快照」（bg_error_ + 已 Append 边界 +
+  // 一个能保证生命周期的 log_ 引用），放开锁再 fsync，最后回锁**单调**发布 durable_seq_。
+  // 缺陷原文：旧实现在整个 fsync 窗口内持 commit_mu_，而 SubmitPending 的入队也要它
+  // ⇒ 一次显式 Sync() 会挡住所有并发写者（不能入队、不能与后续批合并）。
+  std::shared_ptr<WALWriter> log;
   SequenceNumber appended_before_fsync = 0;
   {
+    std::lock_guard<std::mutex> ql(commit_mu_);
+    if (log_ == nullptr) return Status::IOError("PersistentDBImpl::Sync: WAL is not open", dbname_);
     DbMutexGuard ml(mutex_);                // 锁序：commit_mu_ → mutex_（L8）；持锁期间不做 IO（I17）
+    if (!bg_error_.ok()) return bg_error_;  // M2-I35：bg_error_ 只在 mutex_ 下读
+    // I32：**先**取「已实际追加的边界」，**再** fsync。fsync 只能覆盖调用之前已写进文件的字节，
+    // 所以水位只能发布到这个快照；并发在飞批次（sequence 已分配、Append 尚未执行）不得被声称
+    // durable。代价是可能少报（保守），绝不许多报 —— 契约仍然成立：任何在本次 Sync 之前已返回
+    // kOk 的写，其 Append 必然早于本次快照点，因而被这次 fsync 覆盖。
+    // `log` 与 `log_last_appended_seq_` 必须在**同一个临界区**取出：否则可能在旧 log 上 fsync
+    // 却拿新 log 的水位（或反之）。
+    log = log_;
     appended_before_fsync = log_last_appended_seq_;
   }
-  const Status s = log_->Sync();
-  if (s.ok()) {
+  const Status s = log->Sync();             // ← 锁外（R1）：并发写者仍可入队/组批/Append
+  if (!s.ok()) return s;
+  {
+    std::lock_guard<std::mutex> ql(commit_mu_);
     DbMutexGuard ml(mutex_);
-    // 单调发布：flusher 的水位发布与本次同受 commit_mu_ 串行，且 appended_seq_ 单调不减。
+    // 单调发布：flusher/轮转的水位发布与本次同受 commit_mu_ 串行，快照单调不减 ⇒ 只升不降。
+    // 语义未被弱化：本次 fsync 覆盖的字节就是快照点之前的全部字节（只能少报，绝不许多报）。
     if (appended_before_fsync > durable_seq_) durable_seq_ = appended_before_fsync;
   }
   return s;
@@ -881,9 +889,10 @@ Status PersistentDBImpl::CreateEmptyLogFile(uint64_t number) {
 Status PersistentDBImpl::RotateLog() {
   // 前置：只有当前 flusher 会走到这里（L20），且它已把当前 log 封口（log_sealed_）。
   uint64_t new_number = 0;
+  SequenceNumber appended = 0;
+  std::shared_ptr<WALWriter> old_log;
   {
     std::lock_guard<std::mutex> ql(commit_mu_);
-    SequenceNumber appended = 0;
     {
       DbMutexGuard ml(mutex_);
       appended = log_last_appended_seq_;
@@ -893,21 +902,32 @@ Status PersistentDBImpl::RotateLog() {
       if (new_number <= log_number_) new_number = log_number_ + 1;
       next_file_number_ = new_number + 1;
     }
-    // I32 的 per-log 边界（M3-A50）：先把旧 log 的已 Append 字节落盘，再发布水位、再换文件。
-    // 否则 Sync() 在新 log 上无法覆盖旧 log 的未 fsync 字节，就会多报 durable。
-    const Status s = log_->Sync();
-    if (!s.ok()) return s;
+    old_log = log_;
+    if (old_log == nullptr) return Status::IOError("RotateLog: WAL is not open", dbname_);
+  }
+  // I32 的 per-log 边界（M3-A50）：先把旧 log 的已 Append 字节落盘，再发布水位、再换文件。
+  // 否则 Sync() 在新 log 上无法覆盖旧 log 的未 fsync 字节，就会多报 durable。
+  // R1 修复：这次 fsync 同样**不在 commit_mu_ 之下**——轮转期间新写者必须仍能入队（否则每次
+  // memtable 轮转都会停顿整个提交队列）。生命周期由 old_log 的副本保证：即使下面换了 log_，
+  // 旧 WALWriter 也会活到本次 fsync 返回（且它的析构在锁外）。
+  {
+    const Status rs = old_log->Sync();
+    if (!rs.ok()) return rs;
+  }
+  {
+    std::lock_guard<std::mutex> ql(commit_mu_);
     if (appended > durable_seq_) durable_seq_ = appended;
   }
   // 锁外建文件（§6.6.1 阶段 A' 的 IO 窗口）。
   Status s = CreateEmptyLogFile(new_number);
   if (!s.ok()) return s;
-  std::unique_ptr<WALWriter> fresh(new WALWriter(EnvOf(), LogFileName(dbname_, new_number)));
+  std::shared_ptr<WALWriter> fresh(new WALWriter(EnvOf(), LogFileName(dbname_, new_number)));
   s = fresh->Open(false);
   if (!s.ok()) return s;
   {
     std::lock_guard<std::mutex> ql(commit_mu_);
-    log_ = std::move(fresh);
+    // swap 而不是 move：`fresh` 于是持有旧 log，并在**函数末尾（锁外）**析构 ⇒ 不持锁做 IO。
+    log_.swap(fresh);
     DbMutexGuard ml(mutex_);
     log_number_ = new_number;
     // §6.6.2 的**精确**口径：当前 memtable 尚未写过任何字节（封口时已把旧表移入 immutables_），
@@ -1103,8 +1123,13 @@ Status PersistentDBImpl::Close() {
     DbMutexGuard ml(mutex_);
     sticky = bg_error_;
   }
-  Status s = sticky.ok() ? log_->Sync() : sticky;        // Close 隐含 Sync（I20/A30）
-  const Status c = log_->Close();
+  // R1：关闭路径的 fsync 也放到 commit_mu_ 之外（此前它持 ql）。此处 closed_ 已置位、
+  // 队列已排空、无在途 flusher ⇒ 不可能再接纳写者、也不可能再发生轮转，取到副本后即可解锁。
+  // 这样"fsync 永不在 commit_mu_ 之下"成为无例外的完整不变量（见 db_impl.h 的锁序注释）。
+  std::shared_ptr<WALWriter> log = log_;
+  ql.unlock();
+  Status s = sticky.ok() ? log->Sync() : sticky;         // Close 隐含 Sync（I20/A30）
+  const Status c = log->Close();
   if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());   // D10：释放独占
   return s.ok() ? c : s;
 }

@@ -151,6 +151,8 @@ add_executable(lsm_tests
   tests/filter_test.cpp
   # M5.2：WriteBatch 编码 / 批提交 / WAL 一次写 / 崩溃原子性（M5-A11~A17）
   tests/batch_test.cpp
+  # R1 回归：fsync 窗口内并发写者必须仍能入队（tests/env_slow_sync.h 提供 fsync 闸门）
+  tests/sync_isolation_test.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}
@@ -201,6 +203,10 @@ target_link_libraries(lsm_ampl_probe PRIVATE lsm)
 # M5.3：微基准驱动（docs/m5-design.md §6/§7.1；只走公共 DB 接口，不暴露 db_impl 统计）
 add_executable(bench_lsm bench/bench_lsm.cpp)
 target_link_libraries(bench_lsm PRIVATE lsm)
+
+# R1：fsync 隔离的量效探针（只走公共 DB 接口；**不是**门禁，只产出同轮同机对照行）
+add_executable(sync_isolation_probe scripts/sync_isolation_probe.cpp)
+target_link_libraries(sync_isolation_probe PRIVATE lsm)
 
 # M5.3 / M5-B04：filter 块体积的逐文件实测（§6.6 的 space_filter_bytes 落点）
 add_executable(lsm_level_stats scripts/lsm_level_stats.cpp)

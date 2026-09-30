@@ -1,0 +1,114 @@
+================================================================================
+R1 的 TDD RED 原始输出存档
+================================================================================
+缺陷：DB::Sync()/RotateLog() 在整个 fsync 窗口内持 commit_mu_ ⇒ 并发写者无法入队。
+基线：b1bd050（= origin/main，tag m5-bloom-writebatch），未含 R1 修复。
+用例：tests/sync_isolation_test.cpp（注入 seam：tests/env_slow_sync.h 的 FsyncGate，
+      注入点是唯一真实 fsync 出口 WritableFile::Sync）。
+命令：./build/bin/lsm_tests --gtest_filter="SyncIsolation.*"     （连跑 20 次）
+日期：2026-10-01（VM 本地时区）
+================================================================================
+
+---- 20 次连跑的逐轮结果（全部 RED）--------------------------------------------
+round=1 rc=1 blocked_msgs=2 async_write_elapsed_us=2000632 commit_mu_reach_us=999785
+round=2 rc=1 blocked_msgs=2 async_write_elapsed_us=2001918 commit_mu_reach_us=1000490
+round=3 rc=1 blocked_msgs=2 async_write_elapsed_us=2001402 commit_mu_reach_us=998356
+round=4 rc=1 blocked_msgs=2 async_write_elapsed_us=2004247 commit_mu_reach_us=1004852
+round=5 rc=1 blocked_msgs=2 async_write_elapsed_us=2002778 commit_mu_reach_us=997186
+round=6 rc=1 blocked_msgs=2 async_write_elapsed_us=2002100 commit_mu_reach_us=997792
+round=7 rc=1 blocked_msgs=2 async_write_elapsed_us=2001758 commit_mu_reach_us=998979
+round=8 rc=1 blocked_msgs=2 async_write_elapsed_us=2003867 commit_mu_reach_us=1000898
+round=9 rc=1 blocked_msgs=2 async_write_elapsed_us=2001338 commit_mu_reach_us=1001481
+round=10 rc=1 blocked_msgs=2 async_write_elapsed_us=2000466 commit_mu_reach_us=1001406
+round=11 rc=1 blocked_msgs=2 async_write_elapsed_us=2002808 commit_mu_reach_us=1003989
+round=12 rc=1 blocked_msgs=2 async_write_elapsed_us=2001359 commit_mu_reach_us=996632
+round=13 rc=1 blocked_msgs=2 async_write_elapsed_us=2004818 commit_mu_reach_us=999518
+round=14 rc=1 blocked_msgs=2 async_write_elapsed_us=2000559 commit_mu_reach_us=1001389
+round=15 rc=1 blocked_msgs=2 async_write_elapsed_us=2002446 commit_mu_reach_us=1003169
+round=16 rc=1 blocked_msgs=2 async_write_elapsed_us=2002511 commit_mu_reach_us=1000869
+round=17 rc=1 blocked_msgs=2 async_write_elapsed_us=2002016 commit_mu_reach_us=999044
+round=18 rc=1 blocked_msgs=2 async_write_elapsed_us=2000360 commit_mu_reach_us=1003135
+round=19 rc=1 blocked_msgs=2 async_write_elapsed_us=2004210 commit_mu_reach_us=1004653
+round=20 rc=1 blocked_msgs=2 async_write_elapsed_us=2001000 commit_mu_reach_us=1000035
+SUMMARY_RUN2: RED_ROUNDS=20 GREEN_ROUNDS=0 TOTAL_BLOCKED_MSGS=40 OF_20_ROUNDS
+
+列含义：
+  async_write_elapsed_us = 线程 B 的一次异步（sync=false）Put 的墙钟耗时；注入的 fsync 窗口 = 2000 ms
+                           ⇒ 全部 ≈ 2000 ms 表示 B 被 commit_mu_ 挡住了整个 fsync 窗口
+  commit_mu_reach_us     = 轮转的 fsync 窗口内旁观者取到 commit_mu_ 的耗时；注入窗口 = 1000 ms
+                           ⇒ 全部 ≈ 1000 ms 表示 fsync 期间 commit_mu_ 不可达
+  blocked_msgs           = 本轮输出里「被 commit_mu_ 挡住了」这条失败信息的条数（2 = 两个用例各一条）
+
+---- 第 1 轮的完整原始 gtest 输出（其余 19 轮同形，仅耗时数值不同）------------
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = SyncIsolation.*
+[==========] Running 2 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 2 tests from SyncIsolation
+[ RUN      ] SyncIsolation.AsyncWriteIsNotBlockedByExplicitSync
+/tmp/lsm-base/tests/sync_isolation_test.cpp:173: Failure
+Value of: b_returned_inside_window
+  Actual: false
+Expected: true
+R1：异步写者在注入的 fsync 窗口**之外**才返回（返回时闸门已放行）—— 被 commit_mu_ 挡住了
+
+/tmp/lsm-base/tests/sync_isolation_test.cpp:177: Failure
+Expected: (b_elapsed_us) < (kAsyncWriteBoundUs), actual: 2000632 vs 200000
+R1：注入的 fsync 窗口 = 2000 ms，要求异步写者 < 200 ms 返回；实测 2000632 us
+
+/tmp/lsm-base/tests/sync_isolation_test.cpp:180: Failure
+Value of: a_still_pending
+  Actual: false
+Expected: true
+Sync() 不得在注入的 fsync 窗口内返回
+
+[  FAILED  ] SyncIsolation.AsyncWriteIsNotBlockedByExplicitSync (2012 ms)
+[ RUN      ] SyncIsolation.CommitQueueReachableDuringRotationFsync
+/tmp/lsm-base/tests/sync_isolation_test.cpp:246: Failure
+Value of: probe_inside_window
+  Actual: false
+Expected: true
+R1：旁观者在轮转的 fsync 窗口**之外**才拿到 commit_mu_ —— 被 commit_mu_ 挡住了
+
+/tmp/lsm-base/tests/sync_isolation_test.cpp:248: Failure
+Expected: (probe_first_us) < (kQueueReachBoundUs), actual: 999785 vs 200000
+R1：轮转的注入窗口 = 1000 ms，要求窗口内取 commit_mu_ < 200 ms；实测 999785 us
+
+/tmp/lsm-base/tests/sync_isolation_test.cpp:251: Failure
+Expected: (pending_observed) >= (1ull), actual: 0 vs 1
+非空绿：轮转的 fsync 窗口内必须真的有写者进了队列（实测 0）
+
+[  FAILED  ] SyncIsolation.CommitQueueReachableDuringRotationFsync (1016 ms)
+[----------] 2 tests from SyncIsolation (3030 ms total)
+
+[----------] Global test environment tear-down
+[==========] 2 tests from 1 test suite ran. (3031 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 2 tests, listed below:
+[  FAILED  ] SyncIsolation.AsyncWriteIsNotBlockedByExplicitSync
+[  FAILED  ] SyncIsolation.CommitQueueReachableDuringRotationFsync
+
+ 2 FAILED TESTS
+
+---- 修复后同一用例的 GREEN 原始输出（第 200/200 轮）--------------------------
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = SyncIsolation.*
+[==========] Running 2 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 2 tests from SyncIsolation
+[ RUN      ] SyncIsolation.AsyncWriteIsNotBlockedByExplicitSync
+[       OK ] SyncIsolation.AsyncWriteIsNotBlockedByExplicitSync (2012 ms)
+[ RUN      ] SyncIsolation.CommitQueueReachableDuringRotationFsync
+[       OK ] SyncIsolation.CommitQueueReachableDuringRotationFsync (19 ms)
+[----------] 2 tests from SyncIsolation (2033 ms total)
+
+[----------] Global test environment tear-down
+[==========] 2 tests from 1 test suite ran. (2034 ms total)
+[  PASSED  ] 2 tests.
+
+GREEN_RUNS_PASS=200
+GREEN_RUNS_FAIL=0
+GREEN_RUNS_TOTAL=200
+2026-10-01T07:14:35+08:00
+DONE
+

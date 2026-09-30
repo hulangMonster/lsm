@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "common.h"
@@ -69,6 +70,20 @@ class WALWriter {
   uint64_t block_offset_ = 0;
   Status error_;        // 粘性错误（D11 fail-stop：短写/fsync 失败后文件偏移已不可信）
   bool closed_ = true;
+
+  // ---- R1：WALWriter 的内部锁（**严格叶子**，不参与 DB 的全局锁序）----
+  // 为什么需要：R1 把 DB::Sync()/RotateLog() 的 fsync 移出 commit_mu_ 之后，DB::Sync() 的 fsync
+  // 与 flusher 的 Append/fsync 可以真的并发（既有代码里这两条路径本来就已能在 error_ 上撞车）。
+  // 为什么是**两把**而不是一把：一把叶子锁若覆盖整个 Sync()，就会让 Append 排在 fsync 后面 ——
+  // 那只是把 R1 的缺陷从 DB 层搬到文件层（sync=false 的写仍被 fsync 窗口挡住；实测可复现 RED）。
+  //   io_mu_  ：只保护对象自身的可变状态（error_/closed_/file_/偏移），临界区短、**不含 fsync**；
+  //   sync_mu_：只串行化**同一文件句柄上的 fsync**（并覆盖 Close 的关文件），临界区长、可阻塞。
+  // 本类内部锁序（唯一）：sync_mu_ → io_mu_；Append 只取 io_mu_。
+  // 与 DB 锁的关系：**所有**调用点都不得持 DB 锁（install_mu_/commit_mu_/deletion_mu_/mutex_）
+  // 进入本类的方法（src/db_impl.cpp 的 5 处调用点逐一核对），而本类也绝不获取任何 DB 锁、
+  // 不回调 DB ⇒ 不存在反向边，故它接在全局全序的最右端且构不成环（详见 docs 修订记录）。
+  mutable std::mutex io_mu_;
+  mutable std::mutex sync_mu_;
 };
 
 // 读端：顺序扫描并重组；结构性损坏不走 Status，而是通过 *result 报告事实，
