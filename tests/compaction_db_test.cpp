@@ -1001,4 +1001,87 @@ TEST(Orphan, CompactionOutputCleanedAndCounted) {
   delete db2;
 }
 
+// ===== A20-并发：后台 compaction 在迭代期间完成安装（确定性屏障；不使用 sleep）=====
+class PauseBeforeInstallHook : public CompactionHook {
+ public:
+  void OnBeforeInstall() override {
+    std::unique_lock<std::mutex> l(mu_);
+    entered_ = true;
+    cv_.notify_all();
+    cv_.wait(l, [this] { return released_; });
+  }
+  bool WaitEntered(int spins = 8000000) {
+    for (int i = 0; i < spins; ++i) {
+      { std::lock_guard<std::mutex> l(mu_); if (entered_) return true; }
+      std::this_thread::yield();
+    }
+    return false;
+  }
+  void Release() {
+    std::lock_guard<std::mutex> l(mu_);
+    released_ = true;
+    cv_.notify_all();
+  }
+
+ private:
+  mutable std::mutex mu_;
+  std::condition_variable cv_;
+  bool entered_ = false;
+  bool released_ = false;
+};
+
+TEST(Merge, ConcurrentIteratorVsBackgroundCompaction) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  PauseBeforeInstallHook hook;
+  o.compaction_hook = &hook;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  std::map<std::string, std::string> expect;
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 80; ++i) {
+      const int idx = round * 80 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+      expect[K(idx)] = V(idx);
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  ASSERT_TRUE(hook.WaitEntered()) << "compaction 必须在 install 前被挡住（否则本用例空绿）";
+  std::unique_ptr<Iterator> it(db->NewIterator());   // 持住安装前的 Version
+  std::shared_ptr<const Version> held = impl->RefCurrentVersionForTest();
+  hook.Release();
+  ASSERT_TRUE(WaitForCompaction(impl, 1)) << "安装必须在迭代存活期间完成";
+  EXPECT_GT(impl->GetCompactionStats().install_rebase_retries + impl->GetCompactionStats().completed, 0u);
+  // 迭代期间 version_ 已换出：结果仍必须与期望逐字节一致
+  std::map<std::string, std::string> got;
+  std::vector<std::string> dup;
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    const std::string k = it->key().ToString();
+    const std::string v = it->value().ToString();
+    auto ins = got.emplace(k, v);
+    if (!ins.second) dup.push_back(k);
+  }
+  EXPECT_TRUE(it->status().ok());
+  EXPECT_TRUE(dup.empty()) << "迭代器对同一 user key 输出了多次：" << (dup.empty() ? "" : dup[0]);
+  EXPECT_EQ(expect.size(), got.size());
+  auto a = expect.begin();
+  auto b = got.begin();
+  for (; a != expect.end() && b != got.end(); ++a, ++b) {
+    EXPECT_EQ(a->first, b->first);
+    EXPECT_EQ(a->second, b->second);
+  }
+  std::string v;
+  for (int i = 1; i <= 240; ++i) {
+    ASSERT_TRUE(db->Get(K(i), &v).ok()) << "key " << i;
+    EXPECT_EQ(V(i), v);
+  }
+  held.reset();
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
 }  // namespace lsm
