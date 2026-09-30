@@ -84,6 +84,25 @@ struct FlushStats {
   std::string last_error;              // 最近一次 flush 失败的可读 Status
 };
 
+// M4.3：层级统计（GetLevelStats）与三个放大口径（GetAmplificationStats + 固定行）。
+struct LevelStats {
+  uint64_t files[kNumLevels] = {};
+  uint64_t bytes[kNumLevels] = {};
+  double score[kNumLevels] = {};
+};
+
+struct AmplificationStats {
+  uint64_t user_logical_bytes = 0, entry_bytes = 0;
+  uint64_t flush_write_bytes = 0, compact_write_bytes = 0;
+  uint64_t files_checked = 0, get_count = 0;
+  uint64_t index_blocks_read = 0, data_blocks_read = 0, bytes_read = 0;
+  uint64_t sst_bytes = 0, manifest_bytes = 0, current_bytes = 0, log_bytes = 0, tmp_bytes = 0;
+  uint64_t live_versions = 0, live_versions_max = 0;
+  uint64_t dropped_old_versions = 0, dropped_tombstones = 0;
+  uint64_t compaction_rounds = 0, compaction_round_p50_us = 0, compaction_round_max_us = 0;
+  uint64_t round_samples = 0;   // p50 的样本数（多轮采样，不是单轮近似）
+};
+
 // M4.2：有状态 MANIFEST 的对外统计（GetManifestStats；诊断只读）。
 struct ManifestStats {
   uint64_t number = 0, bytes = 0, edits = 0, rolls = 0;
@@ -161,6 +180,12 @@ class PersistentDBImpl : public DB {
   // M4.2 诊断（只读）。
   ManifestStats GetManifestStats() const;
   CompactionStats GetCompactionStats() const;
+  LevelStats GetLevelStats() const;
+  AmplificationStats GetAmplificationStats() const;
+  // §10.3 的三个固定行（KEY=VALUE 空格分隔；前缀列冻结，只允许行尾追加）。
+  std::string FormatAmplLine(const std::string& round_id) const;
+  std::string FormatLevelLine(const std::string& round_id) const;
+  std::string FormatFrontLine(const std::string& round_id) const;
   size_t live_versions_size() const {
     std::lock_guard<std::mutex> l(mutex_);
     return live_versions_.size();
@@ -177,6 +202,10 @@ class PersistentDBImpl : public DB {
   void MaybeDeleteObsoleteFilesForTest() { MaybeDeleteObsoleteFiles(); }
   // 同步跑**一轮** compaction（测试用；生产只由 compaction 线程调用）。
   void RunOneCompactionForTest() { CompactOnce(); }
+  SequenceNumber smallest_snapshot() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return smallest_snapshot_;
+  }
   uint64_t files_at_level(int level) const;
   uint64_t bytes_at_level(int level) const;
   // 持住当前 Version 的引用（模拟"正在迭代的读者"，A34/X8 的延迟删除判据）。
@@ -289,6 +318,7 @@ class PersistentDBImpl : public DB {
   uint64_t log_number_ = 0;
   uint64_t next_file_number_ = 1;
   bool log_sealed_ = false;       // 当前 log 已封口（冻结时置位，轮转完成后清）
+  bool rotate_in_progress_ = false;   // 冻结后到轮转完成之间，禁止后台线程 flush（min_keep 依赖新 log 号）
   bool need_rotate_ = false;      // 待轮转（阶段 A 置位，阶段 A' 做 IO）
   // §6.6.2 / §8.3 步骤 ⑩：当前 memtable 的**最早写入所在 log**。恢复时 = 被重放 log 的最小编号；
   // 冻结时旧表保留它自己的值，新表取当时的 log_number_（轮转后不更新 ⇒ 保守，绝不漏删）。
@@ -332,6 +362,12 @@ class PersistentDBImpl : public DB {
   std::multiset<SequenceNumber> snapshots_;   // 受 mutex_ 保护
   std::list<std::unique_ptr<Snapshot>> snapshot_handles_;
   SequenceNumber smallest_snapshot_ = 0;      // 受 mutex_ 保护（无快照时 == last_sequence_）
+  // M4.3 统计（受 mutex_ 保护）
+  uint64_t user_logical_bytes_ = 0, entry_bytes_ = 0, put_ops_ = 0;
+  uint64_t flush_write_bytes_ = 0, get_count_ = 0;
+  uint64_t live_versions_max_ = 0;
+  std::vector<uint64_t> round_samples_us_;   // compaction 单轮耗时样本（p50 用）
+  std::vector<uint64_t> front_samples_us_;   // 前台操作端到端耗时样本（FRONT 行用）
 
   // M3：单后台 flush 线程（§6.5/L21：它只取 mutex_，永不碰 commit_mu_）
   std::thread bg_thread_;

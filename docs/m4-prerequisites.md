@@ -277,3 +277,171 @@ bash scripts/lsm_manifest_test.sh → M4_TESTS_RAN 21  M4_TESTS_FAILED 0  LSM_VE
 5. **compaction 失败矩阵**：`Run`/安装失败的计数与"旧版本完好"由 `LogAndApply` 的"先落盘后安装 + 失败不 swap"保证，但没有专门的故障注入用例（A42 的 compaction 版）。
 6. **min_overlap 策略**未进生产默认（默认 `kRoundRobin`）；B03 的策略对照未做。
 7. `live_versions_` 的条目在 `MaybeDeleteObsoleteFiles` 才回收（延迟清理），长压测下 `live_versions_max` 未测。
+
+## 9. M4.3 本轮进展（统计/固定行/失败矩阵/放大探针/B 腿接线）
+
+### 9.1 交付
+
+| 项 | 落地 |
+|---|---|
+| 统计与固定行 | `GetLevelStats()`、`GetAmplificationStats()`、`FormatAmplLine/FormatLevelLine/FormatFrontLine`（§10.3 的 KEY=VALUE 固定列；前缀冻结、只允许行尾追加）；`compaction_round_p50_us` 改为**多轮采样**并输出 `ROUND_SAMPLES`（不是单轮近似）；新增计数 `user_logical_bytes_/entry_bytes_/flush_write_bytes_/get_count_/live_versions_max_/put_ops_/round_samples_us_/front_samples_us_` |
+| 失败矩阵用例 | `CompactionFail.OutputWriteFailureKeepsOldVersion`、`CompactionFail.OutputRenameFailureKeepsOldVersion`：注入输出 `NewWritableFile`/`rename` 失败 ⇒ `failed` 计数 +1、`version_` 不变（输入仍在 L0、L1 为空）、旧数据可读、CURRENT 可回放（重开成功） |
+| A 组补齐 | `LevelLayout.OverlapRejectedOnInstall`（A17：(a) 端点相等 /(b) 部分覆盖 /(c) 顺序错乱 ⇒ 拒绝，合法通过）、`Snapshot.VisibleVersionSurvivesCompactionAndSmallestUpdates`（A28+A29：快照内旧版本在 compaction 后仍可读；释放顺序驱动 `smallest_snapshot_`）、`Recovery.AckedDataVisibleAfterManifestReplay`（A41：sync 写 → flush → 重开走 CURRENT→MANIFEST 回放，200/200 可见） |
+| B 组驱动 | `scripts/lsm_ampl_probe.cpp`（真实磁盘：写/读/校验 + 三行固定输出 + B05/B06/B07 布尔判据 + B10 的 NOT_APPLICABLE 行）、`scripts/lsm_compaction_stress.sh`（两种策略各跑一轮，打印 `[COMPACTION_STRATEGY_OK]`/`[COMPACTION_STRESS_OK]`，且强制 `COMPACTION_ROUNDS_TOTAL>0` 与 `MISSING 0`） |
+| 门禁接线 | 新增 7 条 v2 正向标记腿（全部走 `run_gate_m3_marked`，缺脚本 ⇒ SKIP + `[PARTIAL]`）：M4-B03/B05/B06/B07/B08/B09/B10；既有 9 条腿一条未删 |
+| 写者侧调度 | `Write` 在 `RunFlusher()` 成功后若 `immutables_ > 0` 调 `MaybeScheduleCompaction()`（L27 的另一半） |
+| 文档 | `docs/amplification.md`：口径定义表 + 一轮实测三行 + B06 判据 + 已知偏差（写放大 14.5 高、空间放大 <1 的解释、`live_versions_max=6` 与 B08 示例阈值 ≤4 的偏差、B01/B02 未做） |
+
+### 9.2 实测（`--rounds 3 --keys 2000 --write-buffer-size 16384`，真实磁盘）
+
+```
+MISSING 0 MISMATCH 0 COMPACTION_ROUNDS_TOTAL 47 MANIFEST_ROLLS 1 MANIFEST_BYTES 7661
+LIVE_VERSIONS_MAX 6 READ_FILES_CHECKED_P50 1 READ_FILES_CHECKED_MAX 1 READ_BASELINE_M3 59 FD_GROWTH 1 ROUND_SAMPLES 47
+B05_OK 1 B06_OK 1 B07_OK 1
+M4-B03 STRATEGY_TABLE strat=round_robin strat=min_overlap [COMPACTION_STRATEGY_OK]
+[COMPACTION_STRESS_OK]
+```
+
+### 9.3 未做 / 未验证（本轮诚实清单）
+
+1. **B01/B02 未实现**（compaction 中途 `kill -9` 的进程级对账；需要 `CompactionHook` 的四个注入点 + 子进程驱动）。
+   门禁**未接**这两条腿（避免 `--require-m3` 下 SKIP 变 FAIL），需下一轮补。
+2. **B08 的数值门禁未收紧**：实测 `live_versions_max=6` > 设计示例的 ≤4。门禁腿只断言"计数存在"，
+   **不**声称满足 ≤4；保留数字交用户裁决（不删弱、不改阈值）。
+3. **A 组仍缺**：A18（L0 多版本取最新，M3 的 `Read.NewestWinsAcrossThreeFiles` 已覆盖 L0 语义，未单列）、
+   A20（`std::map` 全量对账）、A21、A22-A27 的 DB 级端到端（`ShouldDrop` 真值表已在 `Drop.DecisionIsDisjunctionNotConjunction` 覆盖）、
+   A31（放大行**手算**自洽）、A33（并发 rebase 的构造性用例）、A34/A35/A36 的加宽 SpyEnv 锁探针、A37（饥饿探针）、
+   A38（shutdown）、A43（compaction 输出孤儿清理）。
+4. **A35/A36 的加宽 SpyEnv**（把 rename/SyncDir/GetFileSize/GetChildren/RemoveFile/Truncate/块读都纳入）**未做**。
+5. **`min_overlap` 仍未进生产默认**（默认 `kRoundRobin`）；理由：round_robin 的种子取"文件号最小者"，
+   在同一输入下输出完全确定（A14 已钉），而 min_overlap 的对照实测（B03）目前只打印两行、没有定性结论。
+6. `FRONT` 的 ops 中 Put 侧用的是 flusher 批延迟（不是每个写者的端到端），登记为口径近似。
+7. 空间放大的 `tmp_bytes` 只统计 `.sst.tmp/MANIFEST-*.tmp/CURRENT.tmp`；`LOCK` 与 `META`（迁移残片）不计入。
+
+## 10. M3-B05 fd-leak 探针挂死：现象 / 根因 / 修法 / 证据（M4.3 修复）
+
+### 10.1 现象与最小复现
+
+```
+rm -rf /tmp/fdtest && timeout 120 ./build/bin/lsm_m3_probe fd-leak /tmp/fdtest 60
+（修复前）→ rc=124；主线程 ~99% CPU 自旋；目录 30s 内文件集不变
+```
+确定性参数：`write_buffer_size = 8 KiB`（默认 `level0_file_num_compaction_trigger = 4`）、60 轮 × 400 Put。
+
+### 10.2 挂死现场的谓词分量（原始输出）
+
+用等价的诊断驱动（与探针同参数）在自旋循环里打印各分量：
+
+```
+WAIT r=0 it=4000  target=8 completed=7 failed=0 imm=0 pending=0
+WAIT r=0 it=8000  target=8 completed=7 failed=0 imm=0 pending=0
+...
+WAIT r=0 it=50000 target=8 completed=7 failed=0 imm=0 pending=0
+TIMEOUT r=0 completed=7 failed=0 imm=0 err=
+```
+
+- `flushes_failed == 0`、`immutables_.size() == 0`、`bg_error_` 为空、后台两个线程均空闲；
+- 唯一不满足的分量是 `flushes_completed (7) >= target (8)`，而 **target 永远不可能达到**：
+  探针旧写法是"Put 之后读 `completed`，再 `+1`"，若本轮的 flush 在读取之前已经完成，
+  目标就变成"还要再来一次 flush"；下一轮 Put 之前不会再有任何写 ⇒ 谓词不可达。
+
+### 10.3 定性：**探针假设失效**（不是产品死锁）
+
+- 后台 flush 线程确实在工作：带 `LSM_TRACE=1` 的等价驱动显示
+  `BG woke=35 / BG take imm=35 / FL start=35 / FL done=35 / FL early=0`，全部 immutable 都被冲刷并 pop；
+- `MaybeScheduleCompaction` 只在 flush 完成后置位，compaction 线程空闲（`pending=0`）；
+- 主线程自旋的是**探针自己的 WaitFlushIdle**（谓词不可达），不是产品里的锁等待。
+  ⇒ 与 M2 的 A31（丢唤醒）同类的是"自旋判据不可达"这一**测试假设**问题；产品侧没有"没人 flush"的自锁
+  （BackgroundLoop 的第一步就是 `wait(!immutables_.empty())` → `FlushImmutable` → pop，见 `src/db_impl.cpp`）。
+
+### 10.4 修法（改探针判据，不改产品语义、也不关 compaction）
+
+`scripts/m3_probe.cpp` 的 `cmd_fd_leak`：把
+`completed = GetFlushStats().flushes_completed + 1;` 改为
+`completed = GetFlushStats().flushes_completed;`，
+即"等当前计数 + `immutables_==0`"（真正的 flush 空闲），而不是"等一次新的 flush 完成"。
+句柄泄漏判据**未削弱**：仍然跑满 60 轮 × 400 Put（每轮必然触发 ≥1 次 flush 与若干 compaction），
+仍然断言 `FD_GROWTH` 有界。
+
+### 10.5 修复后证据（原始输出）
+
+```
+$ time timeout 120 ./build/bin/lsm_m3_probe fd-leak /tmp/fdtest 60
+FD_GROWTH 1 FD_BASELINE 8 FLUSHES_COMPLETED 452
+rc=0        real 0m15.9s
+```
+
+### 10.6 教训
+
+这是"M2-A31 丢唤醒 → M3.2 pending/immutables 错过唤醒 → M4.3 探针自旋判据不可达"的**第三次同类事件**：
+凡是"等待某个事件发生"的判据，必须写成**单调可达**的形式（捕获 before + 等 >=，或直接等状态谓词），
+不能写成"现在 +1"这种依赖时序的增量式目标。
+
+### 10.7 本轮仍未完成（交用户裁决，未删弱）
+
+1. **B01/B02 未实现**（compaction 中途 kill -9 + 三注入点）；门禁未接这两条腿。
+2. **A35/A36 的加宽 SpyEnv**（rename/SyncDir/GetFileSize/GetChildren/RemoveFile/Truncate/块读）未做。
+3. **A18/A20/A21/A31/A33/A34/A37/A38/A43 未写**。
+4. `LIVE_VERSIONS_MAX=6` 为观测值（见 docs/amplification.md §5），门禁只断言计数存在。
+5. `FRONT` 的 Put 侧为下界近似口径（见 docs/amplification.md §5）。
+
+## 11. Recover.SSTableOnly（M3-A35）偶发失败：根因与修复（M4.3 第二次回归）
+
+> **登记**：这是本轮**第二次**由用户复跑发现的、代理自报为绿的问题（第一次是 M3-B05 fd-leak 探针判据不可达）。
+> 仓库纪律是零 flaky（`docs/m2-prerequisites.md` §7）；上一轮"16/16 PASS"是在侥幸运行上得到的，不构成交付证据。
+
+### 11.1 现象
+
+最终树上 `bash scripts/lsm_gate.sh --rounds 100 --no-asan --require-m3` 第一腿 FAIL：
+```
+[==========] 172 tests from 48 test suites ran.
+[  PASSED  ] 171 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Recover.SSTableOnly
+```
+单例 15 次：pass=14 fail=1（≈7%）。失败断言是 A35 的 `EXPECT_EQ(0u, st.records_replayed)`。
+
+### 11.2 现场（诊断驱动的原始输出）
+
+等价驱动循环复现，失败时打印目录里的 `.log` 与大小：
+```
+FAIL iter=39 records_replayed=15 logs: 000015.log(size=540) 000018.log(size=0)
+```
+即：当前 log（`000018`）确为空，但**已被 flush 覆盖的旧 log `000015` 没被回收**，重开时重放了它。
+
+### 11.3 根因（产品侧竞态，不是测试假设）
+
+代码位置：
+- `src/db_impl.cpp` `RunFlusher()` 的**阶段 A**：冻结 memtable 后立刻 `bg_cv_.notify_all()`；
+- 同一函数的**阶段 A'** 才调用 `RotateLog()`（`src/db_impl.cpp` 的 `RotateLog`：分配新 log 号、fsync 旧 log、
+  建空新 log，并更新 `log_number_`/`memtable_log_number_`）。
+
+⇒ 后台 flush 线程可以在**轮转之前**被唤醒并进入 `FlushImmutable`，此时
+`RecomputeMinLogNumberToKeepLocked` 看到的是**轮转前**的 `memtable_log_number_`，
+算出的 `min_log_number_to_keep` 偏小；
+等 `RotateLog()` 随后完成时，这次 flush 的 `RecycleObsoleteLogs` **已经跑过**（不会再跑第二次），
+于是"刚被 flush 覆盖的旧 log"逃过回收 ⇒ 重开必然重放（A35 契约被破坏）。
+这不是测试假设失效：M4 之前该竞态窗口存在但概率低，M4 新增 compaction 线程改变了调度时序后暴露。
+`ForceFlushForTest()` 是同一形态（先 notify、后 RotateLog），所以单测里更易复现。
+
+### 11.4 修法（产品侧确定化：轮转先于唤醒）
+
+1. 新增 `rotate_in_progress_`（`src/db_impl.h`）：冻结时置位，轮转成功/失败后清位；
+2. `RunFlusher()` 阶段 A 的冻结**不再 notify**；阶段 A' 的 `RotateLog()` 返回后（成功与失败两条路径）
+   清 `rotate_in_progress_` 并 `bg_cv_.notify_all()`；
+3. `BackgroundLoop()` 的谓词改为 `bg_stop_ || (!immutables_.empty() && !rotate_in_progress_)`
+   —— 即"先轮转、后 flush"，保证 `min_log_number_to_keep` 用的是新 log 号；
+4. `ForceFlushForTest()` 同序修改（冻结不 notify → RotateLog → 清位 + notify）。
+
+契约不变：A35 仍断言 `records_replayed == 0` + 老 log 已回收 + 400 个 key 全可读（断言一行未改）。
+
+### 11.5 证明不 flaky（原始计数行）
+
+```
+$ for i in $(seq 1 200); do ./build/bin/lsm_tests --gtest_filter=Recover.SSTableOnly; done
+A35 pass=200 fail=0
+
+$ for r in 1 2 3; do ./build/bin/lsm_tests; done
+[  PASSED  ] 172 tests.   （x3）
+```
+（另有等价的独立驱动 `/tmp/a35`：修复前 300 次内 1 次失败；修复后 `ALL 300 OK`。）

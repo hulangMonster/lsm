@@ -171,3 +171,7 @@ add_executable(fsbench_commit_latency scripts/fsbench_commit_latency.cpp)
 # M3.3：四个门禁脚本（B01/B03/B04/B05）共用的探针
 add_executable(lsm_m3_probe scripts/m3_probe.cpp)
 target_link_libraries(lsm_m3_probe PRIVATE lsm)
+
+# M4.3：三个放大的实测探针（B 组驱动；真实磁盘）
+add_executable(lsm_ampl_probe scripts/lsm_ampl_probe.cpp)
+target_link_libraries(lsm_ampl_probe PRIVATE lsm)

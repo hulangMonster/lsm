@@ -276,4 +276,190 @@ TEST(Current, InjectedRenameFailureKeepsOldCurrent) {
   delete db2;
 }
 
+// ---- A17：安装期层级校验必须拒绝非法布局 ----
+TEST(LevelLayout, OverlapRejectedOnInstall) {
+  const InternalKeyComparator icmp(BytewiseComparator());
+  auto mk = [](uint64_t n, const std::string& lo, const std::string& hi) {
+    FileMetaData f;
+    f.number = n;
+    f.file_size = 100;
+    f.max_sequence = 100;
+    f.smallest = BuildInternalKey(lo, 100, kTypeValue);
+    f.largest = BuildInternalKey(hi, 1, kTypeValue);
+    return f;
+  };
+  std::string why;
+  {   // (a) 同一 user key 跨两个文件（端点相等）
+    std::vector<std::vector<FileMetaData>> l(kNumLevels);
+    l[1] = {mk(1, "a", "m"), mk(2, "m", "z")};
+    EXPECT_FALSE(ValidateLevelLayout(l, icmp, &why)) << "端点相等必须拒绝（R5 的收紧）";
+    EXPECT_NE(std::string::npos, why.find("level 1")) << why;
+  }
+  {   // (b) 区间部分覆盖
+    std::vector<std::vector<FileMetaData>> l(kNumLevels);
+    l[1] = {mk(1, "a", "n"), mk(2, "m", "z")};
+    EXPECT_FALSE(ValidateLevelLayout(l, icmp, &why));
+  }
+  {   // (c) 顺序错乱
+    std::vector<std::vector<FileMetaData>> l(kNumLevels);
+    l[1] = {mk(1, "m", "n"), mk(2, "a", "b")};
+    EXPECT_FALSE(ValidateLevelLayout(l, icmp, &why));
+  }
+  {   // 合法布局必须通过
+    std::vector<std::vector<FileMetaData>> l(kNumLevels);
+    l[1] = {mk(1, "a", "b"), mk(2, "c", "d")};
+    EXPECT_TRUE(ValidateLevelLayout(l, icmp, &why)) << why;
+  }
+}
+
+// ---- A28/A29：快照可见性与最小快照 ----
+TEST(Snapshot, VisibleVersionSurvivesCompactionAndSmallestUpdates) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  impl->SetCompactionAutoForTest(false);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 60; ++i) {
+      const int idx = round * 60 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  auto* s = impl->GetSnapshot();
+  ASSERT_TRUE(s != nullptr);
+  const SequenceNumber seq_at_snap = s->sequence;
+  ASSERT_TRUE(db->Put(K(1), "after-snapshot").ok());
+  impl->RunOneCompactionForTest();
+
+  std::string v;
+  ASSERT_TRUE(impl->GetAtSnapshot(s, K(1), &v).ok());
+  EXPECT_EQ(V(1), v) << "A28：快照内可见的旧版本不得被 compaction 丢掉";
+  ASSERT_TRUE(db->Get(K(1), &v).ok());
+  EXPECT_EQ("after-snapshot", v) << "最新读必须看到新值";
+
+  EXPECT_EQ(seq_at_snap, impl->smallest_snapshot());
+  auto* s2 = impl->GetSnapshot();
+  ASSERT_TRUE(s2 != nullptr);
+  EXPECT_EQ(seq_at_snap, impl->smallest_snapshot());
+  impl->ReleaseSnapshot(s);
+  EXPECT_EQ(s2->sequence, impl->smallest_snapshot());
+  impl->ReleaseSnapshot(s2);
+  EXPECT_EQ(impl->last_sequence(), impl->smallest_snapshot());
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
+// ---- A41：已 ack 数据在 MANIFEST 回放后仍可见 ----
+TEST(Recovery, AckedDataVisibleAfterManifestReplay) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  for (int i = 1; i <= 200; ++i) {
+    WriteOptions wo;
+    wo.sync = true;
+    ASSERT_TRUE(db->Put(wo, K(i), V(i)).ok());
+  }
+  ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+
+  DB* db2 = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db2).ok());
+  auto* impl2 = static_cast<PersistentDBImpl*>(db2);
+  const RecoveryStats rs = impl2->GetRecoveryStats();
+  EXPECT_TRUE(rs.manifest_present);
+  EXPECT_GE(rs.manifest_edits_replayed, 1u);
+  std::string v;
+  for (int i = 1; i <= 200; ++i) {
+    ASSERT_TRUE(db2->Get(K(i), &v).ok()) << "key " << i;
+    EXPECT_EQ(V(i), v);
+  }
+  ASSERT_TRUE(db2->Close().ok());
+  delete db2;
+}
+
+// ---- compaction 失败矩阵：输出写/rename 失败 ⇒ 旧版本完好、无半成品注册、CURRENT 可回放 ----
+class CompactionFailEnv : public MemEnv {
+ public:
+  bool fail_output_write = false;
+  bool fail_output_rename = false;
+  Status NewWritableFile(const std::string& fname, WritableFile** result) override {
+    if (fail_output_write && fname.find(".sst.tmp") != std::string::npos) {
+      return Status::IOError("injected output write failure", fname);
+    }
+    return MemEnv::NewWritableFile(fname, result);
+  }
+  Status RenameFile(const std::string& src, const std::string& target) override {
+    if (fail_output_rename && target.find(".sst") != std::string::npos &&
+        target.find(".tmp") == std::string::npos) {
+      return Status::IOError("injected output rename failure", target);
+    }
+    return MemEnv::RenameFile(src, target);
+  }
+};
+
+static void RunFailureCase(bool fail_write, bool fail_rename) {
+  CompactionFailEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  impl->SetCompactionAutoForTest(false);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 60; ++i) {
+      const int idx = round * 60 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  const uint64_t files_before = impl->files_at_level(0);
+  const CompactionStats before = impl->GetCompactionStats();
+  env.fail_output_write = fail_write;
+  env.fail_output_rename = fail_rename;
+  impl->RunOneCompactionForTest();
+  env.fail_output_write = false;
+  env.fail_output_rename = false;
+
+  const CompactionStats after = impl->GetCompactionStats();
+  EXPECT_GE(after.failed - before.failed, 1u) << "失败必须计数";
+  EXPECT_EQ(files_before, impl->files_at_level(0)) << "失败不得安装新版本（输入仍在 L0）";
+  EXPECT_EQ(0u, impl->files_at_level(1)) << "不得有半成品被注册";
+  std::string v;
+  for (int i = 1; i <= 180; ++i) {
+    ASSERT_TRUE(db->Get(K(i), &v).ok()) << "key " << i;
+    EXPECT_EQ(V(i), v);
+  }
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+
+  DB* db2 = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db2).ok()) << "CURRENT 必须仍指向可回放的 MANIFEST";
+  for (int i = 1; i <= 180; ++i) {
+    ASSERT_TRUE(db2->Get(K(i), &v).ok()) << "重开后 key " << i;
+  }
+  ASSERT_TRUE(db2->Close().ok());
+  delete db2;
+}
+
+TEST(CompactionFail, OutputWriteFailureKeepsOldVersion) {
+  RunFailureCase(true, false);
+  EXPECT_FALSE(::testing::Test::HasFailure()) << "WriteFailure 用例内不得有失败断言";
+}
+TEST(CompactionFail, OutputRenameFailureKeepsOldVersion) {
+  RunFailureCase(false, true);
+  EXPECT_FALSE(::testing::Test::HasFailure()) << "RenameFailure 用例内不得有失败断言";
+}
+
 }  // namespace lsm

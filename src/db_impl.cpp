@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <vector>
 #include <cstring>
 #include <set>
 #include <utility>
@@ -16,6 +17,7 @@
 
 namespace lsm {
 namespace {
+
 
 namespace {
 // A25 探针（I17 持锁零 IO 的可验证化）：持有 DB 互斥锁的线程置位该标记。
@@ -246,6 +248,7 @@ void PersistentDBImpl::WaitForImmutableCapacity() {
 }
 
 Status PersistentDBImpl::RunFlusher() {
+  const uint64_t batch_t0 = EnvOf()->NowMicros();
   std::string payload;
   std::vector<Pending*> members;
   bool need_sync = false;
@@ -300,7 +303,9 @@ Status PersistentDBImpl::RunFlusher() {
           memtable_log_number_ = log_number_;   // 轮转前暂记；A' 轮转成功后更新为新 log（§6.6.2）
           log_sealed_ = true;                   // 当前 log 封口，本批起必须轮转
           need_rotate_ = true;
-          bg_cv_.notify_all();                  // 唤醒后台线程（L13）
+          rotate_in_progress_ = true;           // 轮转完成前不许 flush：min_log_to_keep 需要新 log 号
+          // 注意：**不在这里 notify** —— 见阶段 A' 之后；否则后台线程会用旧 log 号算 min_keep，
+          // 导致刚被 flush 覆盖的旧 log 逃过回收（M3-A35 实测偶发 records_replayed > 0）。
         } else {
           // 空表：不必制造空 SSTable，直接换一个容量足够的新表（当前 log 未封口，无需轮转）。
           memtable_ = std::make_shared<MemTable>(internal_comparator_, new_cap);
@@ -331,6 +336,8 @@ Status PersistentDBImpl::RunFlusher() {
         DbMutexGuard ml(mutex_);
         ++flush_stats_.rotate_failed;
         flush_stats_.last_error = rs.ToString();
+        rotate_in_progress_ = false;                        // 轮转失败也必须解封后台线程（imm 仍需 flush）
+        bg_cv_.notify_all();
       }
       std::lock_guard<std::mutex> ql(commit_mu_);
       for (Pending* p : members) {
@@ -340,6 +347,10 @@ Status PersistentDBImpl::RunFlusher() {
       commit_cv_.notify_all();
       return rs;
     }
+    // 轮转成功后：new log 号已写进 log_number_/memtable_log_number_，此时才允许后台 flush。
+    DbMutexGuard ml(mutex_);
+    rotate_in_progress_ = false;
+    bg_cv_.notify_all();
   }
 
   // ---- 阶段 B（持 commit_mu_ → mutex_）：分配 sequence + 组 payload（§6.6.1）----
@@ -352,6 +363,14 @@ Status PersistentDBImpl::RunFlusher() {
     }
     last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
     if (snapshots_.empty()) smallest_snapshot_ = last_sequence_;
+    // M4.3：写放大分子（user_logical）与前台延迟样本（FRONT 行）。
+    for (const Pending* p : members) {
+      user_logical_bytes_ += p->key.size() + p->value.size();
+      entry_bytes_ += p->key.size() + p->value.size() + 16;
+    }
+    put_ops_ += members.size();
+    front_samples_us_.push_back(EnvOf()->NowMicros() - batch_t0);
+    if (front_samples_us_.size() > 20000) front_samples_us_.erase(front_samples_us_.begin());
     payload = EncodeGroup(begin, members);
   }
 
@@ -423,8 +442,15 @@ Status PersistentDBImpl::GetAtSnapshot(const Snapshot* snapshot, const Slice& ke
     seq = (snapshot != nullptr) ? snapshot->sequence : last_sequence_;
   }
   DbReadStats delta;
+  const uint64_t op_t0 = EnvOf()->NowMicros();
   const Status s = GetInternal(key, seq, value, &delta);
   MergeReadStats(delta);
+  {
+    DbMutexGuard l(mutex_);
+    ++get_count_;
+    front_samples_us_.push_back(EnvOf()->NowMicros() - op_t0);
+    if (front_samples_us_.size() > 20000) front_samples_us_.erase(front_samples_us_.begin());
+  }
   return s;
 }
 
@@ -643,8 +669,8 @@ Status PersistentDBImpl::ForceFlushForTest() {
       memtable_log_number_ = log_number_;
       log_sealed_ = true;
       need_rotate_ = true;
+      rotate_in_progress_ = true;   // 轮转完成前不许 flush（与 RunFlusher 同一时序纪律）
       enqueued = true;
-      bg_cv_.notify_all();
     } else if (!log_sealed_) {
       // 空表：仍要把当前 log 轮转成空文件（"关库时当前 log 为空"的契约）。
       log_sealed_ = true;
@@ -652,6 +678,11 @@ Status PersistentDBImpl::ForceFlushForTest() {
     }
   }
   const Status rs = RotateLog();
+  {
+    DbMutexGuard ml(mutex_);
+    rotate_in_progress_ = false;
+    if (enqueued || rs.ok()) bg_cv_.notify_all();
+  }
   if (!rs.ok()) return rs;
   if (!enqueued) return Status::OK();
   for (int i = 0; i < 8000000; ++i) {
@@ -712,7 +743,9 @@ void PersistentDBImpl::StartBackgroundThread() {
 void PersistentDBImpl::BackgroundLoop() {
   std::unique_lock<std::mutex> l(mutex_);
   while (true) {
-    bg_cv_.wait(l, [this] { return bg_stop_ || !immutables_.empty(); });
+    bg_cv_.wait(l, [this] {
+      return bg_stop_ || (!immutables_.empty() && !rotate_in_progress_);
+    });
     // §6.5：Close() 置 bg_stop_ 后必须**放弃**剩余 immutables 并退出（数据仍在 WAL + 内存，
     // 由 Close 计数 immutables_abandoned）；不能继续循环，否则会在 closed_ 下空转、join 挂死。
     if (bg_stop_) break;
@@ -919,6 +952,7 @@ void PersistentDBImpl::FlushImmutable(const std::shared_ptr<Immutable>& imm) {
     if (!immutables_.empty() && immutables_.front() == imm) immutables_.pop_front();
     ++flush_stats_.flushes_completed;
     flush_stats_.index_size_warn += index_warn;
+    flush_write_bytes_ += meta.file_size;
     bg_cv_.notify_all();
     compact_cv_.notify_all();   // immutables_ 变为空 ⇒ 唤醒 compaction（谓词含 immutables_.empty()）
   }
@@ -1382,6 +1416,7 @@ void PersistentDBImpl::InstallNewVersionLocked(std::shared_ptr<const Version> ne
   newv->SetUnrefHook([this](const Version* v) { OnVersionUnref(v); });
   version_ = newv;
   live_versions_.push_back(std::move(newv));
+  if (live_versions_.size() > live_versions_max_) live_versions_max_ = live_versions_.size();
 }
 
 void PersistentDBImpl::EnqueueObsoleteSST(uint64_t number) {
@@ -1468,7 +1503,8 @@ void PersistentDBImpl::StartCompactionThread() {
 Status PersistentDBImpl::LogAndApply(const VersionEdit& edit,
                                      const std::shared_ptr<const Version>& base,
                                      std::shared_ptr<const Version>* out_new) {
-  std::lock_guard<std::mutex> il(install_mu_);   // 9.4 全序最左端：安装串行化
+  std::lock_guard<std::mutex> il(install_mu_);
+  // 9.4 全序最左端：安装串行化
   std::shared_ptr<const Version> newv;
   std::shared_ptr<const Version> prev;
   std::string why;
@@ -1573,7 +1609,7 @@ void PersistentDBImpl::CompactOnce() {
     compaction_stats_.dropped_old_versions += round.dropped_old_versions;
     compaction_stats_.dropped_tombstones += round.dropped_tombstones;
     if (dt > compaction_stats_.round_micros_max) compaction_stats_.round_micros_max = dt;
-    compaction_stats_.round_micros_p50 = dt;
+    round_samples_us_.push_back(dt);   // 多轮采样；p50 在 getter 里按样本算，不用单轮近似
     if (run_status.ok() && install_status.ok()) {
       ++compaction_stats_.completed;
     } else {
@@ -1667,6 +1703,178 @@ std::shared_ptr<const Version> PersistentDBImpl::RefCurrentVersionForTest() {
   version_->Ref();
   const Version* p = version_.get();
   return std::shared_ptr<const Version>(p, [](const Version* v) { v->Unref(); });
+}
+
+
+// ---------------------------------------------------------------------------
+// M4.3：层级统计 / 三个放大口径 / 固定行格式（docs/m4-design.md §10.3）
+// ---------------------------------------------------------------------------
+
+namespace {
+uint64_t Percentile(const std::vector<uint64_t>& v, int pct) {
+  if (v.empty()) return 0;
+  std::vector<uint64_t> c = v;
+  std::sort(c.begin(), c.end());
+  size_t idx = static_cast<size_t>(pct) * (c.size() - 1) / 100;
+  if (idx >= c.size()) idx = c.size() - 1;   // p999 的分母是 1000，必须夹取
+  return c[idx];
+}
+}  // namespace
+
+LevelStats PersistentDBImpl::GetLevelStats() const {
+  DbMutexGuard l(mutex_);
+  LevelStats out;
+  if (version_ == nullptr) return out;
+  for (int l = 0; l < kNumLevels; ++l) {
+    out.files[l] = version_->level_files(l).size();
+    out.bytes[l] = version_->total_bytes(l);
+    out.score[l] = Compaction::Score(*version_, options_, l);
+  }
+  return out;
+}
+
+AmplificationStats PersistentDBImpl::GetAmplificationStats() const {
+  AmplificationStats out;
+  {
+    DbMutexGuard l(mutex_);
+    out.user_logical_bytes = user_logical_bytes_;
+    out.entry_bytes = entry_bytes_;
+    out.flush_write_bytes = flush_write_bytes_;
+    out.get_count = get_count_;
+    out.files_checked = read_stats_.files_checked;
+    out.index_blocks_read = read_stats_.index_blocks_read;
+    out.data_blocks_read = read_stats_.data_blocks_read;
+    out.bytes_read = read_stats_.bytes_read;
+    out.manifest_bytes = manifest_bytes_;
+    out.compaction_rounds = compaction_stats_.completed;
+    out.compact_write_bytes = compaction_stats_.bytes_written;
+    out.dropped_old_versions = compaction_stats_.dropped_old_versions;
+    out.dropped_tombstones = compaction_stats_.dropped_tombstones;
+    out.round_samples = round_samples_us_.size();
+    out.compaction_round_p50_us = Percentile(round_samples_us_, 50);
+    out.compaction_round_max_us = compaction_stats_.round_micros_max;
+    out.live_versions = live_versions_.size();
+    out.live_versions_max = live_versions_max_;
+    if (version_ != nullptr) {
+      for (const FileMetaData& f : version_->AllFiles()) out.sst_bytes += f.file_size;
+    }
+  }
+  // 目录扫描在锁外（L26；A36 的探针会把持锁 IO 当违规）。
+  std::vector<std::string> children;
+  if (EnvOf()->GetChildren(dbname_, &children).ok()) {
+    for (const std::string& c : children) {
+      uint64_t n = 0;
+      uint64_t size = 0;
+      std::string path = dbname_ + "/" + c;
+      if (c == "CURRENT") {
+        EnvOf()->GetFileSize(path, &size);
+        out.current_bytes = size;
+      } else if (ParseLogFileName(c, &n)) {
+        EnvOf()->GetFileSize(path, &size);
+        out.log_bytes += size;
+      } else if (ParseTempFileName(c, &n) || ParseManifestTempFileName(c, &n) ||
+                 c == "CURRENT.tmp") {
+        EnvOf()->GetFileSize(path, &size);
+        out.tmp_bytes += size;
+      }
+    }
+  }
+  return out;
+}
+
+std::string PersistentDBImpl::FormatLevelLine(const std::string& round_id) const {
+  const LevelStats ls = GetLevelStats();
+  std::string out = "LEVEL round_id=" + round_id;
+  uint64_t total_files = 0, total_bytes = 0;
+  for (int l = 0; l < kNumLevels; ++l) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), " l%d_files=%llu l%d_bytes=%llu", l,
+                  static_cast<unsigned long long>(ls.files[l]), l,
+                  static_cast<unsigned long long>(ls.bytes[l]));
+    out += buf;
+    total_files += ls.files[l];
+    total_bytes += ls.bytes[l];
+  }
+  {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), " total_sst_files=%llu total_sst_bytes=%llu",
+                  static_cast<unsigned long long>(total_files),
+                  static_cast<unsigned long long>(total_bytes));
+    out += buf;
+  }
+  for (int l = 0; l < kNumLevels; ++l) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), " l%d_score=%.6f", l, ls.score[l]);
+    out += buf;
+  }
+  return out;
+}
+
+std::string PersistentDBImpl::FormatAmplLine(const std::string& round_id) const {
+  const AmplificationStats a = GetAmplificationStats();
+  const double user = static_cast<double>(a.user_logical_bytes);
+  const double wa_total =
+      user > 0 ? static_cast<double>(a.flush_write_bytes + a.compact_write_bytes) / user : 0.0;
+  const double wa_excl = user > 0 ? static_cast<double>(a.flush_write_bytes) / user : 0.0;
+  const double read_amp =
+      a.get_count > 0 ? static_cast<double>(a.files_checked) / static_cast<double>(a.get_count) : 0.0;
+  const double space_amp =
+      user > 0 ? static_cast<double>(a.sst_bytes + a.manifest_bytes + a.current_bytes + a.log_bytes +
+                                     a.tmp_bytes) /
+                     user
+               : 0.0;
+  const double space_sst = user > 0 ? static_cast<double>(a.sst_bytes) / user : 0.0;
+  char buf[1024];
+  std::snprintf(buf, sizeof(buf),
+                "AMPL round_id=%s user_logical_bytes=%llu entry_bytes=%llu flush_write_bytes=%llu "
+                "compact_write_bytes=%llu write_amp_total=%.6f write_amp_excl_compact=%.6f "
+                "read_files_checked=%llu read_index_blocks_read=%llu read_data_blocks_read=%llu "
+                "read_bytes=%llu read_get_count=%llu read_amp_files_per_get=%.6f "
+                "space_sst_bytes=%llu space_manifest_bytes=%llu space_current_bytes=%llu "
+                "space_log_bytes=%llu space_tmp_bytes=%llu space_amp=%.6f space_amp_sst_only=%.6f "
+                "dropped_old_versions=%llu dropped_tombstones=%llu compaction_rounds=%llu "
+                "compaction_round_p50_us=%llu compaction_round_max_us=%llu live_versions_max=%llu",
+                round_id.c_str(), static_cast<unsigned long long>(a.user_logical_bytes),
+                static_cast<unsigned long long>(a.entry_bytes),
+                static_cast<unsigned long long>(a.flush_write_bytes),
+                static_cast<unsigned long long>(a.compact_write_bytes), wa_total, wa_excl,
+                static_cast<unsigned long long>(a.files_checked),
+                static_cast<unsigned long long>(a.index_blocks_read),
+                static_cast<unsigned long long>(a.data_blocks_read),
+                static_cast<unsigned long long>(a.bytes_read),
+                static_cast<unsigned long long>(a.get_count), read_amp,
+                static_cast<unsigned long long>(a.sst_bytes),
+                static_cast<unsigned long long>(a.manifest_bytes),
+                static_cast<unsigned long long>(a.current_bytes),
+                static_cast<unsigned long long>(a.log_bytes),
+                static_cast<unsigned long long>(a.tmp_bytes), space_amp, space_sst,
+                static_cast<unsigned long long>(a.dropped_old_versions),
+                static_cast<unsigned long long>(a.dropped_tombstones),
+                static_cast<unsigned long long>(a.compaction_rounds),
+                static_cast<unsigned long long>(a.compaction_round_p50_us),
+                static_cast<unsigned long long>(a.compaction_round_max_us),
+                static_cast<unsigned long long>(a.live_versions_max));
+  return std::string(buf);
+}
+
+std::string PersistentDBImpl::FormatFrontLine(const std::string& round_id) const {
+  std::vector<uint64_t> samples;
+  uint64_t get_count = 0;
+  {
+    DbMutexGuard l(mutex_);
+    samples = front_samples_us_;
+    get_count = get_count_;
+  }
+  char buf[512];
+  std::snprintf(buf, sizeof(buf),
+                "FRONT round_id=%s ops=%llu get_ops=%llu p50_us=%llu p99_us=%llu p999_us=%llu "
+                "max_us=%llu",
+                round_id.c_str(), static_cast<unsigned long long>(put_ops_ + get_count),
+                static_cast<unsigned long long>(get_count), static_cast<unsigned long long>(Percentile(samples, 50)),
+                static_cast<unsigned long long>(Percentile(samples, 99)),
+                static_cast<unsigned long long>(Percentile(samples, 999)),
+                static_cast<unsigned long long>(samples.empty() ? 0 : samples.back()));
+  return std::string(buf);
 }
 
 

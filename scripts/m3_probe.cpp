@@ -382,7 +382,10 @@ int cmd_fd_leak(int argc, char** argv) {
         return 1;
       }
     }
-    completed = impl->GetFlushStats().flushes_completed + 1;
+    // M4.3 判据修正：旧写法在 Put 之后取 completed+1，若本轮 flush 已完成，目标就变成
+    // "还要再来一次 flush"，而下一轮 Put 之前不会再有写 => 谓词不可达（自旋挂死）。
+    // 改为等"当前计数 + immutables_==0"（真正的 flush 空闲），不削弱句柄泄漏判据。
+    completed = impl->GetFlushStats().flushes_completed;
     WaitFlushIdle(impl, completed, 2000000);
     for (int i = 0; i < 400; ++i) {
       std::string got;

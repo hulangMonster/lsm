@@ -142,6 +142,22 @@ run_gate_m3_marked "M3-B05 句柄计数不增长" scripts/lsm_fd_leak_test.sh \
 run_gate_m3_marked "M4-B11 MANIFEST/VersionEdit A 组 + 零依赖" scripts/lsm_manifest_test.sh \
   'M4_TESTS_RAN [1-9][0-9]*@@M4_TESTS_FAILED 0@@LSM_VERSION_FORBIDDEN 0@@\[MANIFEST_OK\]'
 
+# ---------------- M4 腿（M4.3 B03/B05/B06/B07/B08/B09/B10）----------------
+run_gate_m3_marked "M4-B03 两种 pick 策略对照" scripts/lsm_compaction_stress.sh \
+  'M4-B03 STRATEGY_TABLE@@\[COMPACTION_STRATEGY_OK\]@@\[COMPACTION_STRESS_OK\]'
+run_gate_m3_marked "M4-B05 句柄上限（fd 不增长）" scripts/lsm_compaction_stress.sh \
+  'B05_OK 1@@\[COMPACTION_STRESS_OK\]'
+run_gate_m3_marked "M4-B06 读放大改善（p50<=3 max<=12）" scripts/lsm_compaction_stress.sh \
+  'READ_FILES_CHECKED_P50 [0-3]@@READ_FILES_CHECKED_MAX ([0-9]|1[0-2])@@B06_OK 1@@\[COMPACTION_STRESS_OK\]'
+run_gate_m3_marked "M4-B07 前台 P99 与单轮 P50 量级分离" scripts/lsm_compaction_stress.sh \
+  'B07_OK 1@@ROUND_SAMPLES [1-9][0-9]*@@\[COMPACTION_STRESS_OK\]'
+run_gate_m3_marked "M4-B08 存活 Version 数有界（计数存在）" scripts/lsm_compaction_stress.sh \
+  'LIVE_VERSIONS_MAX [0-9]+@@\[COMPACTION_STRESS_OK\]'
+run_gate_m3_marked "M4-B09 MANIFEST 体积/重建计数" scripts/lsm_compaction_stress.sh \
+  'MANIFEST_BYTES [0-9]+@@MANIFEST_ROLLS [0-9]+@@\[COMPACTION_STRESS_OK\]'
+run_gate_m3_marked "M4-B10 块缓存 NOT_APPLICABLE" scripts/lsm_compaction_stress.sh \
+  'M4-B10 NOT_APPLICABLE@@\[COMPACTION_STRESS_OK\]'
+
 echo
 echo "==== lsm_gate 汇总 ===="
 for line in "${RESULTS[@]}"; do echo "$line"; done

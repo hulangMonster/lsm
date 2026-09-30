@@ -147,23 +147,27 @@ bool Compaction::PickInputs(const Version& v, int level, PickStrategy s, const O
     chosen_upper.push_back(upper[seed]);
   }
 
-  // ---- 下层重叠集合 ----
+  // ---- 下层重叠集合（闭包：区间扩张后必须重扫，直到不再变化）----
   std::vector<FileMetaData> chosen_lower;
-  for (const FileMetaData& lf : lower) {
-    Slice llo, lhi;
-    if (!ParseUserRange(lf, &llo, &lhi)) continue;
-    if (RangesOverlap(Slice(begin), Slice(end), llo, lhi, uc)) chosen_lower.push_back(lf);
-  }
-  if (!chosen_lower.empty()) {
-    std::string b2 = begin, e2 = end;
-    for (const FileMetaData& lf : chosen_lower) {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (const FileMetaData& lf : lower) {
+      bool already = false;
+      for (const FileMetaData& c : chosen_lower) {
+        if (c.number == lf.number) { already = true; break; }
+      }
+      if (already) continue;
       Slice llo, lhi;
       if (!ParseUserRange(lf, &llo, &lhi)) continue;
-      if (uc->Compare(llo, Slice(b2)) < 0) b2 = llo.ToString();
-      if (uc->Compare(lhi, Slice(e2)) > 0) e2 = lhi.ToString();
+      if (RangesOverlap(Slice(begin), Slice(end), llo, lhi, uc)) {
+        chosen_lower.push_back(lf);
+        if (uc->Compare(llo, Slice(begin)) < 0) begin = llo.ToString();
+        if (uc->Compare(lhi, Slice(end)) > 0) end = lhi.ToString();
+        changed = true;
+      }
     }
-    begin = b2;
-    end = e2;
+    // L1+ 的上层是单文件；但区间扩张后仍可能需要把上层相邻文件纳入（保守：只扩下层）。
   }
 
   out->level = level;
