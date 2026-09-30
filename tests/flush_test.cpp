@@ -699,6 +699,9 @@ TEST(Flush, TombstoneCountPreserved) {
   Options options;
   options.env = &env;
   options.write_buffer_size = 8 * 1024;
+  // M4.2：本用例测的是 **flush** 不得丢 tombstone；把 compaction 触发阈值调高，隔离 compaction
+  // 的合法丢弃（I40）对"文件里 tombstone 条数"的影响（断言强度不变）。
+  options.level0_file_num_compaction_trigger = 1000;
   DB* db = nullptr;
   ASSERT_TRUE(DB::Open(options, "/db", &db).ok());
   PersistentDBImpl* impl = static_cast<PersistentDBImpl*>(db);
@@ -787,6 +790,9 @@ TEST(Read, NewestWinsAcrossThreeFiles) {
   Options options;
   options.env = &env;
   options.write_buffer_size = 8 * 1024;
+  // M4.2：本用例测的是 **L0 三文件** 的"逐个检查、不得因 range 提前返回"；
+  // 调高 compaction 阈值把三个文件留在 L0（M4 的 L1+ 等效用例见 tests/compaction_test.cpp）。
+  options.level0_file_num_compaction_trigger = 1000;
   DB* db = nullptr;
   ASSERT_TRUE(DB::Open(options, "/db", &db).ok());
   PersistentDBImpl* impl = static_cast<PersistentDBImpl*>(db);

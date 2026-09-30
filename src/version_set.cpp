@@ -255,6 +255,13 @@ SequenceNumber Version::MaxSequenceInFiles() const {
   return m;
 }
 
+void Version::Unref() const {
+  if (refs_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    const std::function<void(const Version*)> hook = unref_hook_;
+    if (hook) hook(this);
+  }
+}
+
 bool ValidateLevelLayout(const std::vector<std::vector<FileMetaData>>& levels,
                          const InternalKeyComparator& icmp, std::string* why) {
   if (levels.size() > static_cast<size_t>(kNumLevels)) {
@@ -817,6 +824,64 @@ Status VersionSet::RecoverManifest(Env* env, const std::string& dbname, const Op
   *out = std::make_shared<const Version>(std::vector<FileMetaData>(), /*log_number=*/0,
                                          /*min_log_number_to_keep=*/1,
                                          std::max<uint64_t>(1, max_dir + 1));
+  return Status::OK();
+}
+
+// ---------------------------------------------------------------------------
+// ManifestStore（M4.2：有状态 MANIFEST 句柄 + 模式 (a)/(b)）
+// ---------------------------------------------------------------------------
+
+ManifestStore::ManifestStore(Env* env, std::string dbname, uint64_t roll_bytes)
+    : env_(env), dbname_(std::move(dbname)), roll_bytes_(roll_bytes) {}
+
+ManifestStore::~ManifestStore() = default;
+
+Status ManifestStore::OpenAppend(uint64_t number, uint64_t bytes) {
+  const std::string path = ManifestFileName(dbname_, number);
+  WritableFile* raw = nullptr;
+  Status s = env_->NewAppendableFile(path, &raw);
+  if (!s.ok()) return s;
+  file_.reset(raw);
+  number_ = number;
+  bytes_ = bytes;
+  edits_ = 0;
+  rolls_ = 0;
+  return Status::OK();
+}
+
+Status ManifestStore::Append(const VersionEdit& edit) {
+  if (file_ == nullptr) return Status::IOError("ManifestStore::Append: not open", dbname_);
+  std::string rec;
+  if (!EncodeManifestRecord(edit, &rec)) {
+    return Status::Corruption("ManifestStore::Append: 编码失败");
+  }
+  Status s = file_->Append(Slice(rec));
+  if (s.ok()) s = file_->Sync();
+  if (!s.ok()) return s;
+  bytes_ += rec.size();
+  ++edits_;
+  return Status::OK();
+}
+
+Status ManifestStore::RollAndOpen(const Version& snapshot, const Options& options,
+                                  uint64_t new_number, uint64_t* old_number) {
+  const uint64_t old = number_;
+  Status s = VersionSet::WriteSnapshotManifest(env_, dbname_, new_number, snapshot, options);
+  if (!s.ok()) return s;
+  s = VersionSet::WriteCurrentAtomic(env_, dbname_, new_number);
+  if (!s.ok()) return s;
+  uint64_t size = 0;
+  s = env_->GetFileSize(ManifestFileName(dbname_, new_number), &size);
+  if (!s.ok()) return s;
+  WritableFile* raw = nullptr;
+  s = env_->NewAppendableFile(ManifestFileName(dbname_, new_number), &raw);
+  if (!s.ok()) return s;
+  file_.reset(raw);
+  number_ = new_number;
+  bytes_ = size;
+  edits_ = 1;
+  ++rolls_;
+  if (old_number != nullptr) *old_number = old;
   return Status::OK();
 }
 

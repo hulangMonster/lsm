@@ -582,10 +582,10 @@ TEST(Manifest, RollWritesSnapshotAndKeepsNumberingMonotonic) {
   auto* impl = static_cast<PersistentDBImpl*>(db);
   ASSERT_TRUE(impl->ForceFlushForTest().ok());
   EXPECT_GE(impl->manifest_rolls(), 1u);
-  const uint64_t next = impl->next_file_number();
   const uint64_t manifest_number = impl->manifest_number();
   EXPECT_GT(manifest_number, 0u);
-  ASSERT_TRUE(db->Close().ok());
+  ASSERT_TRUE(db->Close().ok());   // 先停两个后台线程，再读 next_file_number_（否则与 compaction 的编号分配竞态）
+  const uint64_t next = impl->next_file_number();
   delete db;
 
   // X5：所有族（.log/.sst/MANIFEST）的编号必须严格小于 next_file_number_。

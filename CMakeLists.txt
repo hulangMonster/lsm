@@ -138,6 +138,8 @@ add_executable(lsm_tests
   tests/version_test.cpp
   # M4.2：选层/选文件/闭包/丢弃判据（A11~A16/A23/A26 的确定性部分）
   tests/compaction_test.cpp
+  # M4.2：compaction 端到端 / 读路径层级化 / 延迟删除 / 独立 CRC
+  tests/compaction_db_test.cpp
 )
 target_include_directories(lsm_tests PRIVATE
   ${GTEST_INCLUDE_DIR}

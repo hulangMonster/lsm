@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -55,10 +56,13 @@ class Version {
   uint64_t next_file_number() const { return next_file_number_; }
   SequenceNumber MaxSequenceInFiles() const;
 
-  // 【M4 新增】引用计数（I42/L23）：live 集合由 VersionSet 维护。
+  // 【M4 新增】引用计数（I42/L23）：live 集合由 DB 维护。
+  // Ref/Unref 成对：读路径拿到即 Ref、用完/迭代器析构即 Unref；安装新版本时对旧版本 Unref。
+  // 最后一个引用释放时调用 unref_hook_（DB 用它把版本从 live_versions_ 摘除）。
   void Ref() const { refs_.fetch_add(1, std::memory_order_relaxed); }
-  void Unref() const { refs_.fetch_sub(1, std::memory_order_relaxed); }
+  void Unref() const;
   int refs() const { return refs_.load(std::memory_order_relaxed); }
+  void SetUnrefHook(std::function<void(const Version*)> h) const { unref_hook_ = std::move(h); }
 
  private:
   void Normalize();
@@ -68,6 +72,7 @@ class Version {
   const uint64_t min_log_number_to_keep_;
   const uint64_t next_file_number_;
   mutable std::atomic<int> refs_{1};
+  mutable std::function<void(const Version*)> unref_hook_;
 };
 
 // 安装期层级校验（I37，§3.4）。返回 false + why（层号 / 两个文件号 / 冲突 key）。
@@ -152,6 +157,38 @@ class VersionSet {
   // 应用一条 edit 得到新 Version（X7：先 DeleteFile 后 AddFile）；安装前 ValidateLevelLayout。
   static bool ApplyEdit(const Version& base, const VersionEdit& edit,
                         std::shared_ptr<const Version>* out, std::string* why);
+};
+
+// 【M4.2】有状态的 MANIFEST 追加句柄 + 模式 (a) 重建（§8.1）。
+//   * Append    = 模式 (b)：向当前 MANIFEST 追加一条 record 并 fsync；
+//   * RollAndOpen = 模式 (a)：写新 MANIFEST 的全量快照 → fsync → rename → SyncDir →
+//                   写 CURRENT.tmp → fsync → rename(CURRENT) → SyncDir → 以新 MANIFEST 重开追加句柄。
+//   旧 MANIFEST 的删除**不由本类执行**（返回 old_number，由调用方进延迟删除队列，L24/I43）。
+class ManifestStore {
+ public:
+  ManifestStore(Env* env, std::string dbname, uint64_t roll_bytes);
+  ~ManifestStore();
+  ManifestStore(const ManifestStore&) = delete;
+  ManifestStore& operator=(const ManifestStore&) = delete;
+
+  Status OpenAppend(uint64_t number, uint64_t bytes);   // 恢复后打开追加点（追加点 = EOF）
+  Status Append(const VersionEdit& edit);               // 模式 (b)
+  Status RollAndOpen(const Version& snapshot, const Options& options, uint64_t new_number,
+                     uint64_t* old_number);             // 模式 (a)
+  bool open() const { return file_ != nullptr; }
+  bool ShouldRoll() const { return number_ == 0 || bytes_ > roll_bytes_; }
+  WritableFile* manifest_file() const { return file_.get(); }
+  uint64_t number() const { return number_; }
+  uint64_t bytes() const { return bytes_; }
+  uint64_t edits() const { return edits_; }
+  uint64_t rolls() const { return rolls_; }
+
+ private:
+  Env* const env_;
+  const std::string dbname_;
+  const uint64_t roll_bytes_;
+  uint64_t number_ = 0, bytes_ = 0, edits_ = 0, rolls_ = 0;
+  std::unique_ptr<WritableFile> file_;
 };
 
 // 文件号 → shared_ptr<const Table> 的有界缓存（D8/I30/L19）。

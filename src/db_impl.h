@@ -7,6 +7,8 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <list>
+#include <set>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -17,6 +19,7 @@
 #include "common.h"
 #include "db.h"
 #include "memtable.h"
+#include "compaction.h"
 #include "version_set.h"
 #include "wal.h"
 
@@ -81,6 +84,12 @@ struct FlushStats {
   std::string last_error;              // 最近一次 flush 失败的可读 Status
 };
 
+// M4.2：有状态 MANIFEST 的对外统计（GetManifestStats；诊断只读）。
+struct ManifestStats {
+  uint64_t number = 0, bytes = 0, edits = 0, rolls = 0;
+  uint64_t replay_edits = 0, replay_truncated_bytes = 0;
+};
+
 // 读路径命中位置（§D8；A30 断言 "hit_layer == none"）。
 enum class HitLayer { kNone, kMemTable, kImmutable, kSSTable };
 
@@ -139,6 +148,42 @@ class PersistentDBImpl : public DB {
     std::lock_guard<std::mutex> l(mutex_);
     return next_file_number_;
   }
+  // M4.2：快照句柄（§7.2）。GetSnapshot/ReleaseSnapshot 成对；GetAtSnapshot/NewIteratorAtSnapshot
+  // 用调用方持有的快照 sequence 读；SmallestSnapshot 是 compaction 丢弃判据的唯一真相源。
+  struct Snapshot {
+    SequenceNumber sequence = 0;
+  };
+  const Snapshot* GetSnapshot();
+  void ReleaseSnapshot(const Snapshot* snapshot);
+  Status GetAtSnapshot(const Snapshot* snapshot, const Slice& key, std::string* value);
+  Iterator* NewIteratorAtSnapshot(const Snapshot* snapshot);
+
+  // M4.2 诊断（只读）。
+  ManifestStats GetManifestStats() const;
+  CompactionStats GetCompactionStats() const;
+  size_t live_versions_size() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return live_versions_.size();
+  }
+  size_t pending_delete_size() const {
+    std::lock_guard<std::mutex> l(deletion_mu_);
+    return pending_delete_sst_.size() + pending_delete_manifest_.size();
+  }
+  bool compaction_pending_for_test() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return compaction_pending_;
+  }
+  void ScheduleCompactionForTest() { MaybeScheduleCompaction(); }
+  void MaybeDeleteObsoleteFilesForTest() { MaybeDeleteObsoleteFiles(); }
+  // 同步跑**一轮** compaction（测试用；生产只由 compaction 线程调用）。
+  void RunOneCompactionForTest() { CompactOnce(); }
+  uint64_t files_at_level(int level) const;
+  uint64_t bytes_at_level(int level) const;
+  // 持住当前 Version 的引用（模拟"正在迭代的读者"，A34/X8 的延迟删除判据）。
+  std::shared_ptr<const Version> RefCurrentVersionForTest();
+  void EnqueueObsoleteSSTForTest(uint64_t n) { EnqueueObsoleteSST(n); }
+  void SetCompactionAutoForTest(bool v) { compaction_auto_ = v; }
+
   // M4.1 诊断：取代路径的 MANIFEST 编号/字节数/编辑数/重建次数（受 mutex_ 保护）。
   uint64_t manifest_number() const {
     std::lock_guard<std::mutex> l(mutex_);
@@ -217,7 +262,7 @@ class PersistentDBImpl : public DB {
   void BackgroundLoop();
   void FlushImmutable(const std::shared_ptr<struct Immutable>& imm);
   void WaitForImmutableCapacity();
-  Status GetInternal(const Slice& key, std::string* value, DbReadStats* delta);
+  Status GetInternal(const Slice& key, SequenceNumber snapshot, std::string* value, DbReadStats* delta);
   void MergeReadStats(const DbReadStats& delta);
 
   // ---- M3.3（§6.3 步骤 ⑦/⑨、§6.6）----
@@ -254,6 +299,39 @@ class PersistentDBImpl : public DB {
   uint64_t manifest_bytes_ = 0;
   uint64_t manifest_edits_ = 0;
   uint64_t manifest_rolls_ = 0;
+
+  // ---- M4.2：有状态 MANIFEST + 安装串行化 + 延迟删除 + live versions + compaction ----
+  Status LogAndApply(const VersionEdit& edit, const std::shared_ptr<const Version>& base,
+                     std::shared_ptr<const Version>* out_new);
+  Status EnsureManifestOpen(const Version& snapshot);
+  uint64_t AllocateFileNumber();
+  void OnVersionUnref(const Version* v);
+  void EnqueueObsoleteSST(uint64_t number);
+  void EnqueueObsoleteManifest(uint64_t number);
+  void MaybeDeleteObsoleteFiles();
+  void MaybeScheduleCompaction();
+  void StartCompactionThread();
+  void BackgroundCompactionLoop();
+  void CompactOnce();
+  void InstallNewVersionLocked(std::shared_ptr<const Version> newv);
+  Iterator* BuildIterator(SequenceNumber snapshot);
+
+  std::unique_ptr<ManifestStore> manifest_;   // 受 install_mu_ 保护
+  mutable std::mutex install_mu_;             // 安装串行化（§9.4 全序最左端）
+  mutable std::mutex deletion_mu_;            // 延迟删除队列（L24；锁序 deletion_mu_ → mutex_）
+  std::set<uint64_t> pending_delete_sst_;
+  std::set<uint64_t> pending_delete_manifest_;
+  std::vector<std::shared_ptr<const Version>> live_versions_;   // 受 mutex_ 保护（I42；每项持有一个安装期引用）
+  std::thread compaction_thread_;
+  std::condition_variable compact_cv_;
+  bool compaction_auto_ = true;   // 测试可关闭自动调度，用 RunOneCompactionForTest 做确定性单轮
+  bool compaction_started_ = false;
+  bool compaction_pending_ = false;
+  bool compact_stop_ = false;
+  CompactionStats compaction_stats_;          // 受 mutex_ 保护
+  std::multiset<SequenceNumber> snapshots_;   // 受 mutex_ 保护
+  std::list<std::unique_ptr<Snapshot>> snapshot_handles_;
+  SequenceNumber smallest_snapshot_ = 0;      // 受 mutex_ 保护（无快照时 == last_sequence_）
 
   // M3：单后台 flush 线程（§6.5/L21：它只取 mutex_，永不碰 commit_mu_）
   std::thread bg_thread_;

@@ -6,6 +6,7 @@
 #define LSM_COMPACTION_H_
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,22 @@ struct CompactionInputs {
   std::string begin_user_key;
   std::string end_user_key;
 };
+
+// §5.7：compaction 统计（compaction 线程内累加；失败/丢弃必须计数）。
+struct CompactionStats {
+  uint64_t started = 0, completed = 0, failed = 0, aborted = 0;
+  uint64_t rounds_by_level[kNumLevels] = {};
+  uint64_t pick_round_robin = 0, pick_min_overlap = 0;
+  uint64_t input_files = 0, output_files = 0;
+  uint64_t bytes_read = 0, bytes_written = 0;
+  uint64_t dropped_old_versions = 0, dropped_tombstones = 0;
+  uint64_t install_rebase_retries = 0;
+  uint64_t round_micros_p50 = 0, round_micros_max = 0;
+  uint64_t level_full_events[kNumLevels] = {};
+  std::string last_error;
+};
+
+class TableCache;
 
 class Compaction {
  public:
@@ -46,6 +63,15 @@ class Compaction {
   static bool IsBaseLevelForKey(const Version& v, const Slice& user_key, int level);
 
   static std::string UserKeyOfInternal(const std::string& ikey);
+
+  // §6.4：执行（锁外）：多路归并 → 只在 user key 变化处滚动输出（X2）→ 每个输出 write+fsync+rename
+  // 之后才写进 *edit（I39）；edit 里先 DeleteFile(输入) 后 AddFile(输出层, 输出)（X7）。
+  // 丢弃判据真正被调用（ShouldDrop + IsBaseLevelForKey，I40/I41/X6）。
+  static Status Run(Env* env, TableCache* tc, const std::string& dbname, const CompactionInputs& in,
+                    const Options& o, const Version& version, SequenceNumber smallest_snapshot,
+                    const std::function<uint64_t()>& alloc_file_number,
+                    const InternalKeyComparator& icmp, VersionEdit* edit, CompactionStats* stats,
+                    std::string* why);
 };
 
 }  // namespace lsm

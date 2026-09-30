@@ -243,3 +243,37 @@ bash scripts/lsm_manifest_test.sh → M4_TESTS_RAN 21  M4_TESTS_FAILED 0  LSM_VE
 
 零断言 TEST = 0 ; DISABLED_/GTEST_SKIP/|| true = 0 ; 全量用例 154 → 162（+8）
 ```
+
+## 8. M4.2 核心执行体 + 调度 + 锁/队列 + 读路径层级化（本轮）
+
+### 8.1 交付
+
+| 范围 | 落地 |
+|---|---|
+| ① 执行体 | `Compaction::Run`：多路归并（复用 `MergingIterator`）→ 只在 user key 变化处滚动输出（X2）→ 每个输出 `write+fsync+rename+SyncDir` 后才 `AddFile`（I39）→ `VersionEdit` 先 `DeleteFile(输入)` 后 `AddFile(输出层)`（X7）；`ShouldDrop` + `IsBaseLevelForKey` 真正被调用，`dropped_old_versions`/`dropped_tombstones` 分开计数 |
+| ② 调度 | `compaction_thread_`/`compact_cv_`/`MaybeScheduleCompaction`；flush 完成后调度；compaction 循环的谓词要求 `immutables_.empty()`（flush 优先让路，L27）；同一时刻至多一个 compaction（单线程 + `install_mu_`）；flush 完成时 `compact_cv_.notify_all()`（修掉"pending 已置位但 immutables 未空 ⇒ 错过唤醒"的 bug） |
+| ③ 读路径 | `GetInternal`/`BuildIterator` 覆盖 L0 全部 + L1..L6 每个文件；L1+ 用"层内有序 + 下层不重叠"做 key range 过滤与提前 break；`files_checked` 只对真的进了 `TableCache::Get` 的文件递增；range 过滤计 `key_range_skipped` 且零 IO |
+| ④ 锁/队列 | `install_mu_`（最左端）、`deletion_mu_`（deletion_mu_ → mutex_）、延迟删除队列（SST + 旧 MANIFEST，不再即时删）、`live_versions_`（每项持有一个安装期 shared_ptr）、`Version::Ref/Unref` 真实调用点（读路径 Ref、安装替换 Unref、迭代器用 `VersionRefHolder` 先 Unref 再释放内存）；有状态 `ManifestStore`（`manifest_file()`/`Append`/`RollAndOpen`）+ `PersistentDBImpl::LogAndApply`（锁内准备 → 锁外/持 install_mu_ 写 MANIFEST → 回锁安装 → 锁外 Unref → 出队 unlink）+ `GetManifestStats()` |
+| 快照 | `GetSnapshot/ReleaseSnapshot/GetAtSnapshot/NewIteratorAtSnapshot` + `smallest_snapshot_`（`multiset` 按值删一个，A29 的语义） |
+
+**并发正确性关键修复（本轮实测暴露）**：`LogAndApply` 不再用陈旧的 `base` 安装，而是在锁内以**当前 `version_` 重放 edit**（L25 的 rebase），并把 `next_file_number_` 取当前值（防回退）；flush 也统一走 `LogAndApply`，杜绝"flush 直接改 `version_` 与 compaction 安装并发"的竞态。`MaybeDeleteObsoleteFiles` 先摘除 `refs()==0` 的旧版本、再算 live 集合。
+
+### 8.2 新增用例（162 → 167，+5）
+
+- `VersionEdit.CrcIndependentlyRecomputed`（A04 补强：**独立** bitwise CRC32C 复算，不复用被测实现）；
+- `CompactionDb.EndToEndMovesL0ToL1AndKeepsData`（L0→L1、输出计数、全量可读、重开可读）；
+- `ReadLevels.NewestWinsAndRangeFilterNotCounted`（L0 覆盖 L1、tombstone 屏蔽、range 过滤不计 `files_checked`）；
+- `Delete.DeferredUntilRefsZero`（持 live Version 引用 ⇒ 输入文件仍在、候选留在队列；引用归零 ⇒ 删除）；
+- `Current.InjectedRenameFailureKeepsOldCurrent`（A08 补强：在 `RenameFile(..., CURRENT)` 上**字面注入**一次失败 ⇒ CURRENT 不被切换、旧 MANIFEST 可回放、已 ack 数据由 WAL 补齐）。
+
+另：`tests/flush_test.cpp` 的 `Flush.TombstoneCountPreserved` 与 `Read.NewestWinsAcrossThreeFiles` 各加一行 `options.level0_file_num_compaction_trigger = 1000`，把用例**隔离**在"flush/L0 语义"上（断言一行未改、强度不变），因为 M4.2 起 compaction 默认生效会合法地移动/丢弃文件。
+
+### 8.3 未做 / 未验证（本轮诚实清单）
+
+1. **A 组仍缺**：A17/A18/A20~A38 的多数（层级安装拒绝、std::map 全量对账、输出切分边界、快照 A28/A29 的用例、A31 放大行自洽、A33 并发 rebase 的**构造性**用例、A34/A35/A36 的 SpyEnv 锁探针、A37 饥饿探针、A38 shutdown）；A41（MANIFEST 回放后 ack 可见）、A43（compaction 输出孤儿清理）仍未写。
+2. **锁探针未做**：`M4-A35`（安装临界区无 unlink 的事件序列）与 `M4-A36`（持 DB 锁零 IO 的加宽 SpyEnv）依赖专门的加宽 Env，未实现；本轮只保证既有 M3 `NoIoWhileHoldingDbMutex` 仍通过。
+3. **统计口径未收口**：`GetLevelStats`/`AmplificationStats`、`AMPL`/`LEVEL`/`FRONT` 行、`round_micros_p50` 目前只是单轮近似 —— M4.3 的放大报告与 B 组未做。
+4. **MakeRoomForWrite 的"写者触发 flush"分支**：当前实现是"compaction 让路等 immutables 清空"（L27 的实质），没有在写路径里显式增加 flush 触发条件；M4 的 M3 版 flush 触发（写缓冲满）未改。
+5. **compaction 失败矩阵**：`Run`/安装失败的计数与"旧版本完好"由 `LogAndApply` 的"先落盘后安装 + 失败不 swap"保证，但没有专门的故障注入用例（A42 的 compaction 版）。
+6. **min_overlap 策略**未进生产默认（默认 `kRoundRobin`）；B03 的策略对照未做。
+7. `live_versions_` 的条目在 `MaybeDeleteObsoleteFiles` 才回收（延迟清理），长压测下 `live_versions_max` 未测。

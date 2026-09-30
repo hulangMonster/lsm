@@ -351,6 +351,7 @@ Status PersistentDBImpl::RunFlusher() {
       members[i]->begin = begin + static_cast<SequenceNumber>(i);
     }
     last_sequence_ = begin + static_cast<SequenceNumber>(members.size()) - 1;
+    if (snapshots_.empty()) smallest_snapshot_ = last_sequence_;
     payload = EncodeGroup(begin, members);
   }
 
@@ -409,28 +410,43 @@ Status PersistentDBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status PersistentDBImpl::Get(const Slice& key, std::string* value) {
+  return GetAtSnapshot(nullptr, key, value);
+}
+
+Status PersistentDBImpl::GetAtSnapshot(const Snapshot* snapshot, const Slice& key,
+                                       std::string* value) {
   if (value == nullptr) return Status::InvalidArgument("PersistentDBImpl::Get: null value pointer");
   value->clear();
+  SequenceNumber seq = 0;
+  {
+    DbMutexGuard l(mutex_);
+    seq = (snapshot != nullptr) ? snapshot->sequence : last_sequence_;
+  }
   DbReadStats delta;
-  const Status s = GetInternal(key, value, &delta);
+  const Status s = GetInternal(key, seq, value, &delta);
   MergeReadStats(delta);
   return s;
 }
 
-Status PersistentDBImpl::GetInternal(const Slice& key, std::string* value, DbReadStats* delta) {
+Status PersistentDBImpl::GetInternal(const Slice& key, SequenceNumber snapshot,
+                                       std::string* value, DbReadStats* delta) {
   std::shared_ptr<const MemTable> mt;
   std::vector<std::shared_ptr<const MemTable>> imms;
   std::shared_ptr<const Version> ver;
-  SequenceNumber snapshot = 0;
   {
-    // L19：mutex_ 内只做「取 shared_ptr 引用 + 取快照」；所有 IO 与比较在锁外。
     DbMutexGuard l(mutex_);
-    snapshot = last_sequence_;
     mt = memtable_;
     imms.reserve(immutables_.size());
     for (const std::shared_ptr<Immutable>& im : immutables_) imms.push_back(im->mem);
     ver = version_;
+    if (ver != nullptr) ver->Ref();   // I42/L23：读路径拿到版本即 Ref
   }
+  struct VerRef {
+    const Version* v = nullptr;
+    ~VerRef() {
+      if (v != nullptr) v->Unref();
+    }
+  } ver_ref{ver.get()};
 
   const std::string lookup_key = BuildLookupKey(key, snapshot);
   const auto lookup_mem = [&](const std::shared_ptr<const MemTable>& m, HitLayer layer) -> int {
@@ -452,7 +468,7 @@ Status PersistentDBImpl::GetInternal(const Slice& key, std::string* value, DbRea
   int r = lookup_mem(mt, HitLayer::kMemTable);
   if (r == 1) return Status::OK();
   if (r == -1) return Status::NotFound("PersistentDBImpl::Get: key is deleted in memtable");
-  for (auto it = imms.rbegin(); it != imms.rend(); ++it) {   // 新→旧（deque 的 back 最新）
+  for (auto it = imms.rbegin(); it != imms.rend(); ++it) {
     r = lookup_mem(*it, HitLayer::kImmutable);
     if (r == 1) return Status::OK();
     if (r == -1) return Status::NotFound("PersistentDBImpl::Get: key is deleted in immutable");
@@ -460,43 +476,52 @@ Status PersistentDBImpl::GetInternal(const Slice& key, std::string* value, DbRea
 
   if (ver != nullptr) {
     const Comparator* user_cmp = internal_comparator_.user_comparator();
-    for (const FileMetaData& f : ver->files()) {   // 文件号降序 = 新→旧（§7.1 规则 2）
-      Slice min_user;
-      Slice max_user;
-      SequenceNumber tmp_seq = 0;
-      ValueType tmp_type = kTypeValue;
-      if (!ParseInternalKey(Slice(f.smallest), &min_user, &tmp_seq, &tmp_type) ||
-          !ParseInternalKey(Slice(f.largest), &max_user, &tmp_seq, &tmp_type)) {
-        return Status::Corruption("PersistentDBImpl::Get", "file metadata key range is malformed");
-      }
-      if (user_cmp->Compare(key, min_user) < 0 || user_cmp->Compare(key, max_user) > 0) {
-        ++delta->key_range_skipped;   // 零 IO（§5.4 ① / A19 的 DB 层口径）
-        continue;
-      }
-      // M3-A30 的口径：files_checked 只数**真的进了 Table::GetEntry** 的文件；
-      // 递增归属是 DB 层（不是 Table 层），避免双重计数。
-      ++delta->files_checked;
-      std::string file_value;
-      TableGetResult tr = TableGetResult::kNotFound;
-      ReadStats tstats;
-      bool opened = false;
-      const Status fs =
-          table_cache_->Get(f, Slice(lookup_key), &file_value, &tr, &tstats, &opened);
-      if (opened) ++delta->index_blocks_read;
-      delta->data_blocks_read += tstats.data_blocks_read;
-      delta->blocks_read += tstats.blocks_read;
-      delta->bytes_read += tstats.bytes_read;
-      delta->crc_checked += tstats.crc_checked;
-      delta->crc_failed += tstats.crc_failed;
-      if (!fs.ok()) return fs;
-      if (tr == TableGetResult::kFound) {
-        *value = std::move(file_value);
-        delta->hit_layer = HitLayer::kSSTable;
-        return Status::OK();
-      }
-      if (tr == TableGetResult::kDeleted) {
-        delta->hit_layer = HitLayer::kSSTable;
-        return Status::NotFound("PersistentDBImpl::Get: key is deleted in sstable");
+    // §7.1：L0 逐个检查（新→旧，命中即终局）；L1+ 层内按 smallest 升序，可用 key range 过滤。
+    for (int level = 0; level < kNumLevels; ++level) {
+      const std::vector<FileMetaData>& files = ver->level_files(level);
+      for (const FileMetaData& f : files) {
+        Slice min_user;
+        Slice max_user;
+        SequenceNumber tmp_seq = 0;
+        ValueType tmp_type = kTypeValue;
+        if (!ParseInternalKey(Slice(f.smallest), &min_user, &tmp_seq, &tmp_type) ||
+            !ParseInternalKey(Slice(f.largest), &max_user, &tmp_seq, &tmp_type)) {
+          return Status::Corruption("PersistentDBImpl::Get", "file metadata key range is malformed");
+        }
+        if (user_cmp->Compare(key, min_user) < 0) {
+          ++delta->key_range_skipped;
+          if (level > 0) break;   // L1+ 层内有序：后面的文件只会更大
+          continue;
+        }
+        if (user_cmp->Compare(key, max_user) > 0) {
+          ++delta->key_range_skipped;
+          continue;
+        }
+        ++delta->files_checked;
+        std::string file_value;
+        TableGetResult tr = TableGetResult::kNotFound;
+        ReadStats tstats;
+        bool opened = false;
+        const Status fs =
+            table_cache_->Get(f, Slice(lookup_key), &file_value, &tr, &tstats, &opened);
+        if (opened) ++delta->index_blocks_read;
+        delta->data_blocks_read += tstats.data_blocks_read;
+        delta->blocks_read += tstats.blocks_read;
+        delta->bytes_read += tstats.bytes_read;
+        delta->crc_checked += tstats.crc_checked;
+        delta->crc_failed += tstats.crc_failed;
+        if (!fs.ok()) return fs;
+        if (tr == TableGetResult::kFound) {
+          *value = std::move(file_value);
+          delta->hit_layer = HitLayer::kSSTable;
+          return Status::OK();
+        }
+        if (tr == TableGetResult::kDeleted) {
+          delta->hit_layer = HitLayer::kSSTable;
+          return Status::NotFound("PersistentDBImpl::Get: key is deleted in sstable");
+        }
+        if (level == 0) continue;   // L0 允许重叠：必须逐个检查
+        break;                      // L1+ 层内互斥：查完这一个文件即可
       }
     }
   }
@@ -536,33 +561,56 @@ size_t PersistentDBImpl::immutables_size() const {
 }
 
 Iterator* PersistentDBImpl::NewIterator() {
-  std::shared_ptr<const MemTable> mt;
-  std::vector<std::shared_ptr<const MemTable>> imms;
-  std::shared_ptr<const Version> ver;
   SequenceNumber snapshot = 0;
   {
     DbMutexGuard l(mutex_);
     snapshot = last_sequence_;
+  }
+  return BuildIterator(snapshot);
+}
+
+Iterator* PersistentDBImpl::NewIteratorAtSnapshot(const Snapshot* snapshot) {
+  if (snapshot == nullptr) return NewIterator();
+  return BuildIterator(snapshot->sequence);
+}
+
+Iterator* PersistentDBImpl::BuildIterator(SequenceNumber snapshot) {
+  std::shared_ptr<const MemTable> mt;
+  std::vector<std::shared_ptr<const MemTable>> imms;
+  std::shared_ptr<const Version> ver;
+  {
+    DbMutexGuard l(mutex_);
     mt = memtable_;
     imms.reserve(immutables_.size());
     for (const std::shared_ptr<Immutable>& im : immutables_) imms.push_back(im->mem);
     ver = version_;
+    if (ver != nullptr) ver->Ref();
   }
+  // 迭代器必须同时：(a) 持住 Version 的内存（owning shared_ptr），(b) 在析构时 Unref，
+  // 且 Unref 必须在 own 释放**之前**执行（先 Unref 再析构成员）——否则会 use-after-free。
+  struct VersionRefHolder {
+    std::shared_ptr<const Version> v;
+    ~VersionRefHolder() {
+      if (v != nullptr) v->Unref();
+    }
+  };
 
-  // 迭代器必须持住每一个 MemTable / Version 的引用（L19/L21），否则迭代中途 flush 注册并
-  // 释放 Arena 会造成 UAF（M3-A33 在 ASan 下钉住）。
   std::vector<std::shared_ptr<const void>> refs;
   refs.push_back(mt);
   for (const std::shared_ptr<const MemTable>& m : imms) refs.push_back(m);
-  if (ver != nullptr) refs.push_back(ver);
+  if (ver != nullptr) {
+    refs.push_back(std::shared_ptr<const void>(new VersionRefHolder{ver}));
+  }
 
   std::vector<Iterator*> kids_vec;
   kids_vec.push_back(mt->NewIterator());
   for (auto it = imms.rbegin(); it != imms.rend(); ++it) kids_vec.push_back((*it)->NewIterator());
   if (ver != nullptr) {
-    for (const FileMetaData& f : ver->files()) {
-      std::unique_ptr<Iterator> child = table_cache_->NewIterator(f, nullptr);
-      kids_vec.push_back(child.release());
+    for (int level = 0; level < kNumLevels; ++level) {
+      for (const FileMetaData& f : ver->level_files(level)) {
+        std::unique_ptr<Iterator> child = table_cache_->NewIterator(f, nullptr);
+        kids_vec.push_back(child.release());
+      }
     }
   }
   const int n = static_cast<int>(kids_vec.size());
@@ -841,70 +889,41 @@ void PersistentDBImpl::FlushImmutable(const std::shared_ptr<Immutable>& imm) {
 
   if (options_.flush_hook != nullptr) options_.flush_hook->OnBeforeRegister();
 
-  // ⑦a 内存版本替换（§6.3 步骤 ⑦ 的前半）：min_log_number_to_keep 由单一真相源重算（I34）。
-  std::shared_ptr<const Version> snapshot;
-  uint64_t roll_new_manifest = 0;
+  // ⑦ min_log_to_keep（单一真相源）→ VersionEdit → LogAndApply（先落盘后安装，§8.1）。
+  VersionEdit edit;
   {
     DbMutexGuard l(mutex_);
     if (!bg_error_.ok() || closed_) return;   // 与 Close/失败的竞态：不注册，数据仍在 WAL+内存
-    if (version_ == nullptr) {
-      version_ = VersionSet::Empty(log_number_ == 0 ? memtable_log_number_ : log_number_,
-                                   next_file_number_);
-    }
     const uint64_t min_keep = RecomputeMinLogNumberToKeepLocked(imm.get());
-    version_ = VersionSet::RegisterFile(*version_, meta, log_number_, min_keep, next_file_number_);
-    snapshot = version_;
-    if (manifest_number_ == 0 || manifest_bytes_ > options_.manifest_roll_bytes) {
-      roll_new_manifest = next_file_number_++;   // 模式 (a)：分配新 MANIFEST 编号
-    }
+    edit.SetComparatorName(options_.comparator->Name());
+    edit.SetLogNumber(log_number_);
+    edit.SetMinLogNumberToKeep(min_keep);
+    edit.SetNextFileNumber(next_file_number_);
+    edit.AddFile(0, meta);
   }
-
-  // ⑦b META 持久化：META.tmp → fsync → rename(META) → SyncDir（§6.3 步骤 ⑦/L17）。
-  // 这是 IO，必须在 DB 锁外做（L18）。
-  VersionEdit edit;
-  Status ms;
-  edit.SetComparatorName(options_.comparator->Name());
-  edit.SetLogNumber(snapshot->log_number());
-  edit.SetMinLogNumberToKeep(snapshot->min_log_number_to_keep());
-  edit.SetNextFileNumber(snapshot->next_file_number());
-  edit.AddFile(0, meta);
-  if (roll_new_manifest != 0) {
-    const uint64_t old = manifest_number_;
-    ms = VersionSet::WriteSnapshotManifest(EnvOf(), dbname_, roll_new_manifest, *snapshot, options_);
-    if (ms.ok()) ms = VersionSet::WriteCurrentAtomic(EnvOf(), dbname_, roll_new_manifest);
-    if (ms.ok()) {
-      manifest_number_ = roll_new_manifest;
-      manifest_edits_ = 1;
-      ++manifest_rolls_;
-      uint64_t size = 0;
-      EnvOf()->GetFileSize(ManifestFileName(dbname_, manifest_number_), &size);
-      manifest_bytes_ = size;
-      if (old != 0 && old != manifest_number_) {
-        EnvOf()->DeleteFile(ManifestFileName(dbname_, old));   // 旧 MANIFEST 只在切换后删
-      }
-    }
-  } else {
-    ms = VersionSet::AppendEdit(EnvOf(), dbname_, manifest_number_, edit, &manifest_bytes_);
-    if (ms.ok()) ++manifest_edits_;
-  }
+  std::shared_ptr<const Version> snapshot;
+  const Status ms = LogAndApply(edit, nullptr, &snapshot);
   if (!ms.ok()) {
     DbMutexGuard l(mutex_);
-    bg_error_ = ms;              // 粘性 fail-stop（§6.4 的"写/rename META"行）
+    bg_error_ = ms;              // 粘性 fail-stop（§6.6 的"写/rename MANIFEST"行）
     ++flush_stats_.flushes_failed;
     flush_stats_.last_error = ms.ToString();
     bg_cv_.notify_all();
-    return;   // imm 留在 immutables_；内存版本已含该文件 ⇒ 本轮可读；WAL **未删**（I34）
+    return;   // imm 留在 immutables_；WAL **未删**（I34）；没有半成品被注册
   }
+  (void)snapshot;
 
-  // ⑦c 注册完成（META 已 durable）：弹出 imm + 计数。
+  // ⑦c 注册完成（MANIFEST 已 durable）：弹出 imm + 计数。
   {
     DbMutexGuard l(mutex_);
     if (!immutables_.empty() && immutables_.front() == imm) immutables_.pop_front();
     ++flush_stats_.flushes_completed;
     flush_stats_.index_size_warn += index_warn;
     bg_cv_.notify_all();
+    compact_cv_.notify_all();   // immutables_ 变为空 ⇒ 唤醒 compaction（谓词含 immutables_.empty()）
   }
 
+  MaybeScheduleCompaction();   // 层级分支：flush 完成后才考虑 compaction（flush 优先，L27）
   // ⑨ WAL 回收（§6.3/§6.6.2）：**只在 META 的 rename + SyncDir 之后**执行（I34）。
   RecycleObsoleteLogs();
 }
@@ -933,6 +952,13 @@ Status PersistentDBImpl::Close() {
     if (file_lock_ != nullptr) EnvOf()->UnlockFile(file_lock_.release());
     return Status::OK();
   }
+  // M4.2/L29：先停 compaction 线程并 join，再停 flush 线程（compaction 先 join）。
+  {
+    DbMutexGuard ml(mutex_);
+    compact_stop_ = true;
+    compact_cv_.notify_all();
+  }
+  if (compaction_thread_.joinable()) compaction_thread_.join();
   // §6.5 的关闭顺序：置 bg_stop_ → join（必须在关 log/释放对象之前）。
   {
     DbMutexGuard ml(mutex_);
@@ -944,6 +970,7 @@ Status PersistentDBImpl::Close() {
     DbMutexGuard ml(mutex_);
     flush_stats_.immutables_abandoned += immutables_.size();   // 放弃必须计数（§6.4 表末行）
   }
+  MaybeDeleteObsoleteFiles();   // L29：关闭时处理延迟删除队列（失败只计数）
   Status sticky;                                        // M2-I35：bg_error_ 只在 mutex_ 下读
   {
     DbMutexGuard ml(mutex_);
@@ -1319,12 +1346,328 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
                                                  db->next_file_number_);
   db->manifest_number_ = manifest_result.manifest_number;
   db->manifest_bytes_ = manifest_result.manifest_bytes;
+  db->version_->SetUnrefHook([dbp = db.get()](const Version* v) { dbp->OnVersionUnref(v); });
+  db->live_versions_.push_back(db->version_);
+  db->smallest_snapshot_ = last;
+  if (manifest_result.manifest_present) {
+    db->manifest_.reset(new ManifestStore(env, name, options.manifest_roll_bytes));
+    const Status os = db->manifest_->OpenAppend(manifest_result.manifest_number,
+                                                manifest_result.manifest_bytes);
+    if (!os.ok()) return os;
+  }
   db->recovery_stats_ = stats;
   db->file_lock_.reset(lock_guard.release());   // 所有权交给 DB（Close/析构时释放）
   db->closed_ = false;
   db->StartBackgroundThread();                  // L12：恢复成功后、发布 *dbptr 之前启动
+  db->StartCompactionThread();
   *dbptr = db.release();
   return Status::OK();
 }
+
+// ---------------------------------------------------------------------------
+// M4.2：有状态 LogAndApply / 延迟删除 / live versions / compaction 线程
+// ---------------------------------------------------------------------------
+
+uint64_t PersistentDBImpl::AllocateFileNumber() {
+  DbMutexGuard l(mutex_);
+  return next_file_number_++;
+}
+
+void PersistentDBImpl::OnVersionUnref(const Version* /*v*/) {
+  // 延迟清理：Unref 可能在"最后一个 shared_ptr 的析构"里被调用，此时若销毁拥有者会 UAF。
+  // 因此只记账（refs 已归零），真正的摘除 + 释放放在 MaybeDeleteObsoleteFiles（锁内、安全点）。
+}
+
+void PersistentDBImpl::InstallNewVersionLocked(std::shared_ptr<const Version> newv) {
+  newv->SetUnrefHook([this](const Version* v) { OnVersionUnref(v); });
+  version_ = newv;
+  live_versions_.push_back(std::move(newv));
+}
+
+void PersistentDBImpl::EnqueueObsoleteSST(uint64_t number) {
+  std::lock_guard<std::mutex> l(deletion_mu_);
+  pending_delete_sst_.insert(number);
+}
+
+void PersistentDBImpl::EnqueueObsoleteManifest(uint64_t number) {
+  std::lock_guard<std::mutex> l(deletion_mu_);
+  pending_delete_manifest_.insert(number);
+}
+
+void PersistentDBImpl::MaybeDeleteObsoleteFiles() {
+  std::vector<uint64_t> ssts;
+  std::vector<uint64_t> mans;
+  {
+    std::lock_guard<std::mutex> dl(deletion_mu_);   // 锁序：deletion_mu_ -> mutex_（9.4）
+    if (pending_delete_sst_.empty() && pending_delete_manifest_.empty()) return;
+    std::set<uint64_t> live;
+    uint64_t current_manifest = 0;
+    {
+      DbMutexGuard ml(mutex_);
+      // 安全点：先摘除 refs 已归零、且不是 current 的版本（内存与"待删文件"同时在此刻释放），
+      // 再据此计算 live 集合 —— 否则刚归零的版本会把文件多留一轮。
+      for (auto it = live_versions_.begin(); it != live_versions_.end();) {
+        if (it->get() != version_.get() && (*it)->refs() == 0) {
+          it = live_versions_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+      for (const std::shared_ptr<const Version>& v : live_versions_) {
+        for (const FileMetaData& f : v->AllFiles()) live.insert(f.number);
+      }
+      if (version_ != nullptr) {
+        for (const FileMetaData& f : version_->AllFiles()) live.insert(f.number);
+      }
+      if (manifest_ != nullptr) current_manifest = manifest_->number();
+    }
+    for (auto it = pending_delete_sst_.begin(); it != pending_delete_sst_.end();) {
+      if (live.count(*it) != 0) {
+        ++it;   // 仍被某个 live Version 引用 => 绝不删（I42/X8）
+      } else {
+        ssts.push_back(*it);
+        it = pending_delete_sst_.erase(it);
+      }
+    }
+    for (auto it = pending_delete_manifest_.begin(); it != pending_delete_manifest_.end();) {
+      if (*it == current_manifest) {
+        ++it;   // CURRENT 仍指向它 => 不删
+      } else {
+        mans.push_back(*it);
+        it = pending_delete_manifest_.erase(it);
+      }
+    }
+  }
+  for (uint64_t n : ssts) {
+    if (table_cache_ != nullptr) table_cache_->Evict(n);
+    EnvOf()->DeleteFile(TableFileName(dbname_, n));   // 锁外 unlink（L24/L26）
+  }
+  for (uint64_t n : mans) {
+    EnvOf()->DeleteFile(ManifestFileName(dbname_, n));
+  }
+}
+
+void PersistentDBImpl::MaybeScheduleCompaction() {
+  DbMutexGuard l(mutex_);
+  if (!compaction_started_ || compact_stop_ || closed_) return;
+  if (!compaction_auto_) return;
+  compaction_pending_ = true;
+  compact_cv_.notify_all();   // 即使 pending 已置位也要 notify：谓词还要求 immutables_ 为空
+}
+
+void PersistentDBImpl::StartCompactionThread() {
+  {
+    DbMutexGuard l(mutex_);
+    if (compaction_started_) return;
+    compaction_started_ = true;
+    compact_stop_ = false;
+  }
+  compaction_thread_ = std::thread([this] { BackgroundCompactionLoop(); });
+}
+
+Status PersistentDBImpl::LogAndApply(const VersionEdit& edit,
+                                     const std::shared_ptr<const Version>& base,
+                                     std::shared_ptr<const Version>* out_new) {
+  std::lock_guard<std::mutex> il(install_mu_);   // 9.4 全序最左端：安装串行化
+  std::shared_ptr<const Version> newv;
+  std::shared_ptr<const Version> prev;
+  std::string why;
+  {
+    DbMutexGuard ml(mutex_);
+    if (version_ == nullptr) return Status::IOError("LogAndApply: version_ == nullptr");
+    if (base != nullptr && base.get() != version_.get()) {
+      ++compaction_stats_.install_rebase_retries;   // L25：回锁后状态已变 ⇒ 以当前 version_ 重放
+    }
+    std::shared_ptr<const Version> tmp;
+    if (!VersionSet::ApplyEdit(*version_, edit, &tmp, &why)) {
+      return Status::Corruption("LogAndApply: 安装期层级校验失败", why);
+    }
+    // next_file_number_ 的权威值 = 当前值（并发分配只增不减，绝不能用 stale 的 edit 值回退）。
+    newv = std::make_shared<const Version>(tmp->level_files_all(), tmp->log_number(),
+                                           tmp->min_log_number_to_keep(), next_file_number_);
+    prev = version_;
+  }
+
+  if (manifest_ == nullptr) {
+    manifest_.reset(new ManifestStore(EnvOf(), dbname_, options_.manifest_roll_bytes));
+  }
+  Status s;
+  uint64_t old_manifest = 0;
+  if (!manifest_->open() || manifest_->ShouldRoll()) {
+    const uint64_t n = AllocateFileNumber();
+    s = manifest_->RollAndOpen(*newv, options_, n, &old_manifest);
+  } else {
+    s = manifest_->Append(edit);
+  }
+  if (!s.ok()) return s;   // 先落盘后安装：失败 => version_ 不变、无半成品被注册
+
+  std::set<uint64_t> removed;
+  {
+    std::lock_guard<std::mutex> dl(deletion_mu_);   // 锁序：deletion_mu_ -> mutex_
+    {
+      DbMutexGuard ml(mutex_);
+      prev = version_;
+      for (const FileMetaData& f : prev->AllFiles()) removed.insert(f.number);
+      for (const FileMetaData& f : newv->AllFiles()) removed.erase(f.number);
+      InstallNewVersionLocked(newv);
+      manifest_number_ = manifest_->number();
+      manifest_bytes_ = manifest_->bytes();
+      manifest_edits_ = manifest_->edits();
+      manifest_rolls_ = manifest_->rolls();
+    }
+    for (uint64_t n : removed) pending_delete_sst_.insert(n);
+    if (old_manifest != 0) pending_delete_manifest_.insert(old_manifest);
+  }
+  if (prev != nullptr && prev.get() != newv.get()) prev->Unref();   // 锁外 Unref（hook 会取 mutex_）
+  MaybeDeleteObsoleteFiles();
+  if (out_new != nullptr) *out_new = newv;
+  return Status::OK();
+}
+
+void PersistentDBImpl::CompactOnce() {
+  CompactionInputs in;
+  std::shared_ptr<const Version> base;
+  SequenceNumber smallest = 0;
+  int level = -1;
+  const PickStrategy strategy = options_.compaction_pick_strategy;
+  {
+    DbMutexGuard l(mutex_);
+    compaction_pending_ = false;
+    if (!bg_error_.ok() || closed_ || version_ == nullptr) return;
+    level = Compaction::PickLevel(*version_, options_);
+    if (level < 0) return;
+    std::string why;
+    if (!Compaction::PickInputs(*version_, level, strategy, options_, &in, &why)) return;
+    base = version_;
+    base->Ref();
+    smallest = smallest_snapshot_;
+    ++compaction_stats_.started;
+    ++compaction_stats_.rounds_by_level[level];
+    if (strategy == PickStrategy::kRoundRobin) {
+      ++compaction_stats_.pick_round_robin;
+    } else {
+      ++compaction_stats_.pick_min_overlap;
+    }
+  }
+
+  const uint64_t t0 = EnvOf()->NowMicros();
+  VersionEdit edit;
+  CompactionStats round;
+  std::string why;
+  const Status run_status =
+      Compaction::Run(EnvOf(), table_cache_.get(), dbname_, in, options_, *base, smallest,
+                      [this] { return AllocateFileNumber(); }, internal_comparator_, &edit, &round,
+                      &why);
+  Status install_status = Status::OK();
+  if (run_status.ok()) {
+    std::shared_ptr<const Version> newv;
+    install_status = LogAndApply(edit, base, &newv);
+  }
+  const uint64_t dt = EnvOf()->NowMicros() - t0;
+  {
+    DbMutexGuard l(mutex_);
+    compaction_stats_.input_files += round.input_files;
+    compaction_stats_.output_files += round.output_files;
+    compaction_stats_.bytes_read += round.bytes_read;
+    compaction_stats_.bytes_written += round.bytes_written;
+    compaction_stats_.dropped_old_versions += round.dropped_old_versions;
+    compaction_stats_.dropped_tombstones += round.dropped_tombstones;
+    if (dt > compaction_stats_.round_micros_max) compaction_stats_.round_micros_max = dt;
+    compaction_stats_.round_micros_p50 = dt;
+    if (run_status.ok() && install_status.ok()) {
+      ++compaction_stats_.completed;
+    } else {
+      ++compaction_stats_.failed;
+      ++compaction_stats_.aborted;   // 放弃一轮必须计数（8.6）
+      compaction_stats_.last_error =
+          run_status.ok() ? install_status.ToString() : run_status.ToString();
+    }
+  }
+  base->Unref();
+}
+
+void PersistentDBImpl::BackgroundCompactionLoop() {
+  std::unique_lock<std::mutex> l(mutex_);
+  while (true) {
+    // flush 优先：只要 immutables_ 非空就让路（L27 的固定优先级）。
+    compact_cv_.wait(l, [this] {
+      return compact_stop_ || (compaction_pending_ && immutables_.empty());
+    });
+    if (compact_stop_) break;
+    if (!compaction_pending_) continue;
+    l.unlock();
+    CompactOnce();
+    l.lock();
+    if (!bg_error_.ok()) {
+      compact_cv_.wait(l, [this] { return compact_stop_; });
+      break;
+    }
+  }
+}
+
+ManifestStats PersistentDBImpl::GetManifestStats() const {
+  ManifestStats out;
+  {
+    DbMutexGuard l(mutex_);
+    out.number = manifest_number_;
+    out.bytes = manifest_bytes_;
+    out.edits = manifest_edits_;
+    out.rolls = manifest_rolls_;
+    out.replay_edits = recovery_stats_.manifest_edits_replayed;
+    out.replay_truncated_bytes = recovery_stats_.manifest_tail_truncated_bytes;
+  }
+  return out;
+}
+
+CompactionStats PersistentDBImpl::GetCompactionStats() const {
+  DbMutexGuard l(mutex_);
+  return compaction_stats_;
+}
+
+const PersistentDBImpl::Snapshot* PersistentDBImpl::GetSnapshot() {
+  DbMutexGuard l(mutex_);
+  std::unique_ptr<Snapshot> h(new Snapshot());
+  h->sequence = last_sequence_;
+  const Snapshot* p = h.get();
+  snapshot_handles_.push_back(std::move(h));
+  snapshots_.insert(p->sequence);
+  smallest_snapshot_ = snapshots_.empty() ? last_sequence_ : *snapshots_.begin();
+  return p;
+}
+
+void PersistentDBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
+  if (snapshot == nullptr) return;
+  DbMutexGuard l(mutex_);
+  for (auto it = snapshot_handles_.begin(); it != snapshot_handles_.end(); ++it) {
+    if (it->get() == snapshot) {
+      const auto sit = snapshots_.find(snapshot->sequence);
+      if (sit != snapshots_.end()) snapshots_.erase(sit);   // 按值删一个（A29）
+      snapshot_handles_.erase(it);
+      break;
+    }
+  }
+  smallest_snapshot_ = snapshots_.empty() ? last_sequence_ : *snapshots_.begin();
+}
+
+uint64_t PersistentDBImpl::files_at_level(int level) const {
+  DbMutexGuard l(mutex_);
+  if (version_ == nullptr) return 0;
+  return version_->level_files(level).size();
+}
+
+uint64_t PersistentDBImpl::bytes_at_level(int level) const {
+  DbMutexGuard l(mutex_);
+  if (version_ == nullptr) return 0;
+  return version_->total_bytes(level);
+}
+
+std::shared_ptr<const Version> PersistentDBImpl::RefCurrentVersionForTest() {
+  DbMutexGuard l(mutex_);
+  if (version_ == nullptr) return nullptr;
+  version_->Ref();
+  const Version* p = version_.get();
+  return std::shared_ptr<const Version>(p, [](const Version* v) { v->Unref(); });
+}
+
 
 }  // namespace lsm

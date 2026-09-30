@@ -10,7 +10,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BIN="build/bin/lsm_tests"
-FILTER='VersionEdit.*:Manifest.*:Current.*:Migration.*:Install.FailureKeepsCurrentRecoverable:Compaction.*:Level0.*:LevelN.*:PickLevel.*:PickFile.*:L0Inputs.*:BaseLevelForKey.*:Drop.*'
+FILTER='VersionEdit.*:Manifest.*:Current.*:Migration.*:Install.FailureKeepsCurrentRecoverable:Compaction.*:CompactionDb.*:Level0.*:LevelN.*:PickLevel.*:PickFile.*:L0Inputs.*:BaseLevelForKey.*:Drop.*:ReadLevels.*:Delete.*'
 
 if [ ! -x "$BIN" ]; then
   echo "[FAIL] $BIN 不存在（先跑 scripts/lsm_build.sh）"
