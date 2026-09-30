@@ -28,6 +28,8 @@ namespace lsm {
 // A25 探针（I17「持锁零 IO」的可验证化）：本线程当前是否持有 DB 互斥锁。
 // 只做诊断，不改变加锁语义；测试用它包一层 Env，在 Append/Sync/rename/块读时断言此刻未持锁。
 bool DbMutexHeldOnThisThread();
+// M4.3 探针（A35）：本线程当前是否持有 install_mu_（安装临界区）。仅诊断，不改变锁语义。
+bool InstallMuHeldOnThisThread();
 
 // M2 的恢复报告（design §8.2 明写"这个接口 M2 就要有"；A13 的判据含"可读"）。
 // M3.3 只增不改（§8.4 的计数纪律：任何丢弃/跳过/截断/删除都必须有一个计数落点）。

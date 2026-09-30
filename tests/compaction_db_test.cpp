@@ -1213,4 +1213,150 @@ TEST(Merge, SkipAcrossChildrenWithVolatileChildKeyView) {
   EXPECT_TRUE(it->status().ok());
 }
 
+// ===== A31：放大行可复现 + 自洽（同一输入两次运行逐字段相等；两种口径从同一行复算）=====
+namespace {
+struct AmpRun {
+  AmplificationStats stats;
+  std::string line;
+};
+AmpRun RunAmpWorkload() {
+  AmpRun out;
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  EXPECT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  impl->SetCompactionAutoForTest(false);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 60; ++i) {
+      const int idx = round * 60 + i;
+      EXPECT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    EXPECT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  for (int k = 0; k < 32; ++k) impl->RunOneCompactionForTest();
+  std::string v;
+  for (int i = 1; i <= 180; ++i) EXPECT_TRUE(db->Get(K(i), &v).ok());
+  out.stats = impl->GetAmplificationStats();
+  out.line = impl->FormatAmplLine("ALL");
+  EXPECT_TRUE(db->Close().ok());
+  delete db;
+  return out;
+}
+}  // namespace
+
+TEST(Amplification, RowReproducibleAndSelfConsistent) {
+  const AmpRun a = RunAmpWorkload();
+  const AmpRun b = RunAmpWorkload();
+  EXPECT_GT(a.stats.user_logical_bytes, 0u);
+  EXPECT_GT(a.stats.compaction_rounds, 0u) << "必须真的发生过 compaction";
+  // 同输入重跑：计数类字段逐字段相等（时间维度不参与）
+  EXPECT_EQ(a.stats.user_logical_bytes, b.stats.user_logical_bytes);
+  EXPECT_EQ(a.stats.entry_bytes, b.stats.entry_bytes);
+  EXPECT_EQ(a.stats.flush_write_bytes, b.stats.flush_write_bytes);
+  EXPECT_EQ(a.stats.compact_write_bytes, b.stats.compact_write_bytes);
+  EXPECT_EQ(a.stats.get_count, b.stats.get_count);
+  EXPECT_EQ(a.stats.files_checked, b.stats.files_checked);
+  EXPECT_EQ(a.stats.compaction_rounds, b.stats.compaction_rounds);
+  EXPECT_EQ(a.stats.dropped_old_versions, b.stats.dropped_old_versions);
+  EXPECT_EQ(a.stats.sst_bytes, b.stats.sst_bytes);
+  EXPECT_EQ(a.stats.manifest_bytes, b.stats.manifest_bytes);
+  EXPECT_EQ(a.stats.live_versions_max, b.stats.live_versions_max);
+  // 自洽：从同一行的分母/分子复算两种写放大口径
+  const double wa_total =
+      static_cast<double>(a.stats.flush_write_bytes + a.stats.compact_write_bytes) /
+      static_cast<double>(a.stats.user_logical_bytes);
+  const double wa_excl =
+      static_cast<double>(a.stats.flush_write_bytes) / static_cast<double>(a.stats.user_logical_bytes);
+  double line_total = -1.0, line_excl = -1.0, line_read = -1.0;
+  {
+    const char* p1 = std::strstr(a.line.c_str(), "write_amp_total=");
+    ASSERT_TRUE(p1 != nullptr);
+    std::sscanf(p1, "write_amp_total=%lf", &line_total);
+    const char* p2 = std::strstr(a.line.c_str(), "write_amp_excl_compact=");
+    ASSERT_TRUE(p2 != nullptr);
+    std::sscanf(p2, "write_amp_excl_compact=%lf", &line_excl);
+    const char* p3 = std::strstr(a.line.c_str(), "read_amp_files_per_get=");
+    ASSERT_TRUE(p3 != nullptr);
+    std::sscanf(p3, "read_amp_files_per_get=%lf", &line_read);
+  }
+  EXPECT_NEAR(wa_total, line_total, 1e-6);   // 行内固定 %.6f 精度
+  EXPECT_NEAR(wa_excl, line_excl, 1e-6);
+  EXPECT_NEAR(static_cast<double>(a.stats.files_checked) / static_cast<double>(a.stats.get_count),
+              line_read, 1e-6);
+  // 同一输入重跑：行里除时间字段外必须逐字符一致
+  const auto strip = [](std::string l) {
+    for (const char* tag : {"compaction_round_p50_us=", "compaction_round_max_us="}) {
+      const size_t pos = l.find(tag);
+      if (pos != std::string::npos) {
+        const size_t end = l.find(' ', pos);
+        l.erase(pos, end == std::string::npos ? std::string::npos : end - pos + 1);
+      }
+    }
+    return l;
+  };
+  EXPECT_EQ(strip(a.line), strip(b.line)) << a.line << "\nvs\n" << b.line;
+}
+
+// ===== A35：安装临界区内无 unlink；删除晚于安装；只删已无 live 引用的文件 =====
+class EventLogEnv : public MemEnv {
+ public:
+  std::atomic<uint64_t> deletes{0}, deletes_under_install{0}, deletes_under_db_mutex{0};
+  std::mutex mu_;
+  std::vector<uint64_t> deleted_ssts;
+
+  Status DeleteFile(const std::string& fname) override {
+    ++deletes;
+    if (InstallMuHeldOnThisThread()) ++deletes_under_install;
+    if (DbMutexHeldOnThisThread()) ++deletes_under_db_mutex;
+    uint64_t n = 0;
+    if (ParseTableFileName(fname, &n)) {
+      std::lock_guard<std::mutex> l(mu_);
+      deleted_ssts.push_back(n);
+    }
+    return MemEnv::DeleteFile(fname);
+  }
+};
+
+TEST(Delete, NoUnlinkInsideInstallCriticalSection) {
+  EventLogEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 80; ++i) {
+      const int idx = round * 80 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  ASSERT_TRUE(WaitForCompaction(impl, 1));
+  impl->MaybeDeleteObsoleteFilesForTest();
+
+  EXPECT_EQ(0u, env.deletes_under_install.load())
+      << "I43/L24：安装临界区内不得发生 unlink";
+  EXPECT_EQ(0u, env.deletes_under_db_mutex.load())
+      << "L24/L26：unlink 不得持 DB 互斥锁";
+  EXPECT_GE(env.deletes.load(), 1u) << "本用例必须真的有删除（否则空绿）";
+
+  // 被删的 sst 必须已不在当前 Version 里（删除晚于安装）
+  std::set<uint64_t> live;
+  for (int l = 0; l < kNumLevels; ++l) {
+    for (const FileMetaData& f : impl->LevelFilesForTest(l)) live.insert(f.number);
+  }
+  std::lock_guard<std::mutex> l(env.mu_);
+  for (uint64_t n : env.deleted_ssts) {
+    EXPECT_EQ(0u, live.count(n)) << "被删文件 " << n << " 仍在当前 Version 里（删除早于安装）";
+  }
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
 }  // namespace lsm

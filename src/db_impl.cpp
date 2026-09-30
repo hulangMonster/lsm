@@ -23,6 +23,13 @@ namespace {
 // A25 探针（I17 持锁零 IO 的可验证化）：持有 DB 互斥锁的线程置位该标记。
 // 只做诊断，不改变加锁语义（内部仍是 std::lock_guard）。
 thread_local bool g_db_mutex_held = false;
+thread_local bool g_install_mu_held = false;
+
+struct InstallMuGuard {
+  InstallMuGuard() { g_install_mu_held = true; }
+  ~InstallMuGuard() { g_install_mu_held = false; }
+};
+
 struct DbMutexGuard {
   explicit DbMutexGuard(std::mutex& m) : lk(m) { g_db_mutex_held = true; }
   ~DbMutexGuard() { g_db_mutex_held = false; }
@@ -698,6 +705,8 @@ Status PersistentDBImpl::ForceFlushForTest() {
 
 // A25 探针的访问器：必须定义在 namespace lsm 正体（外部链接），与 db_impl.h 的声明匹配
 bool DbMutexHeldOnThisThread() { return g_db_mutex_held; }
+
+bool InstallMuHeldOnThisThread() { return g_install_mu_held; }
 
 size_t PersistentDBImpl::pending_writers() {
   std::lock_guard<std::mutex> ql(commit_mu_);
@@ -1503,7 +1512,9 @@ void PersistentDBImpl::StartCompactionThread() {
 Status PersistentDBImpl::LogAndApply(const VersionEdit& edit,
                                      const std::shared_ptr<const Version>& base,
                                      std::shared_ptr<const Version>* out_new) {
+  {
   std::lock_guard<std::mutex> il(install_mu_);
+  InstallMuGuard install_guard;   // 仅诊断：A35 的安装临界区探针
   // 9.4 全序最左端：安装串行化
   std::shared_ptr<const Version> newv;
   std::shared_ptr<const Version> prev;
@@ -1555,8 +1566,9 @@ Status PersistentDBImpl::LogAndApply(const VersionEdit& edit,
     if (old_manifest != 0) pending_delete_manifest_.insert(old_manifest);
   }
   if (prev != nullptr && prev.get() != newv.get()) prev->Unref();   // 锁外 Unref（hook 会取 mutex_）
-  MaybeDeleteObsoleteFiles();
   if (out_new != nullptr) *out_new = newv;
+  }   // 释放 install_mu_
+  MaybeDeleteObsoleteFiles();   // L24/I43：unlink 必须在安装临界区之外（A35）
   return Status::OK();
 }
 
