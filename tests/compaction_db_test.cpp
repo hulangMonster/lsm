@@ -1,8 +1,12 @@
 // tests/compaction_db_test.cpp —— M4.2：compaction 端到端/读路径层级化/延迟删除/失败恢复/独立 CRC
 #include "test_harness.h"
 
+#include <atomic>
+#include <condition_variable>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <set>
 #include <string>
 #include <vector>
@@ -392,6 +396,7 @@ class CompactionFailEnv : public MemEnv {
  public:
   bool fail_output_write = false;
   bool fail_output_rename = false;
+  int fail_sync_dir_remaining = 0;   // A43：rename 之后再让 SyncDir 失败 == 留下未注册的 .sst
   Status NewWritableFile(const std::string& fname, WritableFile** result) override {
     if (fail_output_write && fname.find(".sst.tmp") != std::string::npos) {
       return Status::IOError("injected output write failure", fname);
@@ -404,6 +409,13 @@ class CompactionFailEnv : public MemEnv {
       return Status::IOError("injected output rename failure", target);
     }
     return MemEnv::RenameFile(src, target);
+  }
+  Status SyncDir(const std::string& d) override {
+    if (fail_sync_dir_remaining > 0) {
+      --fail_sync_dir_remaining;
+      return Status::IOError("injected SyncDir failure", d);
+    }
+    return MemEnv::SyncDir(d);
   }
 };
 
@@ -460,6 +472,533 @@ TEST(CompactionFail, OutputWriteFailureKeepsOldVersion) {
 TEST(CompactionFail, OutputRenameFailureKeepsOldVersion) {
   RunFailureCase(false, true);
   EXPECT_FALSE(::testing::Test::HasFailure()) << "RenameFailure 用例内不得有失败断言";
+}
+
+// ================= M4.3 批 (i)：A36 加宽锁探针 + A37 flush 优先 =================
+
+// ---- A36：compaction 全路径的「持 DB 互斥锁期间 IO 调用数 == 0」+ 反向自检 ----
+class CompactionSpyEnv : public MemEnv {
+ public:
+  std::atomic<uint64_t> violations{0};
+  std::atomic<uint64_t> append_calls{0}, sync_calls{0}, rename_calls{0}, sync_dir_calls{0};
+  std::atomic<uint64_t> get_file_size_calls{0}, get_children_calls{0}, remove_file_calls{0};
+  std::atomic<uint64_t> truncate_calls{0}, block_read_calls{0}, new_file_calls{0};
+
+  Status NewWritableFile(const std::string& f, WritableFile** r) override {
+    ++new_file_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    WritableFile* inner = nullptr;
+    const Status s = MemEnv::NewWritableFile(f, &inner);
+    if (s.ok()) *r = new SpyFile(inner, this);
+    return s;
+  }
+  Status NewAppendableFile(const std::string& f, WritableFile** r) override {
+    ++new_file_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    WritableFile* inner = nullptr;
+    const Status s = MemEnv::NewAppendableFile(f, &inner);
+    if (s.ok()) *r = new SpyFile(inner, this);
+    return s;
+  }
+  Status NewRandomAccessFile(const std::string& f, RandomAccessFile** r) override {
+    if (DbMutexHeldOnThisThread()) ++violations;
+    RandomAccessFile* inner = nullptr;
+    const Status s = MemEnv::NewRandomAccessFile(f, &inner);
+    if (s.ok()) *r = new SpyRandom(inner, this);
+    return s;
+  }
+  Status RenameFile(const std::string& a, const std::string& b) override {
+    ++rename_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    return MemEnv::RenameFile(a, b);
+  }
+  Status SyncDir(const std::string& d) override {
+    ++sync_dir_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    return MemEnv::SyncDir(d);
+  }
+  Status GetFileSize(const std::string& f, uint64_t* n) override {
+    ++get_file_size_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    return MemEnv::GetFileSize(f, n);
+  }
+  Status GetChildren(const std::string& d, std::vector<std::string>* r) override {
+    ++get_children_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    return MemEnv::GetChildren(d, r);
+  }
+  Status RemoveFile(const std::string& f) override {
+    ++remove_file_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    return MemEnv::RemoveFile(f);
+  }
+  Status Truncate(const std::string& f, uint64_t n) override {
+    ++truncate_calls;
+    if (DbMutexHeldOnThisThread()) ++violations;
+    return MemEnv::Truncate(f, n);
+  }
+
+ private:
+  class SpyFile : public WritableFile {
+   public:
+    SpyFile(WritableFile* inner, CompactionSpyEnv* env) : inner_(inner), env_(env) {}
+    ~SpyFile() override { delete inner_; }
+    Status Append(const Slice& d) override {
+      ++env_->append_calls;
+      if (DbMutexHeldOnThisThread()) ++env_->violations;
+      return inner_->Append(d);
+    }
+    Status Flush() override { return inner_->Flush(); }
+    Status Sync() override {
+      ++env_->sync_calls;
+      if (DbMutexHeldOnThisThread()) ++env_->violations;
+      return inner_->Sync();
+    }
+    Status Close() override { return inner_->Close(); }
+
+   private:
+    WritableFile* inner_;
+    CompactionSpyEnv* env_;
+  };
+  class SpyRandom : public RandomAccessFile {
+   public:
+    SpyRandom(RandomAccessFile* inner, CompactionSpyEnv* env) : inner_(inner), env_(env) {}
+    ~SpyRandom() override { delete inner_; }
+    Status Read(uint64_t off, size_t n, Slice* out, char* scratch) const override {
+      ++env_->block_read_calls;
+      if (DbMutexHeldOnThisThread()) ++env_->violations;
+      return inner_->Read(off, n, out, scratch);
+    }
+
+   private:
+    RandomAccessFile* inner_;
+    CompactionSpyEnv* env_;
+  };
+};
+
+TEST(Locks, ZeroIoWhileHoldingDbMutexOnCompactionPath) {
+  CompactionSpyEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  o.manifest_roll_bytes = 1;   // 强制 MANIFEST 重建，覆盖 rename/SyncDir/RemoveFile
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 80; ++i) {
+      const int idx = round * 80 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  ASSERT_TRUE(WaitForCompaction(impl, 1));
+  std::string v;
+  for (int i = 1; i <= 240; ++i) ASSERT_TRUE(db->Get(K(i), &v).ok());
+  (void)impl->GetAmplificationStats();   // GetChildren/GetFileSize（锁外）
+  impl->MaybeDeleteObsoleteFilesForTest();
+
+  EXPECT_EQ(0u, env.violations.load()) << "L26：持 DB 互斥锁期间发生了 IO";
+  EXPECT_GE(env.append_calls.load(), 1u);
+  EXPECT_GE(env.sync_calls.load(), 1u);
+  EXPECT_GE(env.rename_calls.load(), 1u);
+  EXPECT_GE(env.sync_dir_calls.load(), 1u);
+  EXPECT_GE(env.get_file_size_calls.load(), 1u);
+  EXPECT_GE(env.get_children_calls.load(), 1u);
+  EXPECT_GE(env.remove_file_calls.load(), 1u);
+  EXPECT_GE(env.block_read_calls.load(), 1u);
+
+  // 反向自检：持锁时逐项操作，探针必须**每一项**都报警（证明它真的在数）。
+  const uint64_t before = env.violations.load();
+  const uint64_t ra = env.rename_calls.load(), sa = env.sync_dir_calls.load();
+  const uint64_t ga = env.get_file_size_calls.load(), ca = env.get_children_calls.load();
+  const uint64_t ma = env.remove_file_calls.load(), ta = env.truncate_calls.load();
+  const uint64_t aa = env.append_calls.load(), ya = env.sync_calls.load();
+  const uint64_t ba = env.block_read_calls.load();
+  impl->RunHoldingDbMutexForTest([&] {
+    env.RenameFile("/db/a", "/db/b");
+    env.SyncDir("/db");
+    uint64_t sz = 0;
+    env.GetFileSize("/db/CURRENT", &sz);
+    std::vector<std::string> ch;
+    env.GetChildren("/db", &ch);
+    env.RemoveFile("/db/nonexistent");
+    env.Truncate("/db/nonexistent", 0);
+    WritableFile* f = nullptr;
+    env.NewWritableFile("/db/probe.tmp", &f);
+    if (f != nullptr) {
+      f->Append(Slice("x"));
+      f->Sync();
+      f->Close();
+      delete f;
+    }
+    RandomAccessFile* r = nullptr;
+    env.NewRandomAccessFile("/db/CURRENT", &r);
+    if (r != nullptr) {
+      Slice out;
+      char scratch[16];
+      r->Read(0, 1, &out, scratch);
+      delete r;
+    }
+  });
+  EXPECT_GE(env.violations.load() - before, 9u) << "反向自检：每个注入点都必须报警";
+  EXPECT_EQ(ra + 1, env.rename_calls.load());
+  EXPECT_EQ(sa + 1, env.sync_dir_calls.load());
+  EXPECT_EQ(ga + 1, env.get_file_size_calls.load());
+  EXPECT_EQ(ca + 1, env.get_children_calls.load());
+  EXPECT_EQ(ma + 1, env.remove_file_calls.load());
+  EXPECT_EQ(ta + 1, env.truncate_calls.load());
+  EXPECT_GE(env.append_calls.load(), aa + 1);
+  EXPECT_GE(env.sync_calls.load(), ya + 1);
+  EXPECT_GE(env.block_read_calls.load(), ba + 1);
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
+// ---- A37：flush 优先于 compaction（L27）——compaction 在"写输出后"被挡住，flush 仍必须完成 ----
+class BlockingCompactionHook : public CompactionHook {
+ public:
+  void OnOutputWritten(uint64_t) override {
+    std::unique_lock<std::mutex> l(mu_);
+    entered_ = true;
+    cv_.notify_all();
+    cv_.wait(l, [this] { return released_; });
+  }
+  bool WaitEntered(int spins = 4000000) {
+    for (int i = 0; i < spins; ++i) {
+      {
+        std::lock_guard<std::mutex> l(mu_);
+        if (entered_) return true;
+      }
+      std::this_thread::yield();
+    }
+    return false;
+  }
+  void Release() {
+    std::lock_guard<std::mutex> l(mu_);
+    released_ = true;
+    cv_.notify_all();
+  }
+  bool entered() const {
+    std::lock_guard<std::mutex> l(mu_);
+    return entered_;
+  }
+
+ private:
+  mutable std::mutex mu_;
+  std::condition_variable cv_;
+  bool entered_ = false;
+  bool released_ = false;
+};
+
+TEST(Scheduling, FlushTakesPriorityOverCompaction) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  BlockingCompactionHook hook;
+  o.compaction_hook = &hook;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 80; ++i) {
+      const int idx = round * 80 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  ASSERT_TRUE(hook.WaitEntered()) << "compaction 必须真的跑到输出注入点（否则空绿）";
+  // compaction 卡在 OnOutputWritten 时，flush 必须仍能完成（L27 的固定优先级）。
+  const uint64_t fl_before = impl->GetFlushStats().flushes_completed;
+  for (int i = 241; i <= 320; ++i) ASSERT_TRUE(db->Put(K(i), V(i)).ok());
+  ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  EXPECT_GT(impl->GetFlushStats().flushes_completed, fl_before)
+      << "compaction 阻塞期间 flush 仍必须推进";
+  EXPECT_TRUE(hook.entered());
+  hook.Release();
+  ASSERT_TRUE(WaitForCompaction(impl, 1));
+  std::string v;
+  for (int i = 1; i <= 320; ++i) {
+    ASSERT_TRUE(db->Get(K(i), &v).ok()) << "key " << i;
+    EXPECT_EQ(V(i), v);
+  }
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
+// ================= M4.3 批 (ii)：A18/A20/A21/A31/A33/A38/A43 =================
+
+// ---- A18：L0 内允许重叠，读必须按文件号新->旧逐个检查 ----
+TEST(Read, L0NewestFirst) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 1000;   // 只测 L0 语义
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  for (int r = 1; r <= 3; ++r) {
+    ASSERT_TRUE(db->Put(K(1), "v" + std::to_string(r)).ok());
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  std::string v;
+  ASSERT_TRUE(db->Get(K(1), &v).ok());
+  EXPECT_EQ("v3", v) << "必须读到文件号最大者的值";
+  // tombstone 在新文件、值在旧文件
+  ASSERT_TRUE(db->Delete(K(1)).ok());
+  ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  EXPECT_TRUE(db->Get(K(1), &v).IsNotFound()) << "新文件的 tombstone 必须屏蔽旧文件的值";
+  // 值在新文件、tombstone 在旧文件
+  ASSERT_TRUE(db->Put(K(1), "v5").ok());
+  ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  ASSERT_TRUE(db->Get(K(1), &v).ok());
+  EXPECT_EQ("v5", v) << "新文件的值必须覆盖旧文件的 tombstone";
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
+// ---- A20：compaction 前后 Get/DBIter 与 std::map 全量对账 ----
+TEST(Merge, StdMapReconciliation) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  impl->SetCompactionAutoForTest(false);   // A20 是确定性对账：compaction 用显式单轮驱动，避免并发安装
+  test::Rng rng(12345);
+  std::map<std::string, std::string> expect;
+  for (int r = 0; r < 3; ++r) {
+    for (int i = 0; i < 150; ++i) {
+      const std::string k = "k" + std::to_string(rng.Uniform(200));
+      if (rng.Uniform(5) == 0) {
+        ASSERT_TRUE(db->Delete(k).ok());
+        expect.erase(k);
+      } else {
+        const std::string val = "v" + std::to_string(rng.Next());
+        ASSERT_TRUE(db->Put(k, val).ok());
+        expect[k] = val;
+      }
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  // 显式跑到没有可压的层为止（确定性；仍要求真的发生过 compaction）
+  for (int k = 0; k < 32; ++k) impl->RunOneCompactionForTest();
+  ASSERT_GE(impl->GetCompactionStats().completed, 1u) << "本用例必须真的发生 compaction";
+  EXPECT_TRUE(impl->GetCompactionStats().last_error.empty());
+  for (int i = 0; i < 200; ++i) {
+    const std::string k = "k" + std::to_string(i);
+    std::string v;
+    const Status g = db->Get(k, &v);
+    const auto it = expect.find(k);
+    if (it == expect.end()) {
+      EXPECT_TRUE(g.IsNotFound()) << k;
+    } else {
+      ASSERT_TRUE(g.ok()) << k;
+      EXPECT_EQ(it->second, v) << k;
+    }
+  }
+  std::unique_ptr<Iterator> it(db->NewIterator());
+  std::map<std::string, std::string> got;
+  for (it->SeekToFirst(); it->Valid(); it->Next()) got[it->key().ToString()] = it->value().ToString();
+  EXPECT_TRUE(it->status().ok());
+  EXPECT_EQ(expect.size(), got.size());
+  auto a = expect.begin();
+  auto b = got.begin();
+  for (; a != expect.end() && b != got.end(); ++a, ++b) {
+    EXPECT_EQ(a->first, b->first);
+    EXPECT_EQ(a->second, b->second);
+  }
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
+// ---- A21：输出文件内部 internal key 严格升序 + 跨文件 user key 严格递增 ----
+TEST(Merge, InternalKeyOrderContract) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 80; ++i) {
+      const int idx = round * 80 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  ASSERT_TRUE(WaitForCompaction(impl, 1));
+  const InternalKeyComparator icmp(BytewiseComparator());
+  for (int level = 0; level < kNumLevels; ++level) {
+    const std::vector<FileMetaData> files = impl->LevelFilesForTest(level);
+    std::string prev_largest_user;
+    for (const FileMetaData& f : files) {
+      std::shared_ptr<Table> t;
+      ASSERT_TRUE(Table::Open(o, &env, TableFileName("/db", f.number), &t, &f.smallest, &f.largest).ok());
+      std::unique_ptr<Iterator> it(t->NewIterator());
+      std::string prev;
+      bool first = true;
+      for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        const std::string cur = it->key().ToString();
+        if (!first) { EXPECT_LT(icmp.Compare(Slice(prev), Slice(cur)), 0) << "文件 " << f.number << " 内序错乱"; }
+        prev = cur;
+        first = false;
+      }
+      EXPECT_TRUE(it->status().ok());
+      if (level >= 1) {
+        const std::string lo = Compaction::UserKeyOfInternal(f.smallest);
+        if (!prev_largest_user.empty()) { EXPECT_LT(prev_largest_user, lo) << "跨文件 user key 必须严格递增"; }
+        prev_largest_user = Compaction::UserKeyOfInternal(f.largest);
+      }
+    }
+  }
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
+// ---- A33：构造性证明「锁内以当前 version_ 重放 edit」（陈旧 base 不丢并发 flush 的文件）----
+TEST(Install, RebaseOnConcurrentFlushKeepsI37) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 1000;   // 关闭自动 compaction，手工构造 rebase
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  auto put_batch = [&](int base, int n) {
+    for (int i = 0; i < n; ++i) ASSERT_TRUE(db->Put(K(base + i), V(base + i)).ok());
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  };
+  put_batch(1, 20);      // L0 f1
+  put_batch(21, 20);     // L0 f2
+  std::shared_ptr<const Version> stale = impl->RefCurrentVersionForTest();
+  ASSERT_TRUE(stale != nullptr);
+  ASSERT_GE(stale->level_files(0).size(), 2u);
+  put_batch(41, 20);     // 并发 flush：L0 f3（version_ 前进，stale 落后）
+  auto cur = impl->RefCurrentVersionForTest();
+  ASSERT_TRUE(cur != nullptr);
+  ASSERT_EQ(stale->level_files(0).size() + 1, cur->level_files(0).size());
+
+  std::set<uint64_t> concurrent_added;
+  {
+    std::set<uint64_t> stale_nums;
+    for (const FileMetaData& f : stale->level_files(0)) stale_nums.insert(f.number);
+    for (const FileMetaData& f : cur->level_files(0)) {
+      if (stale_nums.count(f.number) == 0) concurrent_added.insert(f.number);
+    }
+  }
+  ASSERT_FALSE(concurrent_added.empty());
+  const uint64_t before_retries = impl->GetCompactionStats().install_rebase_retries;
+  VersionEdit edit;
+  for (const FileMetaData& f : stale->level_files(0)) edit.DeleteFile(0, f.number);
+  FileMetaData synth;
+  synth.number = 999999;
+  synth.file_size = 100;
+  synth.max_sequence = 1;
+  synth.smallest = BuildInternalKey("zzz-a", 1, kTypeValue);
+  synth.largest = BuildInternalKey("zzz-b", 1, kTypeValue);
+  edit.AddFile(1, synth);
+  std::shared_ptr<const Version> out;
+  const Status s = impl->LogAndApplyForTest(edit, stale, &out);
+  ASSERT_TRUE(s.ok()) << s.ToString();
+  EXPECT_GT(impl->GetCompactionStats().install_rebase_retries, before_retries)
+      << "陈旧 base 必须触发 rebase 计数";
+  ASSERT_TRUE(out != nullptr);
+  ASSERT_EQ(concurrent_added.size(), out->level_files(0).size())
+      << "并发 flush 新增的 L0 文件必须原样保留（陈旧 base 不得覆盖）";
+  for (const FileMetaData& f : out->level_files(0)) {
+    EXPECT_EQ(1u, concurrent_added.count(f.number)) << "只允许并发新增的文件留在 L0";
+  }
+  EXPECT_EQ(1u, out->level_files(1).size());
+  EXPECT_EQ(cur->AllFiles().size() - stale->level_files(0).size() + 1u, out->AllFiles().size())
+      << "总文件数 = 并发后的全量 - 输入 + 新增 L1（无丢失）";
+  stale.reset();
+  cur.reset();
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+}
+
+// ---- A38：Close 幂等 + 两个后台线程 join + 延迟删除队列被处理 ----
+TEST(Shutdown, JoinsBothThreadsAndDrainsQueue) {
+  MemEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 80; ++i) {
+      const int idx = round * 80 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  ASSERT_TRUE(WaitForCompaction(impl, 1));
+  ASSERT_TRUE(db->Close().ok()) << "第一次 Close 必须成功";
+  EXPECT_EQ(0u, impl->pending_delete_size()) << "Close 必须处理延迟删除队列";
+  ASSERT_TRUE(db->Close().ok()) << "重复 Close 必须幂等";
+  delete db;
+}
+
+// ---- A43：compaction 中途失败的未注册输出（.sst.tmp）必须被当孤儿清理并计数 ----
+TEST(Orphan, CompactionOutputCleanedAndCounted) {
+  CompactionFailEnv env;
+  Options o;
+  o.env = &env;
+  o.write_buffer_size = 4096;
+  o.level0_file_num_compaction_trigger = 2;
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db).ok());
+  auto* impl = static_cast<PersistentDBImpl*>(db);
+  impl->SetCompactionAutoForTest(false);
+  for (int round = 0; round < 3; ++round) {
+    for (int i = 1; i <= 60; ++i) {
+      const int idx = round * 60 + i;
+      ASSERT_TRUE(db->Put(K(idx), V(idx)).ok());
+    }
+    ASSERT_TRUE(impl->ForceFlushForTest().ok());
+  }
+  std::set<uint64_t> registered;
+  for (int l = 0; l < kNumLevels; ++l) {
+    for (const FileMetaData& f : impl->LevelFilesForTest(l)) registered.insert(f.number);
+  }
+  // rename 成功、随后 SyncDir 失败 ⇒ 磁盘上留下**未注册的 .sst**（A43 的孤儿来源）
+  env.fail_sync_dir_remaining = 1;
+  impl->RunOneCompactionForTest();
+  std::vector<std::string> children;
+  ASSERT_TRUE(env.GetChildren("/db", &children).ok());
+  size_t orphan = 0;
+  for (const std::string& c : children) {
+    uint64_t n = 0;
+    if (ParseTableFileName(c, &n) && registered.count(n) == 0) ++orphan;
+  }
+  EXPECT_GE(orphan, 1u) << "compaction 失败必须留下未注册的 .sst（本用例的前提）";
+  ASSERT_TRUE(db->Close().ok());
+  delete db;
+
+  DB* db2 = nullptr;
+  ASSERT_TRUE(DB::Open(o, "/db", &db2).ok());
+  const RecoveryStats st = static_cast<PersistentDBImpl*>(db2)->GetRecoveryStats();
+  EXPECT_GE(st.orphan_sst_removed, 1u) << "未注册输出必须被当孤儿清理并计数";
+  std::string v;
+  for (int i = 1; i <= 180; ++i) {
+    ASSERT_TRUE(db2->Get(K(i), &v).ok()) << "key " << i;
+    EXPECT_EQ(V(i), v);
+  }
+  ASSERT_TRUE(db2->Close().ok());
+  delete db2;
 }
 
 }  // namespace lsm

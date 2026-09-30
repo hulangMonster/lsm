@@ -211,6 +211,15 @@ class PersistentDBImpl : public DB {
   // 持住当前 Version 的引用（模拟"正在迭代的读者"，A34/X8 的延迟删除判据）。
   std::shared_ptr<const Version> RefCurrentVersionForTest();
   void EnqueueObsoleteSSTForTest(uint64_t n) { EnqueueObsoleteSST(n); }
+  // M4.3：构造性 rebase 用例（A33）——允许用**陈旧 base** 调 LogAndApply，观察以当前 version_ 重放。
+  Status LogAndApplyForTest(const VersionEdit& edit, const std::shared_ptr<const Version>& base,
+                            std::shared_ptr<const Version>* out) {
+    return LogAndApply(edit, base, out);
+  }
+  std::vector<FileMetaData> LevelFilesForTest(int level) const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return version_ == nullptr ? std::vector<FileMetaData>() : version_->level_files(level);
+  }
   void SetCompactionAutoForTest(bool v) { compaction_auto_ = v; }
 
   // M4.1 诊断：取代路径的 MANIFEST 编号/字节数/编辑数/重建次数（受 mutex_ 保护）。

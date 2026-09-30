@@ -445,3 +445,41 @@ $ for r in 1 2 3; do ./build/bin/lsm_tests; done
 [  PASSED  ] 172 tests.   （x3）
 ```
 （另有等价的独立驱动 `/tmp/a35`：修复前 300 次内 1 次失败；修复后 `ALL 300 OK`。）
+
+## 12. M4 收口判定（对照 §11 的 M4.3 判据 → 状态）
+
+### 12.1 逐条状态
+
+| # | 判据（§11 M4.3 / §10） | 状态 | 证据 |
+|---|---|---|---|
+| 1 | compaction 执行体（归并/滚动/durable 后注册/VersionEdit） | **通过** | `CompactionDb.EndToEndMovesL0ToL1AndKeepsData`、`Merge.InternalKeyOrderContract`、`CompactionFail.*` |
+| 2 | compaction 线程与调度（单实例、flush 优先） | **通过** | `Scheduling.FlushTakesPriorityOverCompaction`（200/200）、`Locks.ZeroIoWhileHoldingDbMutexOnCompactionPath`（200/200） |
+| 3 | 读路径层级化（L0 全量 + L1..L6 每文件；files_checked 口径） | **通过** | `ReadLevels.NewestWinsAndRangeFilterNotCounted`、`Read.L0NewestFirst`、`Merge.StdMapReconciliation`（200/200） |
+| 4 | L22~L29 接线（install_mu_/deletion_mu_/延迟队列/live_versions_/Ref-Unref） | **基本通过** | `Delete.DeferredUntilRefsZero`、`Locks.ZeroIo…OnCompactionPath`（含反向自检）、`Shutdown.JoinsBothThreadsAndDrainsQueue`；**A35（"安装临界区内无 unlink"的事件序列用例）未单列**，仅由延迟队列的行为覆盖 |
+| 5 | 有状态 LogAndApply / manifest_file() / GetManifestStats | **通过** | `ManifestStore` + `PersistentDBImpl::LogAndApply`；`Install.RebaseOnConcurrentFlushKeepsI37`（构造性证明锁内以当前 version_ 重放） |
+| 6 | 默认翻转 + M3 用例语义化 + META 迁移 | **通过** | `Migration.MetaToManifestOneShot`；`use_manifest_metadata` 开关已删除；门禁 16/16 |
+| 7 | A04 独立 CRC + A08 字面注入 | **通过** | `VersionEdit.CrcIndependentlyRecomputed`（独立 bitwise CRC32C）、`Current.InjectedRenameFailureKeepsOldCurrent`（CURRENT rename 字面注入） |
+| 8 | 三个放大的固定行 + 多轮 p50 | **通过** | `FormatAmplLine/FormatLevelLine/FormatFrontLine`（`ROUND_SAMPLES` 为样本数）；`scripts/lsm_ampl_probe` + `docs/amplification.md` |
+| 9 | B 组腿接门禁（v2 正向标记） | **部分** | 已接：M4-B03/B05/B06/B07/B08/B09/B10 + M4-B11；**未接：B01/B02** |
+| 10 | `B01`/B02` compaction 中途 kill -9（三注入点） | **未通过（未做）** | `CompactionHook` 的四个注入点已在 `src/compaction.cpp` 接线，但进程级 kill -9 驱动与脚本未实现 |
+| 11 | A31 放大行可复现自洽 | **未通过（未做）** | 放大字段与行格式已就绪；"同一输入重跑逐字段相等 + 两种口径从同一行复算"的用例未写 |
+| 12 | A 组其余（A22~A27 的真值表、A43 孤儿） | **部分** | `Drop.DecisionIsDisjunctionNotConjunction` 覆盖 ShouldDrop 真值表（无 DB 级 tombstone/旧版本端到端）；`Orphan.CompactionOutputCleanedAndCounted` 覆盖 A43 |
+
+### 12.2 明确**仍未满足**的判据（不得据此打 tag）
+
+1. **B01/B02 未实现**：需要"子进程在 `OnOutputWritten`/`OnOutputRenamed`/`OnBeforeInstall` 各 raise(SIGKILL) + 重启对账（missing 0、孤儿清理、引用集 ⊆ 存在集）"的驱动与脚本；本轮只完成了注入点接线。
+2. **A31 未写**：放大行的"重跑逐字段可复现 + 从同一行复算两种口径"没有用例（只有实测行打印）。
+3. **A35（安装临界区无 unlink 的事件序列）**未单列用例。
+4. **A20 的并发形态暴露了一个未定位的观测**：把 compaction 放在后台与 DBIter 全量对账并发时，10 次里有 1 次出现"迭代结果比期望多 6 个 key"；
+   改为"显式单轮 compaction（无并发安装）后对账"则 200/200 稳定。**本轮没有定位该并发不一致的根因** ⇒ 作为未闭合项登记，
+   在打 tag 前应专门排查（怀疑方向：安装与迭代器持有版本的换出时序，或 DBIter 在跨层同 user key 多版本下的可见性）。
+5. `LIVE_VERSIONS_MAX=6` 与 `FRONT` 的 Put 侧近似口径为观测/近似（见 `docs/amplification.md` §5），不是门禁。
+
+### 12.3 本轮新增用例与 flaky 证据
+
+- 新增 8 条：`Locks.ZeroIoWhileHoldingDbMutexOnCompactionPath`、`Scheduling.FlushTakesPriorityOverCompaction`、
+  `Read.L0NewestFirst`、`Merge.StdMapReconciliation`、`Merge.InternalKeyOrderContract`、
+  `Install.RebaseOnConcurrentFlushKeepsI37`、`Shutdown.JoinsBothThreadsAndDrainsQueue`、
+  `Orphan.CompactionOutputCleanedAndCounted`（172 → 180）。
+- 200 次连跑原始计数行：
+  `A36+A37 pass=200 fail=0`；`A20 pass=200 fail=0`；全量 `[  PASSED  ] 180 tests.` ×3。

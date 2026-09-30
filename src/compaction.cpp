@@ -234,10 +234,14 @@ Status Compaction::Run(Env* env, TableCache* tc, const std::string& dbname, cons
     if (s.ok()) s = out_file->Sync();                 // I39：输出先 durable
     const Status close_status = out_file->Close();
     if (s.ok() && !close_status.ok()) s = close_status;
+    // §5.6 注入点 2：write+fsync 之后、rename 之前（B02 的 kill -9 窗口之一）
+    if (s.ok() && o.compaction_hook != nullptr) o.compaction_hook->OnOutputWritten(out_number);
     if (s.ok()) {
       s = env->RenameFile(TempFileName(dbname, out_number), TableFileName(dbname, out_number));
     }
     if (s.ok()) s = env->SyncDir(dbname);
+    // §5.6 注入点 3：rename + SyncDir 之后、注册之前
+    if (s.ok() && o.compaction_hook != nullptr) o.compaction_hook->OnOutputRenamed(out_number);
     if (!s.ok()) {
       env->DeleteFile(TempFileName(dbname, out_number));
       builder.reset();
@@ -257,6 +261,12 @@ Status Compaction::Run(Env* env, TableCache* tc, const std::string& dbname, cons
     out_file.reset();
     return Status::OK();
   };
+
+  // §5.6 注入点 1：选层/选文件之后（输入集合已定）
+  if (o.compaction_hook != nullptr) {
+    o.compaction_hook->OnInputsSelected(in.level,
+                                        static_cast<int>(in.inputs[0].size() + in.inputs[1].size()));
+  }
 
   Status loop_status = Status::OK();
   for (merged.SeekToFirst(); merged.Valid(); merged.Next()) {
@@ -306,6 +316,9 @@ Status Compaction::Run(Env* env, TableCache* tc, const std::string& dbname, cons
     if (why != nullptr) *why = loop_status.ToString();
     return loop_status;
   }
+
+  // §5.6 注入点 4：进入 install_mu_ 之前
+  if (o.compaction_hook != nullptr) o.compaction_hook->OnBeforeInstall();
 
   if (stats != nullptr) {
     stats->input_files += in.inputs[0].size() + in.inputs[1].size();
