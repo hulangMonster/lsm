@@ -157,6 +157,10 @@ run_gate_m3_marked "M4-B09 MANIFEST 体积/重建计数" scripts/lsm_compaction_
   'MANIFEST_BYTES [0-9]+@@MANIFEST_ROLLS [0-9]+@@\[COMPACTION_STRESS_OK\]'
 run_gate_m3_marked "M4-B10 块缓存 NOT_APPLICABLE" scripts/lsm_compaction_stress.sh \
   'M4-B10 NOT_APPLICABLE@@\[COMPACTION_STRESS_OK\]'
+run_gate_m3_marked "M4-B01 compaction 中途 kill -9 对账" scripts/lsm_compaction_crash_test.sh \
+  'COMPACTION_ROUNDS_TOTAL [1-9][0-9]*@@SST_FILES_TOTAL [1-9][0-9]*@@MISSING_TOTAL 0@@MISMATCH_TOTAL 0@@ROUNDS_OK [1-9][0-9]*@@\[COMPACTION_CRASH_OK\]' --mode b01
+run_gate_m3_marked "M4-B02 四注入点 raise(SIGKILL) 对账" scripts/lsm_compaction_crash_test.sh \
+  'INJECT_POINTS_OK 4@@MISSING_TOTAL 0@@REF_MISSING_TOTAL 0@@OPEN_CORRUPTION_TOTAL 0@@\[COMPACTION_INJECT_OK\]' --mode b02
 
 echo
 echo "==== lsm_gate 汇总 ===="

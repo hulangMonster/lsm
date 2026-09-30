@@ -483,3 +483,30 @@ $ for r in 1 2 3; do ./build/bin/lsm_tests; done
   `Orphan.CompactionOutputCleanedAndCounted`（172 → 180）。
 - 200 次连跑原始计数行：
   `A36+A37 pass=200 fail=0`；`A20 pass=200 fail=0`；全量 `[  PASSED  ] 180 tests.` ×3。
+
+## 13. M4 收口判定（更新：B01/B02 已交付）
+
+### 13.1 本轮新增
+
+| 项 | 交付 | 证据命令 |
+|---|---|---|
+| **M4-B01** compaction 中途随机 kill -9 对账 | `scripts/lsm_compaction_crash_test.sh --mode b01`（真实进程 + 随机时刻 `kill -9`；writer 每 64 条 `db->Sync()` 后写 checkpoint） | 收尾行：`COMPACTION_ROUNDS_TOTAL 10 SST_FILES_TOTAL 6 MISSING_TOTAL 0 MISMATCH_TOTAL 0 ROUNDS_OK 5` + `[COMPACTION_CRASH_OK]` |
+| **M4-B02** 四注入点 `raise(SIGKILL)` 对账 | 同一脚本 `--mode b02`；注入点 = CompactionHook 的 `OnInputsSelected` / `OnOutputWritten` / `OnOutputRenamed` / `OnBeforeInstall` | 逐点输出 `OPEN_OK 1 MISSING 0 MISMATCH 0 REF_MISSING 0 ORPHAN_SST/ORPHAN_TMP n`；汇总 `INJECT_POINTS_OK 4 MISSING_TOTAL 0 REF_MISSING_TOTAL 0 OPEN_CORRUPTION_TOTAL 0 ORPHAN_REMOVED_TOTAL 3` + `[COMPACTION_INJECT_OK]` |
+| 驱动 | `scripts/lsm_compaction_crash.cpp`（`writer` 自杀/被杀；`verify` 重开对账：missing/mismatch、引用集 ⊆ 存在集、孤儿计数、Open 不得 Corruption） | `add_executable(lsm_compaction_crash …)` |
+| 门禁 | 两条 v2 正向标记腿（`run_gate_m3_marked`），既有 16 条腿未动 | `--require-m3` 下 **18 条腿** |
+
+### 13.2 M4.3 判据总表（最终）
+
+| 判据 | 状态 |
+|---|---|
+| compaction 执行体 / 调度 / flush 优先 | 通过（CompactionDb.EndToEnd、Scheduling.FlushTakesPriority、A36 加宽探针 200/200） |
+| 读路径层级化 | 通过（ReadLevels、Read.L0NewestFirst、Merge.StdMapReconciliation 200/200、Merge.InternalKeyOrderContract） |
+| L22~L29 接线 + 有状态 LogAndApply/ManifestStore | 通过（Install.Rebase…、Delete.Deferred…、Shutdown…、GetManifestStats） |
+| **A35 安装临界区内无 unlink** | **通过**：新增 `InstallMuHeldOnThisThread()` 探针，并修掉真实缺陷——`LogAndApply` 原来在**持 install_mu_ 时**调用 `MaybeDeleteObsoleteFiles()`；现改为先释放 install_mu_ 再删（A35 200/200） |
+| **A31 放大行可复现 + 自洽** | **通过**（同输入两遍逐字段相等 + 从同一行复算两种口径；容差 1e-6） |
+| **B01 / B02** | **通过**（见 13.1） |
+| 默认翻转 + META 迁移 | 通过（Migration.MetaToManifestOneShot） |
+| A04 独立 CRC / A08 字面注入 | 通过 |
+| M4-B03/B05/B06/B07/B08/B09/B10 + B11 | 通过（v2 正向标记腿） |
+| A20 并发形态（后台 compaction 与迭代器并发） | **已修**：根因是 `SkipCurrentRunForwardWithKey` 持有的 user_key 视图在 `internal_->Next()` 后失效（父代理的【I7 修复】+ 本仓库最小 RED `Merge.SkipAcrossChildrenWithVolatileChildKeyView`）；修复为在调用点复制为拥有型字符串 |
+| A22~A27（丢弃判据 DB 级端到端） | 部分：`Drop.DecisionIsDisjunctionNotConjunction` 覆盖 ShouldDrop 真值表；无 DB 级 tombstone 端到端用例 |

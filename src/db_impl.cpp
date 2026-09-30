@@ -1463,7 +1463,8 @@ void PersistentDBImpl::MaybeDeleteObsoleteFiles() {
       if (version_ != nullptr) {
         for (const FileMetaData& f : version_->AllFiles()) live.insert(f.number);
       }
-      if (manifest_ != nullptr) current_manifest = manifest_->number();
+      // 只读受 mutex_ 保护的 manifest_number_（不在 install_mu_ 下读 ManifestStore 内部状态，避免与 RollAndOpen 竞态）
+      current_manifest = manifest_number_;
     }
     for (auto it = pending_delete_sst_.begin(); it != pending_delete_sst_.end();) {
       if (live.count(*it) != 0) {

@@ -175,3 +175,8 @@ target_link_libraries(lsm_m3_probe PRIVATE lsm)
 # M4.3：三个放大的实测探针（B 组驱动；真实磁盘）
 add_executable(lsm_ampl_probe scripts/lsm_ampl_probe.cpp)
 target_link_libraries(lsm_ampl_probe PRIVATE lsm)
+
+# M4.3：B01/B02 的进程级崩溃驱动
+add_executable(lsm_compaction_crash scripts/lsm_compaction_crash.cpp)
+target_link_libraries(lsm_compaction_crash PRIVATE lsm)
+target_link_libraries(lsm_ampl_probe PRIVATE lsm)
