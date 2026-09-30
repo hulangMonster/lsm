@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
   int keys = 2000;
   size_t wbs = 256 * 1024;
   std::string strategy = "round_robin";
+  int bloom_bits = 10;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--db") == 0 && i + 1 < argc) dbdir = argv[++i];
     else if (std::strcmp(argv[i], "--rounds") == 0 && i + 1 < argc) rounds = std::atoi(argv[++i]);
@@ -48,10 +49,14 @@ int main(int argc, char** argv) {
       wbs = static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
     else if (std::strcmp(argv[i], "--strategy") == 0 && i + 1 < argc)
       strategy = argv[++i];
+    // M5.3 追加：让 AMPL/space 子轮与 CELL 格的 --filter 设置一致（0 = 不写 filter 块）。
+    else if (std::strcmp(argv[i], "--bloom-bits") == 0 && i + 1 < argc)
+      bloom_bits = std::atoi(argv[++i]);
   }
 
   Options o;
   o.write_buffer_size = wbs;
+  o.bloom_bits = bloom_bits;
   o.compaction_pick_strategy =
       (strategy == "min_overlap") ? PickStrategy::kMinOverlap : PickStrategy::kRoundRobin;
   DB* db = nullptr;

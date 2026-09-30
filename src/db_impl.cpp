@@ -1852,6 +1852,12 @@ AmplificationStats PersistentDBImpl::GetAmplificationStats() const {
     out.compaction_round_max_us = compaction_stats_.round_micros_max;
     out.live_versions = live_versions_.size();
     out.live_versions_max = live_versions_max_;
+    // M5.3（§6.6）：读路径的 filter 计数器（线程局部 delta 汇总后的口径，L34）。
+    out.filter_checked = read_stats_.filter_checked;
+    out.filter_negative = read_stats_.filter_negative;
+    out.filter_positive = read_stats_.filter_positive;
+    out.filter_unavailable = read_stats_.filter_unavailable;
+    out.data_blocks_skipped_by_filter = read_stats_.data_blocks_skipped_by_filter;
     if (version_ != nullptr) {
       for (const FileMetaData& f : version_->AllFiles()) out.sst_bytes += f.file_size;
     }
@@ -1930,7 +1936,9 @@ std::string PersistentDBImpl::FormatAmplLine(const std::string& round_id) const 
                 "space_sst_bytes=%llu space_manifest_bytes=%llu space_current_bytes=%llu "
                 "space_log_bytes=%llu space_tmp_bytes=%llu space_amp=%.6f space_amp_sst_only=%.6f "
                 "dropped_old_versions=%llu dropped_tombstones=%llu compaction_rounds=%llu "
-                "compaction_round_p50_us=%llu compaction_round_max_us=%llu live_versions_max=%llu",
+                "compaction_round_p50_us=%llu compaction_round_max_us=%llu live_versions_max=%llu "
+                "read_filter_checked=%llu read_filter_negative=%llu read_filter_positive=%llu "
+                "read_filter_unavailable=%llu read_data_blocks_skipped_by_filter=%llu",
                 round_id.c_str(), static_cast<unsigned long long>(a.user_logical_bytes),
                 static_cast<unsigned long long>(a.entry_bytes),
                 static_cast<unsigned long long>(a.flush_write_bytes),
@@ -1950,7 +1958,12 @@ std::string PersistentDBImpl::FormatAmplLine(const std::string& round_id) const 
                 static_cast<unsigned long long>(a.compaction_rounds),
                 static_cast<unsigned long long>(a.compaction_round_p50_us),
                 static_cast<unsigned long long>(a.compaction_round_max_us),
-                static_cast<unsigned long long>(a.live_versions_max));
+                static_cast<unsigned long long>(a.live_versions_max),
+                static_cast<unsigned long long>(a.filter_checked),
+                static_cast<unsigned long long>(a.filter_negative),
+                static_cast<unsigned long long>(a.filter_positive),
+                static_cast<unsigned long long>(a.filter_unavailable),
+                static_cast<unsigned long long>(a.data_blocks_skipped_by_filter));
   return std::string(buf);
 }
 

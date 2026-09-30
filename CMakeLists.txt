@@ -197,3 +197,15 @@ target_link_libraries(lsm_batch_crash_writer PRIVATE lsm)
 add_executable(lsm_batch_crash_recover scripts/batch_crash_recover.cpp)
 target_link_libraries(lsm_batch_crash_recover PRIVATE lsm)
 target_link_libraries(lsm_ampl_probe PRIVATE lsm)
+
+# M5.3：微基准驱动（docs/m5-design.md §6/§7.1；只走公共 DB 接口，不暴露 db_impl 统计）
+add_executable(bench_lsm bench/bench_lsm.cpp)
+target_link_libraries(bench_lsm PRIVATE lsm)
+
+# M5.3 / M5-B04：filter 块体积的逐文件实测（§6.6 的 space_filter_bytes 落点）
+add_executable(lsm_level_stats scripts/lsm_level_stats.cpp)
+target_link_libraries(lsm_level_stats PRIVATE lsm)
+
+# M5.3 / M5-B09：磁盘 filter 损坏扫描（含重算 CRC 的错位注入）
+add_executable(lsm_filter_damage scripts/lsm_filter_damage.cpp)
+target_link_libraries(lsm_filter_damage PRIVATE lsm)

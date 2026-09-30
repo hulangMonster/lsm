@@ -104,6 +104,9 @@ struct AmplificationStats {
   uint64_t dropped_old_versions = 0, dropped_tombstones = 0;
   uint64_t compaction_rounds = 0, compaction_round_p50_us = 0, compaction_round_max_us = 0;
   uint64_t round_samples = 0;   // p50 的样本数（多轮采样，不是单轮近似）
+  // ---- M5.3 追加（docs/m5-design.md §6.6 的 read_filter_* 四列；只追加，既有列语义不变）----
+  uint64_t filter_checked = 0, filter_negative = 0, filter_positive = 0, filter_unavailable = 0;
+  uint64_t data_blocks_skipped_by_filter = 0;
 };
 
 // M4.2：有状态 MANIFEST 的对外统计（GetManifestStats；诊断只读）。

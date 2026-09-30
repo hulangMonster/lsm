@@ -1289,8 +1289,17 @@ TEST(Filter, FilterCrcAlwaysVerified) {
 // M5-A10 ≥3× 同轮开关对照：同一数据集、同一不存在 key 集合，bloom_bits=0 vs 10
 // ===========================================================================
 TEST(Filter, BlockReadReductionAtLeastThreeTimes) {
+  // M5.3（登记于 docs/m5-evidence.md §7 第 6 条）：本用例在 TSan 下用**缩小规模**的等价输入覆盖，
+  // 断言与判据**不降**（without>=3、ratio>=3.0、skipped>0、口径自洽、误判率<10% 全部保留）；
+  // 全尺寸（20000 key × 2 库）在 TSan 下实测 >25 分钟仍未结束，不作为 TSan 的通过项。
+  // 检测宏 `__SANITIZE_THREAD__` 由 GCC 在 -fsanitize=thread 时自动定义（已在本机实测）。
+#if defined(__SANITIZE_THREAD__)
+  const int kDataset = 1500;
+  const int kQueries = 300;
+#else
   const int kDataset = 20000;
   const int kQueries = 2000;
+#endif
 
   MemEnv env_off;
   MemEnv env_on;

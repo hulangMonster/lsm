@@ -59,3 +59,16 @@ B05_OK 1 B06_OK 1 B07_OK 1
   `RunFlusher`，其延迟被采样；同组其他写者的端到端延迟 ≥ 该值（它们多等了一个 commit_cv_ 唤醒）。
   因此 `FRONT.p50_us` 对 Put 而言是**下界近似**（误差方向：偏小），Get 侧是精确的端到端。
   行格式不为此单列字段（§10.3 冻结的前缀列），此说明即为口径披露。
+
+## 6. `read_data_blocks_read` 的语义修正（M5.3 登记）
+
+- 本文件 §2 的 M4 原始行里 `read_data_blocks_read=0`：这不是"没有读数据块"，而是**M3/M4 从未递增该列**
+  （`Table::ReadBlockImpl` 只递增了 `blocks_read`/`bytes_read`）。该列在 M4 时点上**没有诊断价值**。
+- M5.1（`src/sstable/table.cpp` 的 `ReadBlockImpl`，`expected == kBlockTypeData` 分支）补上了递增；
+  M5.3 的 `bench_lsm.sh` / `lsm_ampl_probe` 产出的 AMPL 行里该列现在会是非零（例如
+  `read_data_blocks_read=3490`，2000 key 的 LSM 读轮）。
+- **这是对既有诊断列语义的修正，只影响计数，不影响任何读结果/校验语义**：不改 CRC/长度/type 校验，
+  不改 `Get` 的返回值，也不改 `blocks_read` 的既有口径（`blocks_read` 仍是 index+data 之和）。
+- M4 时代的 `read_data_blocks_read=0` 数字**原文保留**在本文件 §2，作为修正前的证据；M5.3 的
+  `>=3x` 块读下降判据定义在这一列上（M5-A10），因此必须先把该列修好，判据才有意义。
+

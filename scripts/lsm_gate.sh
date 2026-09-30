@@ -203,6 +203,28 @@ run_gate_m5_marked "M5-B01 批崩溃对账（kill -9 批写入中途）" scripts
   'BATCH_KILL9_MISSING 0@@BATCH_MISMATCH 0@@BATCH_HALF_VISIBLE 0@@BATCH_KILL9_ROUNDS [1-9][0-9]*@@BATCH_ACKED [1-9][0-9]*@@BATCHES_SEEN [1-9][0-9]*@@\[BATCH_CRASH_OK\]' \
   --rounds "$ROUNDS" --batch-size 16 --write-buffer-size 262144
 
+# ---------------- M5.3 腿（docs/m5-design.md §7.5 的 M5-C/M5-D/M5-E；M5.3 追加）----------------
+# M5-C：四类负载 × 三类对照的固定 CELL 行 + **只对 LSM 格**的 missing/mismatch 对账。
+# 硬门禁只施加在 LSM 腿（M5-C6）：raw_file/raw_pwrite/std_map 的 verify=na 不参与退出码，
+# 复现性判据也只对 engine=lsm 的格生效（BENCH_REPRO_LSM_CELLS 是非零的正向计数）。
+# CELL 的 write_buffer_size 取 16 MiB：20000-key 数据集稳定落在 MemTable 内，避免计时窗口
+# 横跨「后台 flush 完成前后」的 MemTable→SST 切换（那会让复现性判据误报，见 docs/m5-bench.md §8）；
+# AMPL 子轮单独用 256 KiB 强制产生 SST（space_filter_bytes 必须 >0，M5-B04）。
+run_gate_m5_marked "M5-C 基准（四类负载 × 三类对照 + AMPL/LEVEL/FRONT 追加列，硬门禁只在 LSM 腿）" scripts/bench_lsm.sh \
+  'BENCH_CELLS_TOTAL [1-9][0-9]*@@BENCH_LSM_CELLS_TOTAL [1-9][0-9]*@@BENCH_MISSING_TOTAL 0@@BENCH_MISMATCH_TOTAL 0@@BENCH_REPRO_OK 1@@BENCH_REPRO_LSM_CELLS [1-9][0-9]*@@BENCH_AMPL_OK 1@@BENCH_AMPL_MISSING 0@@BENCH_SPACE_FILTER_BYTES [1-9][0-9]*@@BENCH_SPACE_SST_DATA_BYTES [0-9]+@@^AMPL round_id=ALL .*space_filter_bytes=[0-9]+ space_sst_data_bytes=[0-9]+@@^LEVEL round_id=ALL .*total_sst_files=[0-9]+@@^FRONT round_id=ALL .*p99_us=[0-9]+@@\[BENCH_LSM_OK\]' \
+  --dataset 20000 --value-size 100 --batch 1 --pipeline 1 --sync 0 --filter on \
+  --repeats 2 --warmup 1000 --write-buffer-size 16777216 --ampl-write-buffer-size 262144 \
+  --out /tmp/lsm_bench_gate.txt
+
+# M5-D：失败注入自测 —— bench_lsm.sh 在 missing != 0 时必须返回 1（防空绿）。
+run_gate_m5_marked "M5-D 基准失败注入自测（missing!=0 ⇒ rc=1）" scripts/bench_lsm_selftest.sh \
+  'BENCH_INJECT_MISSING_RC 1@@\[BENCH_SELFTEST_OK\]'
+
+# M5-E：真实磁盘 filter 损坏扫描（含重算 CRC 的错位注入，E4 的「CRC 不是唯一防线」）。
+run_gate_m5_marked "M5-E filter 磁盘损坏扫描（零静默假阴性）" scripts/lsm_filter_damage_test.sh \
+  'FILTER_DAMAGE_CASES [1-9][0-9]*@@FILTER_SILENT_FALSE_NEGATIVE 0@@FILTER_SILENT_WRONG_VALUE 0@@FILTER_MISALIGN_DETECTED 1@@\[FILTER_DAMAGE_OK\]' \
+  --cases 2000
+
 echo
 echo "==== lsm_gate 汇总 ===="
 for line in "${RESULTS[@]}"; do echo "$line"; done

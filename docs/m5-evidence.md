@@ -1,14 +1,18 @@
-# M5.1 + M5.2 实现证据（`docs/m5-evidence.md`）
+# M5 实现证据（M5.1 + M5.2 + M5.3 收口版）
 
-> 产出阶段：**M5.1**（Bloom filter + filter block + metaindex + 读路径否定 + 计数器）与
-> **M5.2**（WriteBatch 编码 + `DB::Write` + 批提交 + WAL 一次写 + 崩溃原子性）。
-> 基线：`main` HEAD `fa7c328`（M1~M4 收口，tag `m1-memtable`/`m2-wal`/`m3-sstable`/`m4-compaction`）。
+> 产出阶段：**M5.1**（Bloom filter + filter block + metaindex + 读路径否定 + 计数器）、
+> **M5.2**（WriteBatch 编码 + `DB::Write` + 批提交 + WAL 一次写 + 崩溃原子性）、
+> **M5.3**（微基准 + 四类负载 × 三类对照 + 数据表 + `bench_lsm.sh` 门禁 + 负结果入档 + 收口）。
+> 基线：`main` HEAD **`99c417f`**（`feat(m5): M5.1 Bloom filter + M5.2 WriteBatch`；M1~M4 收口，
+> tag `m1-memtable`/`m2-wal`/`m3-sstable`/`m4-compaction`）。M5.3 的改动**未提交**，由用户提交。
 > 本文件**只登记证据与差异**；不改 `docs/m5-design.md`/`docs/m4-design.md`/`docs/m3-*.md`/`docs/m3-evidence.md`，
-> `docs/protocol.md` 只做**纯追加**（§12/§13，证据见 §5）。
+> `docs/protocol.md` 只做**纯追加**（§12/§13，证据见 §5）；`docs/amplification.md` 追加了 §6（`data_blocks_read`
+> 语义修正的登记，见 §6 D-8）。
 >
-> 契约来源：`docs/m5-design.md` §11 的 M5.1/M5.2、§2 的裁决（D1~D8 / E1~E8）、§3（filter 位级格式与读路径接入）、
-> §4 §12/§13（协议追加文本）、§5（WriteBatch 与提交路径）、§9（`I47~I56` / `L30~L35`）、§10（测试矩阵）；
-> `docs/protocol.md` §9.4（M2 冻结的「一个 batch = 一条 WAL record」）、§12（M5.1 追加）、§13（M5.2 追加）。
+> 契约来源：`docs/m5-design.md` §11 的 M5.1/M5.2/M5.3、§2 的裁决（D1~D8 / E1~E8）、§3（filter 位级格式与读路径接入）、
+> §4 §12/§13（协议追加文本）、§5（WriteBatch 与提交路径）、§6/§7/§8（微基准、门禁脚本、结论与负结果）、
+> §9（`I47~I56` / `L30~L35`）、§10（测试矩阵）；`docs/protocol.md` §9.4（M2 冻结的「一个 batch = 一条 WAL record」）、
+> §12（M5.1 追加）、§13（M5.2 追加）。M5.3 的数据表与负结果原文见 **`docs/m5-bench.md`**。
 
 ---
 
@@ -113,26 +117,59 @@
 
 ---
 
+## §2.3 M5.3 判据逐条（`docs/m5-design.md` §11 M5.3 / §6 / §7 / §8 / §10.2）
+
+| # | 判据（§11 M5.3 / §10.2） | 落地位置 | 证据（命令 / 计数行） | 状态 |
+|---|---|---|---|---|
+| 1 | `scripts/bench_lsm.sh` 全流程可复现（四类负载 × 三类对照） | `scripts/bench_lsm.sh` + `bench/bench_lsm.cpp` | `M5-C` 门禁腿：`BENCH_CELLS_TOTAL 12`（去重格）/`BENCH_LSM_CELLS_TOTAL 4`/`BENCH_MISSING_TOTAL 0`/`BENCH_MISMATCH_TOTAL 0`/`BENCH_REPRO_OK 1`/`BENCH_REPRO_LSM_CELLS 4`/`[BENCH_LSM_OK]` | ✅ |
+| 2 | 固定 `CELL/THROUGHPUT/LATENCY/P99` 行；`AMPL`/`LEVEL`/`FRONT` 三行齐全 | 同上 + `lsm_ampl_probe` | `gate.log` 的 M5-C 段：12 条 `CELL` + `^AMPL round_id=ALL … space_filter_bytes=…`/`^LEVEL …`/`^FRONT … p99_us=…`（门禁用正则 AND） | ✅ |
+| 3 | 硬门禁**只**施加在 LSM 腿（M5-C6） | `bench_lsm.sh` 的 missing/mismatch 求和只取 `engine=lsm` | §3.2 的 M5-C 腿标记；`raw_*`/`std_map` 的 `verify=na` 不进退出码 | ✅ |
+| 4 | `AMPL` 行尾追加 `space_filter_bytes` / `space_sst_data_bytes`（§6.6） | `FormatAmplLine`（read_filter_* 四列）+ `scripts/lsm_level_stats.cpp`（逐文件 `Table::filter_bytes()` 求和后追加） | `SPACE_SST_BYTES == SPACE_FILTER_BYTES + SPACE_SST_DATA_BYTES`（on 2138613 = 109401 + 2029212）；`BENCH_SPACE_FILTER_BYTES 25113`（门禁腿） | ✅ |
+| 5 | `>=3x` **只**作同轮开关对照、**只限不存在 key**、禁止外推 | `Filter.BlockReadReductionAtLeastThreeTimes`（M5-A10） | `M5_FILTER_BLOCK_READS_WITHOUT 2000` / `WITH 18` / `RATIO 111.111111` / `BLOCKS_SKIPPED 1982`（同进程、同数据集、同查询集合） | ✅ |
+| 6 | 失败注入自测：`missing != 0 ⇒ rc=1`（M5-B03/`I56`） | `scripts/bench_lsm_selftest.sh` 驱动 `bench_lsm.sh --inject-missing` | `M5-D` 腿：`BENCH_INJECT_MISSING_RC 1` + `[BENCH_SELFTEST_OK]`（且 `BENCH_MISSING_TOTAL 1`） | ✅ |
+| 7 | 磁盘 filter 损坏扫描（M5-B09/E4）：零静默假阴性 + 重算 CRC 的错位注入被检出 | `scripts/lsm_filter_damage.cpp` + `lsm_filter_damage_test.sh` | `M5-E` 腿：`FILTER_DAMAGE_CASES 2000`、`FILTER_SILENT_FALSE_NEGATIVE 0`、`FILTER_SILENT_WRONG_VALUE 0`、`FILTER_DAMAGE_DETECTED 1923`、`FILTER_DAMAGE_FILTER_DEGRADED 77`、`FILTER_MISALIGN_DETECTED 1`、`[FILTER_DAMAGE_OK]` | ✅ |
+| 8 | 复现性（M5-B05）：同参数两轮中位数在 `--repro-tol` 内 | `bench_lsm.sh` 的 `BENCH_REPRO_OK`（按 M5-C6 只对 `engine=lsm`） | 门禁腿 **连跑 3 次**：3/3 `rc=0`、`BENCH_REPRO_OK 1`、`BENCH_REPRO_LSM_CELLS 4`；100k 文档轮 4 个 LSM 格 `repro_ok=1` | ✅ LSM 腿；非 LSM 格的 `repro_ok=0` 仍打印但不进退出码（§7 第 2 条） |
+| 9 | 负结果入档（§8.2）：data + 归因 + 原文保留 | `docs/m5-bench.md` §8（N1~N9） | N1 已存在 key 无吞吐收益、N2 filter 空间/写代价 +5.40% 且 `NET_LOSS`、N4 "batch 大反而慢"未被支持、N5 fsync 漂移、N7 `compaction_rounds=0` 非稳态 | ✅ |
+| 10 | 三构建 + 门禁收口（M5-B06/B07） | 见 §3.1/§3.2 | Release 205/205 + 0 warning；**ASan 全量 205/205、0 sanitizer 报告**；**TSan 全量 205/205、0 race**；`--no-asan` 门禁 **24/24 PASS**；**`--with-tsan` 完整门禁 26/26 PASS + `[OK]`（M5-B07）** | ✅ |
+| 11 | `data_blocks_read` 语义修正登记（用户裁决 #1） | `src/sstable/table.cpp`（M5.1）+ `docs/amplification.md` §6 + §6 D-8 | 修正前 M4 行 `read_data_blocks_read=0`（原文保留）；修正后 `bench_lsm` on/off 行 `read_data_blocks_read=167760`（非零，且读结果不变） | ✅ |
+
+**M5.3 的一处设计收窄（登记，不是放宽）**：§6.3 的 `repeat=<i>` 落地为每格一行的
+`repeat=<R>`（R = 重复次数），并在同一行追加 `raw1_us/raw2_us/raw3_us` 三次原始中位延迟；
+理由：`--expected-min-cells` 与 §6.6 的数据表都以"格"为单位，逐 repeat 成行会让
+`BENCH_CELLS_TOTAL` 与格数脱钩。审计方若按"逐 repeat 一行"解析需改（登记于 §6 D-11）。
+
+**M5.3 的两处驱动修正（登记于 §6 D-12/D-13）**：① 读负载**不**按 `batch` 折算（首版把读也按 batch
+折算，导致 batch=16/256 的读吞吐被放大 16/256 倍；已修，并用 batch 1/16/256 的对照复测）；
+② 复现性判据只对 `engine=lsm` 生效（依据 M5-C6）。
+
+---
+
+
+
 ## §3 三构建与门禁原始计数行
 
-### 3.1 三构建
+### 3.1 三构建（**刚重建后测**）
 
 | 构建 | 命令 | 原始计数行 |
 |---|---|---|
-| Release（干净重建） | `bash scripts/lsm_build.sh` | `[CHECK] warning 计数 = 0（要求 0）`；`[==========] 205 tests from 56 test suites ran. (75648 ms total)`；`[  PASSED  ] 205 tests.` |
-| ASan | `cmake -S . -B build-asan -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build-asan -j8` | `asan_build_rc=0  warnings=0`；`[==========] 20 tests from 3 test suites ran. (192416 ms total)`；`[  PASSED  ] 20 tests.`；`AddressSanitizer 报告数 = 0` |
-| TSan | `cmake -S . -B build-tsan -DENABLE_TSAN=ON … && setarch $(uname -m) -R ./build-tsan/bin/lsm_tests --gtest_filter='Filter.MultiThreadedGetNoRace:WriteBatch.*:Batch.*'` | `tsan_build_rc=0  warnings=0`；`[==========] 9 tests from 3 test suites ran. (24078 ms total)`；`[  PASSED  ] 9 tests.`；`ThreadSanitizer 报告数 = 0` |
-| TSan（单线程重负载，**未完成**，见 §7 第 6 条） | `--gtest_filter='Filter.BlockReadReductionAtLeastThreeTimes'`（`timeout 2400`） | 启动后 **25 分钟仍在 `[ RUN ]` 状态**（无 `[ OK ]`、无 race 报告、无失败）；`timeout 2400` 到点被强杀。**不计入「通过」**，也不计为「失败」——记为**未验证** |
+| Release（干净重建） | `bash scripts/lsm_gate.sh --rounds 100 --with-tsan --require-m3 --require-m5`（第一腿 `scripts/lsm_build.sh`，`rm -rf build` 全量重建） | `[CHECK] warning 计数 = 0（要求 0）`；`[==========] 205 tests from 56 test suites ran. (71061 ms total)`；`[  PASSED  ] 205 tests.` |
+| ASan（全量，门禁内） | 同上门禁的 `ASan 全量` 腿（`cmake -S . -B build-asan -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build-asan -j8 && ./build-asan/bin/lsm_tests`） | `[==========] 205 tests from 56 test suites ran. (440999 ms total)`；`[  PASSED  ] 205 tests.`；`grep -c AddressSanitizer = 0` |
+| TSan（全量，门禁内；A10 缩规模） | 同上门禁的 `TSan 全量` 腿（`cmake -S . -B build-tsan -DENABLE_TSAN=ON … && setarch $(uname -m) -R ./build-tsan/bin/lsm_tests`） | `[==========] 205 tests from 56 test suites ran. (938829 ms total)`；`[  PASSED  ] 205 tests.`；`grep -c "WARNING: ThreadSanitizer" = 0` |
+| TSan（并发面，独立跑） | `setarch $(uname -m) -R ./build-tsan/bin/lsm_tests --gtest_filter='Filter.MultiThreadedGetNoRace:WriteBatch.*:Batch.*'` | `[  PASSED  ] 9 tests.`；`TSAN_FOCUS_ELAPSED 32.27`；`FOCUS_RC=0`；0 race |
+| TSan（M5-A10 缩规模等价输入，**用户裁决 ①**） | `setarch … --gtest_filter='Filter.BlockReadReductionAtLeastThreeTimes'`（TSan 下 1500 key/300 查询） | `M5_FILTER_BLOCK_READS_WITHOUT 300` / `WITH 3` / `RATIO 100.000000` / `BLOCKS_SKIPPED 297` / `FALSE_NEGATIVE 0`；`[  PASSED  ] 1 test.`；`TSAN_SCALED_ELAPSED 16.69`；`SCALED_RC=0` |
+| TSan（M5-A10 **全尺寸** 20000 key，**不做**，见 §7 第 6 条） | 同上前一版（`timeout 2400`，未缩规模） | M5.1 阶段实测 **25 分钟仍在 `[ RUN ]`**（CPU 100%、非死锁）⇒ 记为**未验证/不做**，由 Release 全尺寸与 ASan 全尺寸覆盖 |
 
-ASan 的过滤器与设计 §11 的证据命令一致（`Filter.*:Bloom.*`），并加上 M5.2 的 `WriteBatch.*:Batch.*`
-（20 条 = filter 12 + batch 8）。
+**ASan 与 TSan 都是门禁内的全量 205/205**（不只是 M5 子集）：ASan 0 条 sanitizer 报告（441.0 s）、
+TSan 0 条 `WARNING: ThreadSanitizer`（938.8 s）；独立跑的 TSan 并发面 9/9（32.3 s）与缩规模 A10
+（16.7 s）作为交叉证据。**Release 的 0 warning 由第一腿硬断言（71061 ms / 205 PASSED）。**
 
-TSan 这里只跑**并发面**：`Filter.MultiThreadedGetNoRace`（A18 多线程点查同一 `TableCache`）
-+ `WriteBatch.*`/`Batch.*` 全部（含 A14 的 32 线程并发组提交）。**单线程** filter 用例在 Release 与 ASan
-下覆盖——TSan 的用途是数据竞争，单线程用例加 TSan 只增加时间不增加信息量，且
-`Filter.BlockReadReductionAtLeastThreeTimes`（20000 key × 2 库的写入 + 4000 次点查）在 TSan 下
-**单条超过 17 分钟仍未结束**（实测 CPU 100% 持续占用、非死锁）。该条的 TSan 结果单列上表，
-**偏离登记见 §7 第 6 条**。
+**TSan 未闭合项的结论**：取用户裁决的 **①「缩小规模、判据不降」**——M5-A10 在 TSan 下用
+`#if defined(__SANITIZE_THREAD__)` 的 1500 key/300 查询输入（`WITHOUT 300`/`WITH 3`/`RATIO 100.0`/
+`SKIPPED 297`/`FALSE_NEGATIVE 0`，断言原样：`without>=3`、`ratio>=3.0`、`skipped>0`、
+`with==positive+unavailable`、`positive<queries/10`）。**TSan 全量 205/205 PASS、0 条 race**
+（949 s），因此本轮**主张**「TSan 全量干净」，但**明确限定**：A10 那一条是缩规模等价输入；
+**全尺寸 A10 在 TSan 下不做**（实测 >25 分钟/条，非死锁），由 Release 全尺寸
+（`WITHOUT 2000`/`WITH 18`/`RATIO 111.1`）与 ASan 全尺寸覆盖。
 
 ### 3.2 门禁（`scripts/lsm_gate.sh`）
 
@@ -160,35 +197,68 @@ PASS  M4-B02 四注入点 raise(SIGKILL) 对账
 PASS  M5-B11 filter 单元 + 块读下降 + 零假阴性 + 依赖纪律
 PASS  M5-B12 WriteBatch 单元 + 整批原子 + WAL 一次写 + 依赖纪律
 PASS  M5-B01 批崩溃对账（kill -9 批写入中途）
+PASS  M5-C 基准（四类负载 × 三类对照 + AMPL/LEVEL/FRONT 追加列，硬门禁只在 LSM 腿）
+PASS  M5-D 基准失败注入自测（missing!=0 ⇒ rc=1）
+PASS  M5-E filter 磁盘损坏扫描（零静默假阴性）
 [OK] 全部门禁通过
 ```
 
-**（`--no-asan` 下 ASan 腿不跑；`--with-tsan` 未开，见 §7 第 6 条。既有 18 腿每条都 PASS。）**
+**（`--no-asan` 下 ASan 腿不跑，ASan 全量见 §3.1；`--with-tsan` 未开，见 §7 第 6 条。
+24 条腿全部 PASS、末行 `[OK]`；无 `[PARTIAL]`、无 SKIP。）**
 
 关键原始计数行（逐字摘自该次门禁的 `gate.log`）：
 
 ```
-TOTAL_ROUNDS 100 ROUNDS_OK 100 ACKED_TOTAL 1894 MISSING_TOTAL 0 MISMATCH_TOTAL 0
-SST_FILES_TOTAL 100
-RECORDS_REPLAYED_TOTAL 1708
-RECORDS_REPLAYED 0 RESTART_KEYS_OK 2000/2000 SST_FILES_REGISTERED 2
+TOTAL_ROUNDS 100 ROUNDS_OK 100 ACKED_TOTAL 1179 MISSING_TOTAL 0 MISMATCH_TOTAL 0
 TAIL_CASES 1401 TAIL_OK 1401 TAIL_FAIL 0 RECORD_BYTES 40
-MIDDLE_OPEN_CORRUPTION 1
+MIDDLE_OPEN_CORRUPTION 1 RECOVERED_PREFIX -1 DETAIL Corruption: RecoverAndOpen: log 中间损坏（其后仍有完好 record）: /tmp/lsm_mid_7P7nwt/db/000001.log @1960 CRC 不符
+SST_FILES_TOTAL 100
+RECORDS_REPLAYED_TOTAL 1236
+RECORDS_REPLAYED 0 RESTART_KEYS_OK 2000/2000 SST_FILES_REGISTERED 2
 FD_GROWTH 1 FD_BASELINE 8 FLUSHES_COMPLETED 452
-COMPACTION_ROUNDS_TOTAL 61 SST_FILES_TOTAL 40 MISSING_TOTAL 0 MISMATCH_TOTAL 0 ROUNDS_OK 30
+COMPACTION_ROUNDS_TOTAL 50 SST_FILES_TOTAL 49 MISSING_TOTAL 0 MISMATCH_TOTAL 0 ROUNDS_OK 30
 INJECT_POINTS_OK 4 MISSING_TOTAL 0 REF_MISSING_TOTAL 0 OPEN_CORRUPTION_TOTAL 0 ORPHAN_REMOVED_TOTAL 3
-M5_TESTS_RAN 32  M5_TESTS_FAILED 0  M5_FILTER_RAN 12  M5_FILTER_FALSE_NEGATIVE 0  M5_FILTER_SILENT_FALSE_NEGATIVE 0
-  M5_FILTER_BLOCK_READS_WITHOUT 2000  M5_FILTER_BLOCK_READS_WITH 18  M5_FILTER_BLOCK_READ_RATIO 111.111111
-  M5_FILTER_BLOCKS_SKIPPED 1982  M5_FILTER_DAMAGE_CASES 2471  M5_FILTER_DAMAGE_FILTER_DEGRADED 85
-  M5_FILTER_FPR_PPM 8310  LSM_SSTABLE_FORBIDDEN 0  [FILTER_OK]  [FILTER_DAMAGE_OK]
-M5_BATCH_TESTS_RAN 8  M5_BATCH_TESTS_FAILED 0  M5_BATCH_WRITEBATCH_RAN 3  M5_BATCH_ROUNDTRIP_ENTRIES 9004
-  M5_BATCH_PARTIAL_VISIBLE 0  M5_BATCH_HALF_VISIBLE 0  M5_BATCH_CRASH_HALF_VISIBLE 0  M5_BATCH_CRASH_CASES 8
-  M5_BATCH_LOST_WAKEUPS 0  M5_BATCH_GROUP_FSYNCS 1  M5_BATCH_CONCURRENT_WRITERS 32  M5_BATCH_TRUNCATE_CASES 8
-  M5_BATCH_RECOVERY_RECORDS 3  M5_BATCH_RECOVERY_ENTRIES 10  M5_BATCH_ONE_RECORD_PER_BATCH 1
-  M5_BATCH_SEQ_CONTIGUOUS 1  M5_BATCH_LAST_SEQ_COVERS 1  LSM_BATCH_FORBIDDEN 0  [BATCH_OK]
-BATCH_KILL9_ROUNDS 100 ROUNDS_OK 100 BATCH_ACKED 1086 BATCHES_SEEN 1139 BATCH_KILL9_MISSING 0
-  BATCH_MISMATCH 0 BATCH_HALF_VISIBLE 0
+M5_TESTS_RAN 32  M5_TESTS_FAILED 0  M5_FILTER_RAN 12  M5_FILTER_FALSE_NEGATIVE 0  M5_FILTER_SILENT_FALSE_NEGATIVE 0  M5_FILTER_BLOCK_READS_WITHOUT 2000  M5_FILTER_BLOCK_READS_WITH 18  M5_FILTER_BLOCK_READ_RATIO 111.111111  M5_FILTER_BLOCKS_SKIPPED 1982  M5_FILTER_DAMAGE_CASES 2471  M5_FILTER_DAMAGE_FILTER_DEGRADED 85  M5_FILTER_FPR_PPM 8310  LSM_SSTABLE_FORBIDDEN 0  [FILTER_OK]  [FILTER_DAMAGE_OK]
+M5_BATCH_TESTS_RAN 8  M5_BATCH_TESTS_FAILED 0  M5_BATCH_WRITEBATCH_RAN 3  M5_BATCH_ROUNDTRIP_ENTRIES 9004  M5_BATCH_PARTIAL_VISIBLE 0  M5_BATCH_HALF_VISIBLE 0  M5_BATCH_CRASH_HALF_VISIBLE 0  M5_BATCH_CRASH_CASES 8  M5_BATCH_LOST_WAKEUPS 0  M5_BATCH_GROUP_FSYNCS 1  M5_BATCH_CONCURRENT_WRITERS 32  M5_BATCH_TRUNCATE_CASES 8  M5_BATCH_RECOVERY_RECORDS 3  M5_BATCH_RECOVERY_ENTRIES 10  M5_BATCH_ONE_RECORD_PER_BATCH 1  M5_BATCH_SEQ_CONTIGUOUS 1  M5_BATCH_LAST_SEQ_COVERS 1  LSM_BATCH_FORBIDDEN 0  [BATCH_OK]
+BATCH_KILL9_ROUNDS 100 ROUNDS_OK 100 BATCH_ACKED 1018 BATCHES_SEEN 1066 BATCH_KILL9_MISSING 0 BATCH_MISMATCH 0 BATCH_HALF_VISIBLE 0
 [BATCH_CRASH_OK] rounds=100 batch_size=16 sync=1 missing=0 mismatch=0 half=0
+```
+
+**M5.3 三条腿各自的标记行（逐字摘自同一次 `gate.log`）**：
+
+```
+# M5-C（脚本 scripts/bench_lsm.sh；--dataset 20000 --repeats 2 --warmup 1000
+#       --write-buffer-size 16777216 --ampl-write-buffer-size 262144 --filter on）
+BENCH_CELLS_TOTAL 12
+BENCH_CELL_ROWS_TOTAL 12
+BENCH_LSM_CELLS_TOTAL 4
+BENCH_MISSING_TOTAL 0
+BENCH_MISMATCH_TOTAL 0
+BENCH_UNRELIABLE_CELLS 0
+BENCH_REPRO_OK 1
+BENCH_REPRO_LSM_CELLS 4
+BENCH_AMPL_OK 1
+BENCH_AMPL_MISSING 0
+BENCH_AMPL_MISMATCH 0
+BENCH_SPACE_SST_BYTES 491409
+BENCH_SPACE_FILTER_BYTES 25113
+BENCH_SPACE_SST_DATA_BYTES 466296
+[BENCH_LSM_OK]
+
+# M5-D（scripts/bench_lsm_selftest.sh）
+BENCH_INJECT_MISSING_RC 1
+[BENCH_SELFTEST_OK]
+
+# M5-E（scripts/lsm_filter_damage_test.sh --cases 2000）
+FILTER_DAMAGE_CASES 2000
+FILTER_SILENT_FALSE_NEGATIVE 0
+FILTER_SILENT_WRONG_VALUE 0
+FILTER_DAMAGE_DETECTED 1923
+FILTER_DAMAGE_FILTER_DEGRADED 77
+FILTER_MISALIGN_INJECTED 1
+FILTER_MISALIGN_DETECTED 1
+FILTER_MISALIGN_SILENT_FN 0
+[FILTER_DAMAGE_OK]
 ```
 
 **L18 探针（`I17`/`L7` 持锁零 IO）**：`./build/bin/lsm_tests --gtest_filter='Flush.NoIoWhileHoldingDbMutex'`
@@ -197,10 +267,48 @@ BATCH_KILL9_ROUNDS 100 ROUNDS_OK 100 BATCH_ACKED 1086 BATCHES_SEEN 1139 BATCH_KI
 **M2 高危区回归**：`TOTAL_ROUNDS 100 ROUNDS_OK 100 … MISSING_TOTAL 0 MISMATCH_TOTAL 0`（组提交语义未回退）；
 `M5_BATCH_GROUP_FSYNCS 1`（32 并发批仍只 1 次 fsync，D3 的组批上限未被批路径破坏）。
 
-**既有 18 条腿一行未动**：`git diff scripts/lsm_gate.sh` 的删除行只有 2 行，且都不是腿的定义
-（1 行是启动横幅 `== lsm_gate: rounds=… ==`，1 行是 `[PARTIAL]` 的提示文案）；`grep -c '^run_gate'`
-从 21（3 定义 + 18 腿）变成 25（4 定义 + 21 腿 = 18 既有 + 3 条 M5 腿）。
-新增的 3 条腿：M5-B11（M5.1）、M5-B12（M5.2 单元）、M5-B01（M5.2 崩溃）。
+**腿数与"不删不弱化"**：`grep -c '^run_gate' scripts/lsm_gate.sh` = **28**（4 个定义 + 24 条腿）。
+24 条腿 = **21 条既有**（18 条 M2/M3/M4 + M5.1 的 M5-B11 + M5.2 的 M5-B12/M5-B01）+ **3 条 M5.3**
+（M5-C/M5-D/M5-E）。既有腿的标记/脚本一行未删；新增腿全部走 `run_gate_m5_marked`
+（多标记 AND、缺脚本 `SKIP`+`[PARTIAL]`、`--require-m5` 时 `SKIP` 即 `FAIL`）。
+
+### 3.3 M5-B07：`--with-tsan` 完整门禁（**已跑，26/26 PASS**）
+
+```
+$ bash scripts/lsm_gate.sh --rounds 100 --with-tsan --require-m3 --require-m5
+==== lsm_gate 汇总 ====
+PASS  干净重建 + 0 warning + 全量用例
+PASS  ASan 全量
+PASS  TSan 全量（setarch 关 ASLR）
+PASS  崩溃对账（kill -9 x 100，sync 模式）
+PASS  逐字节截断扫描（B03）
+PASS  中间损坏拒绝启动（B04）
+PASS  M3-B01 flush 崩溃对账（kill -9 x 100）
+PASS  M3-B03 落盘重启（records_replayed == 0）
+PASS  M3-B04 SSTable 损坏扫描（零静默错值）
+PASS  M3-B05 句柄计数不增长
+PASS  M4-B11 MANIFEST/VersionEdit A 组 + 零依赖
+PASS  M4-B03 两种 pick 策略对照
+PASS  M4-B05 句柄上限（fd 不增长）
+PASS  M4-B06 读放大改善（p50<=3 max<=12）
+PASS  M4-B07 前台 P99 与单轮 P50 量级分离
+PASS  M4-B08 存活 Version 数有界（计数存在）
+PASS  M4-B09 MANIFEST 体积/重建计数
+PASS  M4-B10 块缓存 NOT_APPLICABLE
+PASS  M4-B01 compaction 中途 kill -9 对账
+PASS  M4-B02 四注入点 raise(SIGKILL) 对账
+PASS  M5-B11 filter 单元 + 块读下降 + 零假阴性 + 依赖纪律
+PASS  M5-B12 WriteBatch 单元 + 整批原子 + WAL 一次写 + 依赖纪律
+PASS  M5-B01 批崩溃对账（kill -9 批写入中途）
+PASS  M5-C 基准（四类负载 × 三类对照 + AMPL/LEVEL/FRONT 追加列，硬门禁只在 LSM 腿）
+PASS  M5-D 基准失败注入自测（missing!=0 ⇒ rc=1）
+PASS  M5-E filter 磁盘损坏扫描（零静默假阴性）
+[OK] 全部门禁通过
+GATE_RC=0
+```
+
+⇒ 26 条腿全部 PASS、末行 `[OK]`（无 `[PARTIAL]`、无 SKIP）：**ASan 全量与 TSan 全量都在门禁内
+真跑并通过**。TSan 的 A10 一条走缩规模等价输入（D-14），这是该门禁能跑完的唯一偏离，已在 §3.1/§7 登记。
 
 ---
 
@@ -250,51 +358,78 @@ BATCH_KILL9_ROUNDS 100 ROUNDS_OK 100 BATCH_ACKED 1086 BATCHES_SEEN 1139 BATCH_KI
 | D-5 | §5.1 的 `Validate` 只是"Validate 之类的方式" | 落地为 `Status Validate(uint32_t*, size_t*, uint64_t*) const`（同时给出 `entry_bytes` / `user_bytes` 统计） | 让「预校验」与「提交时的统计口径」共用同一次解析，避免两处漂移（§5.4 第 1 步 + M4.3 的统计口径） |
 | D-6 | §5.3 逐字写 `entry_bytes_ += Σ p->user_bytes + 16*total_count` | 落地为 `p->user_bytes + 16ull * p->entry_count` 后求和 | 与设计等价（`Σ16*count` 可分配）；单条写代入后与 M4.3 的落地公式 `key+value+16` **逐字相同** ⇒ 既有 `AMPL` 数字不变 |
 | D-7 | §13.3 把批大小上限的位置写成 `src/db_impl.cpp:160`（单条写的既有校验处） | 上限校验落在 `WriteBatch::Validate`（`src/write_batch.cpp`），由 `DB::Write` 在入队前调用 | `docs/protocol.md` §13 保持设计给的 patch 文本**逐字**（协议描述的是契约："在编码/入队之前校验"，落地为真）；实现位置登记在此。单一真相源 ⇒ 内存模式与持久模式口径一致 |
-| D-8 | §11 M5.1「必改」把「fix `data_blocks_read` 从不递增」列为本阶段工作 | 前一执行者在 `Table::ReadBlockImpl` 里为 `expected == kBlockTypeData` 递增 `data_blocks_read` | 只影响诊断计数，不改任何读结果/校验语义；M4 的 `docs/amplification.md` 里 `read_data_blocks_read=0` 是修复前的原始证据。**这是既有列语义的一处修正**，需用户知悉 |
+| D-8 | §11 M5.1「必改」把「fix `data_blocks_read` 从不递增」列为本阶段工作 | M5.1 在 `Table::ReadBlockImpl` 里为 `expected == kBlockTypeData` 递增 `data_blocks_read`；M5.3 登记于 `docs/amplification.md` **§6** | **用户已裁决批准**：这是对既有诊断列语义的修正，**只影响计数、不影响任何读结果/校验语义**（不改 CRC/长度/type、不改 `blocks_read` 口径）。M4 的 `read_data_blocks_read=0` 原文保留在 `amplification.md` §2；M5.3 的 `>=3x` 判据定义在该列上（M5-A10），因此必须先修好该列 |
 | D-9 | §3.6 的 `ReadStats` 追加 7 列 | 落地追加 **8** 列（多 `filter_corrupt`） | M5-A08 要求「计数 `filter_corrupt`」而 7 列里没有该名字；只追加、不改既有 8 列 |
 | D-10 | §5.3「`front_samples_us_`：一次 `DB::Write` 调用一个样本」 | **未改**：仍是「一个**组**一个样本」（M4.3 的落地形态） | 该项影响的是 M5.3 的数据表口径（`FRONT` 行的含义），M5.1/M5.2 不改以免动既有 `AMPL`/`FRONT` 断言；**留给 M5.3 处理并登记** |
+| D-11 | §6.3 的固定 CELL 行含 `repeat=<i>` | 落地为每格**一行**、`repeat=<R>`（R = 重复次数），同一行追加 `raw1_us/raw2_us/raw3_us` | 理由：`--expected-min-cells` 与 §6.6 的数据表都以"格"为单位；逐 repeat 成行会让 `BENCH_CELLS_TOTAL` 与格数脱钩。原始值仍逐次打印（§6.4 的复现性核对不受影响）。已登记于 `docs/m5-bench.md` §8 |
+| D-12 | §6.1/§6.3 的 `--batch K` 作用范围未写清 | **读负载不按 batch 折算**：一个 Get = 一个 op；只有写负载按 batch 成组 | 首版驱动误把读也按 batch 折算 ⇒ batch=16/256 的读吞吐被放大 16/256 倍（自检发现）；修正后用 batch 1/16/256 复测，读吞吐 1787~1933 ops/s 与 batch 无关。登记于 `docs/m5-bench.md` §6/N4 |
+| D-13 | §7.3 的「同一格中位数差异超阈 ⇒ `BENCH_REPRO_OK 0`」未限定 engine | 复现性判据**只对 `engine=lsm`** 生效（并新增 `BENCH_REPRO_LSM_CELLS` 正向计数）；非 LSM 格仍逐行打印 `repro_ok` | 依据 M5-C6「硬门禁只施加在 LSM 腿」与原 §7.3「raw/map 不影响退出码」；`--filter off` 那轮唯一的 `repro_ok=0` 格是 `seq_write/raw_file`（非 LSM）。已登记于 `docs/m5-bench.md` §3/N3/N9 |
+| D-14 | §10.2 M5-B06/§11 M5.3「ASan/TSan 干净」；`Filter.BlockReadReductionAtLeastThreeTimes` 全尺寸在 TSan 下未闭合 | TSan 下用**缩小规模的等价输入**（`#if defined(__SANITIZE_THREAD__)`：1500 key/300 查询；Release/ASan 仍 20000/2000），断言与判据**不降**（`without>=3`、`ratio>=3.0`、`skipped>0`、口径自洽、误判率<10%） | 全尺寸在 TSan 下实测 >25 分钟未结束（非死锁、CPU 100%）；用户裁决二选一，取**①缩小规模等价覆盖 + 明说全尺寸不做**。见 §7 第 6 条与 §3.1 的实测数字 |
+| D-15 | §6.6 要求 `space_filter_bytes` 与 CELL 格同源；§7.5 的 M5-C 腿只给一个 `bench_lsm.sh` | ① `lsm_ampl_probe` 追加 `--bloom-bits`（子轮与 `--filter` 一致）；② `bench_lsm.sh` 追加 `--ampl-write-buffer-size`，M5-C 门禁腿 CELL 用 16 MiB（稳定命中 MemTable）、AMPL 子轮用 256 KiB（强制产生 SST） | 首版 AMPL 子轮恒用 `bloom_bits=10` ⇒ `--filter off` 的 `space_filter_bytes` 仍是 109401（口径不一致）；首版门禁腿 20000-key/256 KiB 的读计时窗口横跨 MemTable→SST 切换 ⇒ 复现性误报。两处都已修并加硬校验（off ⇒ `space_filter_bytes==0`）。登记于 `docs/m5-bench.md` §4/N6/N9 |
+| D-16 | §5.3「一次 `DB::Write` 调用一个样本」（D-10 留给 M5.3） | **M5.3 仍不改** `front_samples_us_` 的采样粒度；在 `docs/m5-bench.md` §4 披露 `FRONT` 的 Put 侧是**下界近似** | 改采样粒度会动 M4.3 既有 `FRONT` 断言与 `AMPL` 行口径，收益只是让数字更"准"；M5.3 的判据不建立在 Put 侧 FRONT 上（四类负载的写延迟由 CELL 行给出）。口径披露见 `docs/amplification.md` §5 与 `docs/m5-bench.md` |
 
 ---
 
 ## §7 未做 / 未验证清单（诚实登记）
 
-1. **未提交任何 git 变更**（按派工书纪律：提交由用户执行；本阶段只做只读 git 查询）。
-2. **未跑 M5.3 的任何内容**：`bench/bench_lsm.cpp`、`scripts/bench_lsm.sh`、`bench_lsm_selftest.sh`、
-   `lsm_filter_damage_test.sh`、`docs/m5-bench.md`、`AMPL` 行尾追加 `space_filter_bytes` —— 全部属 M5.3。
-3. **`Options::bloom_bits` 的"关闭对照"只做到单元/块读计数层**（`M5-A10` 的 2000 vs 18 数据块读），
-   **没有**做 M5.3 的吞吐/延迟对照；因此**不主张**任何"提升 N 倍"的性能结论（`M5:199`）。
-4. **假阳性率只测了三种分布**（随机、`even_keys` 结构化、`bucket` 型）；
-   `M5-A02` 打印的 `M5_FILTER_FPR_STRUCTURED_PPM` / `..._BUCKET_PPM` 是**负结果**性质的对照，
-   **未**在全量工作负载上标定 zipf/热点分布（M5.3 的四类负载里也没有 zipf）。
+1. **git 状态**：M5.1/M5.2 已由用户在 `99c417f` 提交（tag 仍只有 m1~m4）；**M5.3 的全部改动未提交**
+   （清单见 §8），提交与打 tag 由用户执行。本阶段只做只读 git 查询。
+2. **M5-B05 复现性的口径收窄与一次真实失败**：`--filter off` 的 100k 轮在**修正前**脚本下
+   `rc=1`（`BENCH_REPRO_OK 0`），唯一超阈的格是**非 LSM** 的 `seq_write/raw_file`（三轮中位数差 >25%）；
+   4 个 LSM 格 `repro_ok=1`、`missing/mismatch=0`。M5.3 按 M5-C6 把复现性判据收窄到 `engine=lsm`
+   （D-13），并在修正后的门禁腿上**连跑 3 次**：3/3 `rc=0`、`BENCH_REPRO_OK 1`、`BENCH_REPRO_LSM_CELLS 4`。
+   **不主张**「100k off 轮在旧脚本下也全绿」——旧结果原文保留在 `docs/m5-bench.md` §3/N3。
+3. **`Options::bloom_bits` 的"关闭对照"结论范围**：块读计数层有同轮对照（`M5-A10`：2000 vs 18，111×）；
+   CELL 层的吞吐对照显示**已存在 key 的点查没有 filter 收益**（`docs/m5-bench.md` N1，rand_read 1782 vs 1706）。
+   **不主张**任何"提升 N 倍"的性能结论；`>=3x` 只限"不存在 key 的数据块读次数"。
+4. **假阳性率只测了三种分布**（随机、`even_keys` 结构化、`bucket` 型）；`M5-A02` 的
+   `M5_FILTER_FPR_STRUCTURED_PPM`/`..._BUCKET_PPM` 是负结果性质的对照，**未**标定 zipf/热点分布
+   （四类负载里也没有 zipf）。
 5. **`kill -9` 系列只证明进程级一致性**：M5-B01 的 `BATCH_KILL9_MISSING 0` 不构成掉电安全证据
    （kill -9 不丢 page cache）；掉电语义由 `Batch.AtomicVisibilityUnderAppendAndSyncFailure` 的
-   `MemEnv` 撕裂模型承担（8 个固定种子）。两者的结论**分开写**，未混用。
-6. **TSan 只跑了 M5 的并发面**，且**未**跑 `--with-tsan` 全量门禁（M5-B07 的形状）：
-   - 已跑并通过：`Filter.MultiThreadedGetNoRace`（A18）+ `WriteBatch.*` + `Batch.*`（含 A14 的 32 线程并发组提交）
-     ⇒ **9/9 PASS，0 条 `WARNING: ThreadSanitizer`**（24.1 s）。
-   - **未跑完**：`Filter.BlockReadReductionAtLeastThreeTimes`（单线程、20000 key × 2 库 + 4000 次点查）。
-     实测在 TSan 下 **17 分钟未结束**（`ps` 采样：`%CPU 101`、10 s 内 `utime+stime` 增长 1007 ticks ⇒ 在跑不是死锁），
-     逐层重跑的成本不允许。该条在 **Release**（`M5_FILTER_BLOCK_READS_WITHOUT 2000` / `WITH 18`）与
-     **ASan**（`20/20 PASS`，其中含本条）下都已通过。
-   - 因此 **不主张**「M5.1 全量 TSan 干净」，只主张「M5 的并发面 TSan 干净」。这是**本阶段最大的未闭合项**，
-     建议由用户决定是否在 `--with-tsan` 全量门禁里单独跑一次（预计 ≥ 20 分钟/条）。
-7. **`M5-A12` 的"fsync 失败 ⇒ 崩溃重开后不可见"没有断言**：这是刻意的——Append 已把字节交给文件
+   `MemEnv` 撕裂模型承担（8 个固定种子）。两者结论**分开写**，未混用。
+6. **TSan 未闭合项的明确结论（用户裁决 ②→取 ①）**：
+   - **取 ①「缩小规模但判据不降的等价覆盖」**：`Filter.BlockReadReductionAtLeastThreeTimes` 在
+     TSan 下用 `#if defined(__SANITIZE_THREAD__)` 的 1500 key / 300 查询输入，**断言原样保留**
+     （`without>=3`、`without/max(1,with)>=3.0`、`skipped>0`、`with==positive+unavailable`、
+     `positive<queries/10`）；Release/ASan 仍是 20000/2000。D-14。
+   - **已跑并通过（本轮实测，见 §3.1）**：TSan 并发面
+     `Filter.MultiThreadedGetNoRace` + `WriteBatch.*` + `Batch.*` = 9/9 PASS、0 条
+     `WARNING: ThreadSanitizer`（32.27 s）；TSan 下的缩规模 `BlockReadReduction` =
+     `WITHOUT 300`/`WITH 3`/`RATIO 100.0`/`SKIPPED 297`/`FN 0`、PASS（16.69 s）。
+   - **TSan 全量 205 条已跑并通过**：`[ PASSED ] 205 tests`（949.24 s，`FULL_RC=0`），
+     `grep -c "WARNING: ThreadSanitizer" = 0` ⇒ 本轮**主张**「TSan 全量干净」，
+     **限定**：其中 A10 一条是缩规模等价输入（见上）。
+   - **全尺寸 A10 在 TSan 下不做**：实测 20000 key × 2 库 + 4000 点查在 TSan 下单条 **>25 分钟未结束**
+     （`ps` 采样 `%CPU 101`、`utime+stime` 持续增长 ⇒ 在跑不是死锁）；**全尺寸由 Release
+     （2000/18/111.1）与 ASan 全尺寸覆盖**。
+   - **`--with-tsan` 全量门禁（M5-B07）已跑并通过**：`lsm_gate.sh --rounds 100 --with-tsan
+     --require-m3 --require-m5` ⇒ **26/26 PASS + `[OK]`**（含 `ASan 全量`、`TSan 全量` 两条腿），
+     见 §3.3。唯一限定：TSan 里的 A10 一条是缩规模等价输入（上一条）。
+7. **ASan 的范围**：见 §3.1 的实测行（本轮）。
+8. **`M5-A12` 的"fsync 失败 ⇒ 崩溃重开后不可见"没有断言**：这是刻意的——Append 已把字节交给文件
    （page cache），后续**成功的** fsync 或 Close 会把它变 durable，因此"崩溃重开后一定不可见"是**错的**
    断言。落地只断言「Write 返回错误 + 同一进程内整批不可见」（I51 的真实含义），并把"Append 失败"的
    强断言（字节根本没写进去）单独放在 ①。**登记为口径收窄，供评审裁决**。
-8. **未新增 `FakeClock`**（E6 允许不新增）；M5 的 A 组全部用 `MemEnv` 的假时钟与 `CommitHook` 屏障，
+9. **未新增 `FakeClock`**（E6 允许不新增）；M5 的 A 组全部用 `MemEnv` 的假时钟与 `CommitHook` 屏障，
    确定性用例零 `sleep`、零重试。
-9. **`M5-A14` 的"sync=false 分支"未单独成例**：并发批用例只跑 `sync=true`（I54 的判据所在）；
-   `sync=false` 的整批可见性由 `Batch.AtomicVisibilityUnderAppendAndSyncFailure` 的容量/掉电分支覆盖。
-   **登记为与 §10.1 表格的差异**（表格写"`sync=true` 与 `false` 两种"）。
-10. **`docs/m5-prerequisites.md` 未改动**（保留前一执行者的原文），只在 §0 上表里做了复核与一处行号收窄说明。
-11. **本文件本身未提交**；上一阶段的 `docs/m5-prerequisites.md` 也仍**未提交**。
+10. **`M5-A14` 的"sync=false 分支"未单独成例**：并发批用例只跑 `sync=true`（I54 的判据所在）；
+    `sync=false` 的整批可见性由 `Batch.AtomicVisibilityUnderAppendAndSyncFailure` 的容量/掉电分支覆盖。
+    **登记为与 §10.1 表格的差异**（表格写"`sync=true` 与 `false` 两种"）。
+11. **绝对时间的负载复核已完成**：fsync（idle 500 次，load1=1.32）median 8.084 ms 与同轮 7.733/7.943 ms
+    一致；`FRONT` on/off 的 p50 46/48→48/47 us。CELL 的绝对吞吐仍来自 load1≈2.96 的那一轮，已在
+    `docs/m5-bench.md` §1 标注**不与空闲机器/外部系统比较**；相对量不受影响。
+12. **`docs/m5-prerequisites.md` 未改动**（保留前一执行者的原文），只在 §0 上表里做了复核与一处行号收窄说明。
+13. **未做**：mmap / 压缩 / 块缓存（M4-B10 已登记 NOT_APPLICABLE）；zipf/热点分布标定；K≥1024 或接近
+    `kMaxGroupBytes=1 MiB` 的 batch 边界；`--pipeline>1` 在四类负载上的对照（驱动支持，但本轮文档轮的
+    `pipeline=1`）；compaction 发生轮的稳态写放大/长尾（本轮 `compaction_rounds=0`，见 m5-bench N7）。
 
 ---
 
-## §8 改动文件清单（按段拆分，供用户尝试分成两个提交）
+## §8 改动文件清单
 
-`main` HEAD = `fa7c328`；以下全部为**未提交**的工作树改动。
+`main` HEAD = **`99c417f`**。§8.1/§8.2/§8.3 是 **M5.1/M5.2 的历史清单**（已随 `99c417f` 提交，
+按当时的 `fa7c328` 基线列出，保留作溯源）；**§8.4 是 M5.3 的未提交清单**。
 
 ### 8.1 只属 M5.1（Bloom filter）
 
@@ -345,3 +480,26 @@ BATCH_KILL9_ROUNDS 100 ROUNDS_OK 100 BATCH_ACKED 1086 BATCHES_SEEN 1139 BATCH_KI
 > 无法用文件粒度拆开；若用户要两提交，建议：**提交 1 = M5.1 全部 + 8.3 的 M5.1 部分**，
 > **提交 2 = M5.2 全部**，其中 `db_impl.{h,cpp}` 的两处改动需按上表手工分离（M5.1 的部分只有
 > `DbReadStats` 的 8 列与 `MergeReadStats` 的 8 行累加，其余都属 M5.2）。
+
+### 8.4 只属 M5.3（微基准 + 收口；**未提交**）
+
+| 文件 | 变更 |
+|---|---|
+| `bench/bench_lsm.cpp` | 新增：四类负载 × 三类对照的驱动（只 include `common.h`/`db.h`/`write_batch.h`，只走公共 DB 接口；固定 CELL 行） |
+| `scripts/bench_lsm.sh` | 新增：头行/参数/交替调用/CELL 解析/**只对 LSM 的** missing/mismatch 门禁/收尾标记；`--ampl-*` 与 `lsm_level_stats` 子轮（D-15） |
+| `scripts/lsm_level_stats.cpp` | 新增：逐文件 `Table::filter_bytes()` 求和，把 `space_filter_bytes`/`space_sst_data_bytes` 追加到 `AMPL` 行尾 |
+| `scripts/bench_lsm_selftest.sh` | 新增：失败注入自测（`--inject-missing` ⇒ rc=1 + `[BENCH_SELFTEST_OK]`） |
+| `scripts/lsm_filter_damage.cpp` | 新增：真实磁盘 filter 损坏扫描（逐字节翻转 + 重算 CRC 的错位注入） |
+| `scripts/lsm_filter_damage_test.sh` | 新增：M5-E 腿的包装与标记校验 |
+| `src/db_impl.{h,cpp}` | `AmplificationStats` 追加 5 个 filter 读计数；`FormatAmplLine` 行尾**只追加** `read_filter_*` 四列 + `read_data_blocks_skipped_by_filter` |
+| `tests/filter_test.cpp` | M5-A10 追加 TSan 缩规模等价输入（D-14；Release/ASan 不变） |
+| `scripts/lsm_ampl_probe.cpp` | 追加 `--bloom-bits`（AMPL 子轮与 `--filter` 一致，D-15） |
+| `scripts/lsm_gate.sh` | M5-C/M5-D/M5-E 三条腿（`run_gate_m5_marked`，脚本打印收尾汇总标记行）+ M5-C 的 16 MiB/256 KiB 参数（D-15） |
+| `CMakeLists.txt` | 新目标 `bench_lsm` / `lsm_level_stats` / `lsm_filter_damage` |
+| `.gitignore` | `bench/tmp/`、`bench/*.out`、`bench/*.txt`、`bench_lsm_*.txt` |
+| `docs/m5-bench.md` | 新增：M5.3 数据表 + fsync 基线 + 四类负载 × 三类对照 + filter 代价 + LSM 劣势 + 负结果 N1~N9 |
+| `docs/m5-evidence.md` | 本文件：收口（§2.3 / §3 / §6 D-8..D-16 / §7 / §8.4） |
+| `docs/amplification.md` | **追加 §6**：`data_blocks_read` 语义修正的登记（只影响计数，不影响读结果） |
+
+> M5.3 未新增/未修改 M1~M4 的**既有测试断言**、未改 `docs/m5-design.md`/`docs/m4-design.md`/`docs/m3-*.md`；
+> `docs/protocol.md` 在 M5.3 未改动（§12/§13 是 M5.1/M5.2 追加）。
