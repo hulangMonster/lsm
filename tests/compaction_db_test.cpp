@@ -1172,4 +1172,45 @@ TEST(Merge, MixedMemTablesAndFileTombstoneVisibility) {
   }
 }
 
+// ===== A20 最小确定性 RED：child 的 key() 视图会被它自己的 Next() 覆盖 =====
+// 真实对应：TableIterator 跨块时旧块缓冲被替换 ⇒ DBIter 传给 skip 循环的 user_key 视图失效。
+class VolatileKeyIterator : public Iterator {
+ public:
+  bool Valid() const override { return valid_; }
+  void SeekToFirst() override {
+    key_.assign(BuildInternalKey("m", 20, kTypeDeletion));   // 墓碑：m@20
+    valid_ = true;
+  }
+  void SeekToLast() override { SeekToFirst(); }
+  void Seek(const Slice&) override { SeekToFirst(); }
+  void Next() override {
+    key_.assign(BuildInternalKey("z", 1, kTypeValue));        // 覆盖同一缓冲 + 变为 Invalid
+    valid_ = false;
+  }
+  void Prev() override { valid_ = false; }
+  Slice key() const override { return Slice(key_); }
+  Slice value() const override { return Slice(key_); }
+  Status status() const override { return Status::OK(); }
+
+ private:
+  std::string key_;
+  bool valid_ = false;
+};
+
+TEST(Merge, SkipAcrossChildrenWithVolatileChildKeyView) {
+  const InternalKeyComparator icmp(BytewiseComparator());
+  MemTable mem(icmp, 1u << 20);
+  ASSERT_TRUE(mem.Add(10, kTypeValue, "m", "old-value").ok());
+  std::vector<Iterator*> kids;
+  kids.push_back(new VolatileKeyIterator());     // m@20 tombstone（key 视图会被 Next() 覆盖）
+  kids.push_back(mem.NewIterator());             // m@10 value（跨 child）
+  Iterator** arr = new Iterator*[kids.size()];
+  for (size_t i = 0; i < kids.size(); ++i) arr[i] = kids[i];
+  MergingIterator* merged = new MergingIterator(&icmp, arr, static_cast<int>(kids.size()));
+  std::unique_ptr<Iterator> it(new DBIter(&icmp, merged, 100, {}));
+  it->SeekToFirst();
+  EXPECT_FALSE(it->Valid()) << "RED：跨 child 的整段跳过必须消费 m@10，不得 emit";
+  EXPECT_TRUE(it->status().ok());
+}
+
 }  // namespace lsm

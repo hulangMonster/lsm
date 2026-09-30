@@ -114,7 +114,12 @@ void DBIter::ScanForwardToVisible() {
       return;
     }
     // 可见 tombstone 屏蔽该 user key 的所有更旧版本。
-    SkipCurrentRunForwardWithKey(user_key);
+    // 【I7 修复】user_key 是指向 internal_->key() 缓冲区的 Slice；SkipCurrentRunForwardWithKey 内部会反复
+    // 调用 internal_->Next()，缓冲区随即被复用 ⇒ 传进去的 Slice 会悬垂，比较结果随机变成"不同 user key"
+    // ⇒ 循环提前 break ⇒ 同一 user key 在其它 child 里的更旧版本逃过跳过，被外层当成可见值 emit
+    // （表现为"全量扫描复活已删除的旧值"，而 Get/Seek 正确）。这里必须先复制成拥有型字符串。
+    const std::string run_key(user_key.data(), user_key.size());
+    SkipCurrentRunForwardWithKey(Slice(run_key));
   }
   state_ = kPastEnd;
 }
