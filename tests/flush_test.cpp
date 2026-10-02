@@ -348,6 +348,27 @@ class BlockingFlushHook : public FlushHook {
   std::atomic<bool> released_{false};
 };
 
+// 只用于首次 flush 的确定性卡点：SST 已 rename/fsync，但版本 edit 尚未提交。
+class BlockBeforeRegisterHook : public FlushHook {
+ public:
+  void OnBeforeRegister() override {
+    entered_.store(true, std::memory_order_release);
+    while (!released_.load(std::memory_order_acquire)) std::this_thread::yield();
+  }
+  bool WaitUntilEntered() {
+    for (int i = 0; i < 400000; ++i) {
+      if (entered_.load(std::memory_order_acquire)) return true;
+      std::this_thread::yield();
+    }
+    return false;
+  }
+  void Release() { released_.store(true, std::memory_order_release); }
+
+ private:
+  std::atomic<bool> entered_{false};
+  std::atomic<bool> released_{false};
+};
+
 }  // namespace
 
 // ==== M3-A20 ====
@@ -833,6 +854,65 @@ TEST(Read, NewestWinsAcrossThreeFiles) {
       << "范围内未命中必须逐个检查过三个文件";
   EXPECT_TRUE(db->Close().ok());
   delete db;
+}
+
+// ==== 首次 flush 的 Close 窗口：SST 已落盘但 MANIFEST edit 未提交 ====
+// 目的：不依赖时序猜测，精确卡住「首个 *.sst 已落盘、活动元数据尚未提交」的窗口，然后 Close。
+// 当前实现会放弃在途 immutable，留下「有 SST、无 CURRENT/MANIFEST」的目录；本用例要求重开
+// 时能依据完整 WAL（sequence 从 1 连续覆盖到孤儿 SST 的 max_sequence）安全重建，而不是
+// 直接返回 Corruption。
+TEST(Flush, FirstFlushCloseWindowRecoversFromCompleteWal) {
+  MemEnv env;
+  Options options;
+  options.env = &env;
+  options.write_buffer_size = 8 * 1024;
+  options.level0_file_num_compaction_trigger = 1000;   // 本用例只关心首次 flush，不做 compaction
+
+  BlockBeforeRegisterHook hook;
+  options.flush_hook = &hook;
+
+  DB* db = nullptr;
+  ASSERT_TRUE(DB::Open(options, "/db", &db).ok());
+  PersistentDBImpl* impl = static_cast<PersistentDBImpl*>(db);
+
+  // 16 KiB value > 8 KiB write_buffer，保证第二次 Put 必然冻结首个 memtable 并触发首次 flush。
+  const std::string value(16 * 1024, 'x');
+  int written = 0;
+  for (int i = 0; i < 20 && impl->immutables_size() == 0; ++i) {
+    const Status s = db->Put(WriteOptions(), Key(i), value);
+    ASSERT_TRUE(s.ok()) << s.ToString();
+    ++written;
+  }
+  ASSERT_GE(impl->immutables_size(), 1u) << "未造出首个 immutable，写入次数=" << written;
+  ASSERT_TRUE(hook.WaitUntilEntered()) << "首次 flush 未到达 OnBeforeRegister";
+
+  std::atomic<int> close_code{-1};
+  std::thread closer([&] {
+    close_code.store(static_cast<int>(db->Close().code()), std::memory_order_release);
+  });
+  for (int spin = 0; spin < 4000000 && !impl->closed_for_test(); ++spin) {
+    std::this_thread::yield();
+  }
+  ASSERT_TRUE(impl->closed_for_test()) << "Close 必须先置 closed_，才能确定卡住的是竞态窗口";
+  hook.Release();
+  closer.join();
+  EXPECT_EQ(static_cast<int>(Status::kOk), close_code.load()) << "Close 不得因竞态失败";
+  delete db;
+
+  DB* db2 = nullptr;
+  const Status reopen = DB::Open(options, "/db", &db2);
+  ASSERT_TRUE(reopen.ok()) << "首个 flush 已落 SST 后必须可重开：" << reopen.ToString();
+  PersistentDBImpl* impl2 = static_cast<PersistentDBImpl*>(db2);
+  EXPECT_GE(impl2->GetRecoveryStats().orphan_sst_removed, 1u)
+      << "WAL 完整时未注册的孤儿 SST 必须按安全规则回收并计数";
+  for (int i = 0; i < written; ++i) {
+    std::string got;
+    const Status g = db2->Get(Key(i), &got);
+    ASSERT_TRUE(g.ok()) << "key " << i << "：" << g.ToString();
+    EXPECT_EQ(value, got) << "key " << i;
+  }
+  ASSERT_TRUE(db2->Close().ok());
+  delete db2;
 }
 
 }  // namespace test

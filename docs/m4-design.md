@@ -2646,3 +2646,18 @@ git tag -a m4-compaction -m "M4 分层 Compaction（docs/m4-design.md）" && git
   以避免与 `NOTE` 的既有编号语义混淆。`#1` 若要引用本轮的新发现，用 `A13/A14/A15`。
 
 
+
+### R16 —— `DB::Open` 的 WAL-only 安全重建回退（M6.10.1 修复）
+
+- **原指令**：无；M4 的 §3.6 / `P` §11.6 原文规定“两者都不存在且目录非空 ⇒ `kCorruption`”。
+- **实际**：`VersionSet::RecoverManifest()` 的该分支逐字不变；`DB::Open` 在它返回该错误后新增一个
+  可证明安全的回退：当没有 `CURRENT` / `META` 及其 tmp，且所有 WAL 能从 sequence 1 连续解析并覆盖
+  所有孤儿 SST 的 `max_sequence` 时，按空 Version + WAL 重放打开，并让未引用 SST / MANIFEST 走孤儿清理。
+- **理由**：修复 `flush` 与 `Close` / `kill -9` 竞态在首个 flush 中留下“有 SST、无 CURRENT/MANIFEST”的
+  不可恢复库；同时保留“WAL 不完整 / 不覆盖 SST 时必须拒绝”的安全阀。未采用“DB 创建即写 MANIFEST”或
+  “flush 在 SST 前先写 MANIFEST”的方案，因为会改变既有磁盘可见时序 / `manifest_present` 契约并与
+  M3/M4 的冻结用例冲突。
+- **依据**：M6.10.1 最小复现与门禁；新增确定性用例
+  `Flush.FirstFlushCloseWindowRecoversFromCompleteWal`。
+- **影响面**：`src/db_impl.cpp` 恢复路径；`docs/protocol.md` §11.7（纯追加）；不改变 MANIFEST 记录格式、
+  CURRENT 语义、`I32/I43/L24` 或既有 `kCorruption` 触发条件（仅在其之前增加证明安全的重建）。

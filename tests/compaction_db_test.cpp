@@ -841,9 +841,14 @@ TEST(Merge, InternalKeyOrderContract) {
     ASSERT_TRUE(impl->ForceFlushForTest().ok());
   }
   ASSERT_TRUE(WaitForCompaction(impl, 1));
+  // 后台 compaction 可能在第一轮完成后立刻继续；持住当前 Version 引用，防止第二轮
+  // 安装后回收其文件，避免 Table::Open 打在已 unlink 的路径上。断言前释放，保证
+  // Unref hook 在 DB 仍存活时执行。
+  std::shared_ptr<const Version> version = impl->RefCurrentVersionForTest();
+  ASSERT_TRUE(version != nullptr);
   const InternalKeyComparator icmp(BytewiseComparator());
   for (int level = 0; level < kNumLevels; ++level) {
-    const std::vector<FileMetaData> files = impl->LevelFilesForTest(level);
+    const std::vector<FileMetaData>& files = version->level_files(level);
     std::string prev_largest_user;
     for (const FileMetaData& f : files) {
       std::shared_ptr<Table> t;
@@ -865,6 +870,7 @@ TEST(Merge, InternalKeyOrderContract) {
       }
     }
   }
+  version.reset();
   ASSERT_TRUE(db->Close().ok());
   delete db;
 }

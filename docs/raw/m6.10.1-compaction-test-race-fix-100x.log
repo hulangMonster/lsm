@@ -1,0 +1,1401 @@
+===== RUN 1 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 2 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 3 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 4 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 5 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (10 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 6 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 7 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 8 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 9 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 10 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 11 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 12 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 13 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 14 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 15 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 16 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 17 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 18 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 19 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 20 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (9 ms)
+[----------] 1 test from Merge (9 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (9 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 21 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (9 ms)
+[----------] 1 test from Merge (9 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (9 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 22 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 23 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 24 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 25 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 26 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 27 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 28 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 29 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 30 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 31 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 32 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (10 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 33 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 34 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 35 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 36 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 37 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 38 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 39 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 40 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 41 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 42 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 43 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 44 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 45 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 46 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 47 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 48 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (15 ms)
+[----------] 1 test from Merge (15 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (15 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 49 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 50 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (10 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 51 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 52 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 53 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 54 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 55 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 56 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (14 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 57 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 58 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 59 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (14 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 60 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 61 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (14 ms)
+[----------] 1 test from Merge (14 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 62 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 63 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 64 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 65 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 66 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 67 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 68 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 69 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 70 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 71 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 72 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 73 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 74 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 75 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 76 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (14 ms)
+[----------] 1 test from Merge (14 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 77 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 78 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 79 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (14 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 80 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 81 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 82 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (11 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 83 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 84 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (9 ms)
+[----------] 1 test from Merge (9 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (9 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 85 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 86 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 87 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 88 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 89 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 90 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 91 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 92 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 93 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 94 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (8 ms)
+[----------] 1 test from Merge (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 95 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (10 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (10 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 96 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (12 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 97 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (12 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 98 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (11 ms)
+[----------] 1 test from Merge (11 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (12 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 99 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (9 ms)
+[----------] 1 test from Merge (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (10 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== RUN 100 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Merge.InternalKeyOrderContract
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Merge
+[ RUN      ] Merge.InternalKeyOrderContract
+[       OK ] Merge.InternalKeyOrderContract (13 ms)
+[----------] 1 test from Merge (13 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (13 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+MERGE_SUMMARY runs=100 pass=100 fail=0

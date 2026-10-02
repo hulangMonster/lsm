@@ -1,0 +1,481 @@
+===== RED RUN 1 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 2 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (3 ms)
+[----------] 1 test from Flush (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 3 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 4 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 5 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 6 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 7 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 8 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 9 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (3 ms)
+[----------] 1 test from Flush (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 10 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 11 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (3 ms)
+[----------] 1 test from Flush (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 12 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (2 ms)
+[----------] 1 test from Flush (2 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 13 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 14 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 15 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 16 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 17 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 18 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 19 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+===== RED RUN 20 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+/home/tengyujie/lsm-kv/tests/flush_test.cpp:904: Failure
+Value of: reopen.ok()
+  Actual: false
+Expected: true
+首个 flush 已落 SST 后必须可重开：Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /db
+
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+
+ 1 FAILED TEST
+RUN_RC=1
+RED_SUMMARY runs=20 pass=0 fail=20

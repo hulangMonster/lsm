@@ -1,0 +1,38 @@
+== lsm engine fix | M6.10.1 before/after ==
+lsm HEAD: f06a44d fix(m2): R1 —— Sync()/RotateLog() 的 fsync 不再持 commit_mu_（WAL 叶子锁 + shared_ptr 生命周期）
+2026-10-02T15:44:52+08:00
+
+==== BEFORE: raw_lsm2 2MiB x2, immediate Close (from ~/raft-kv-lsm/docs/raw/m6.10.1-raw_lsm-matrix.txt) ====
+# raw lsm matrix (no raft-kv code): Open -> batch(2MiB)x2 -> Close -> Open
+mb=2 count=2 sleep=0 wbuf=4 get=0 -> open2 ok=0 Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /tmp/raw_lsm2_104620
+mb=2 count=2 sleep=1500 wbuf=4 get=0 -> open2 ok=1 
+mb=2 count=4 sleep=0 wbuf=4 get=0 -> open2 ok=1 
+mb=2 count=2 sleep=0 wbuf=256 get=0 -> open2 ok=1 
+mb=2 count=2 sleep=0 wbuf=4 get=1 -> open2 ok=0 Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /tmp/raw_lsm2_104647
+
+==== BEFORE: LsmLogStore append(5MiB x3) -> Close -> reopen (from ~/raft-kv-lsm/docs/raw/m6.10.1-lsmstore.txt) ====
+# existing LsmLogStore exposure: append(3 x 5MiB) -> Close -> reopen
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  LsmLogStore: lsm DB::Open(/tmp/lsmstore_104660/raft-lsm) failed: Corruption: VersionSet::RecoverManifest: 元数据缺失但目录非空（*.sst 或 MANIFEST-*）: /tmp/lsmstore_104660/raft-lsm
+bash: line 15: 104660 Aborted                 (core dumped) /tmp/lsmstore_reopen 5 2>&1
+
+==== AFTER: raw_lsm2 2MiB x2, immediate Close, fixed lsm ====
+$ /tmp/m6_raw_lsm2_new 2 2 0 4 0
+mb=2 count=2 sleep=0 wbuf=4 get=0 -> open2 ok=1 
+mb=2 count=2 sleep=0 wbuf=4 get=0 -> open2 ok=1 
+mb=2 count=2 sleep=0 wbuf=4 get=0 -> open2 ok=1 
+mb=2 count=2 sleep=0 wbuf=4 get=0 -> open2 ok=1 
+mb=2 count=2 sleep=0 wbuf=4 get=0 -> open2 ok=1 
+
+==== AFTER: LsmLogStore append(5MiB x3) -> Close -> reopen, fixed lsm ====
+$ /tmp/lsmstore_reopen_new 5
+append(5MiB x3) ok=1
+reopen load=1 lastIndex=3
+append(5MiB x3) ok=1
+reopen load=1 lastIndex=3
+append(5MiB x3) ok=1
+reopen load=1 lastIndex=3
+append(5MiB x3) ok=1
+reopen load=1 lastIndex=3
+append(5MiB x3) ok=1
+reopen load=1 lastIndex=3

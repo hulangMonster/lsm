@@ -1,0 +1,2801 @@
+===== GREEN RUN 1 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 2 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 3 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 4 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 5 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 6 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 7 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 8 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 9 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 10 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 11 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 12 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 13 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 14 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 15 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 16 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 17 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 18 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 19 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 20 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 21 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 22 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 23 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 24 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 25 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 26 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 27 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 28 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 29 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 30 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 31 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 32 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 33 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 34 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 35 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 36 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 37 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 38 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 39 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 40 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 41 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 42 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 43 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 44 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 45 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 46 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (8 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 47 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 48 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (8 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 49 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (8 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 50 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 51 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 52 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 53 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 54 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (3 ms)
+[----------] 1 test from Flush (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 55 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 56 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 57 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (3 ms)
+[----------] 1 test from Flush (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 58 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 59 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 60 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 61 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 62 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 63 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 64 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 65 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 66 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 67 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 68 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 69 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 70 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 71 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 72 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 73 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 74 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 75 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 76 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 77 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 78 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 79 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 80 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 81 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 82 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 83 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 84 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (2 ms)
+[----------] 1 test from Flush (2 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (2 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 85 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 86 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 87 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 88 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 89 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 90 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 91 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 92 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 93 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 94 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 95 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 96 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 97 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 98 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 99 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 100 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (3 ms)
+[----------] 1 test from Flush (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 101 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 102 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 103 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 104 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 105 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 106 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 107 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 108 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 109 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 110 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 111 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 112 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 113 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 114 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 115 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 116 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (8 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 117 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (8 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 118 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 119 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 120 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 121 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 122 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (8 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 123 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 124 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 125 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 126 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 127 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 128 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 129 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[----------] 1 test from Flush (4 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (4 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 130 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 131 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (3 ms)
+[----------] 1 test from Flush (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 132 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 133 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 134 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 135 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 136 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 137 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 138 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 139 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 140 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 141 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 142 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 143 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 144 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 145 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 146 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 147 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 148 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 149 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 150 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 151 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 152 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 153 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 154 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 155 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 156 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 157 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 158 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 159 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 160 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 161 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 162 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 163 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 164 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 165 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 166 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 167 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 168 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 169 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 170 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 171 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 172 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 173 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 174 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 175 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 176 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 177 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 178 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 179 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 180 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 181 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 182 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 183 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 184 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 185 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 186 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 187 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 188 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 189 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 190 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 191 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 192 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 193 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 194 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 195 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 196 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (5 ms)
+[----------] 1 test from Flush (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 197 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 198 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (6 ms)
+[----------] 1 test from Flush (6 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (6 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 199 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (7 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+===== GREEN RUN 200 =====
+Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
+Note: Google Test filter = Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Flush
+[ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (7 ms)
+[----------] 1 test from Flush (8 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8 ms total)
+[  PASSED  ] 1 test.
+RUN_RC=0
+GREEN_SUMMARY runs=200 pass=200 fail=0

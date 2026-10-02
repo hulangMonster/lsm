@@ -122,6 +122,112 @@ bool ParseBatch(const Slice& payload, SequenceNumber* seq, std::vector<BatchEntr
   return true;
 }
 
+// M6.10.1：元数据缺失但目录非空时，判断能否仅凭 WAL 安全重建。
+// 安全判据（缺一不可）：
+//   1) 所有 *.log 的 batch 能逐条解析；
+//   2) sequence 从 1 开始、跨 log 连续无洞；
+//   3) WAL 覆盖到的最后 sequence >= 所有孤儿 *.sst 的 max_sequence。
+// 满足时，任意孤儿 SST 的数据都已完整包含在 WAL 中，可以按空库 + WAL 重放；
+// 不满足时保留原安全阀（kCorruption），绝不静默丢数据。
+bool ScanSstMaxSequence(Env* env, const Options& options, const std::string& path,
+                        SequenceNumber* max_seq, std::string* why) {
+  std::shared_ptr<Table> table;
+  const Status os = Table::Open(options, env, path, &table);
+  if (!os.ok()) {
+    *why = "无法打开孤儿 SST " + path + "：" + os.ToString();
+    return false;
+  }
+  std::unique_ptr<Iterator> it(table->NewIterator());
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    Slice user_key;
+    SequenceNumber seq = 0;
+    ValueType type = kTypeValue;
+    if (!ParseInternalKey(it->key(), &user_key, &seq, &type)) {
+      *why = "孤儿 SST 含非法 internal key：" + path;
+      return false;
+    }
+    if (seq > *max_seq) *max_seq = seq;
+  }
+  if (!it->status().ok()) {
+    *why = "遍历孤儿 SST 失败 " + path + "：" + it->status().ToString();
+    return false;
+  }
+  return true;
+}
+
+bool WalHistoryCoversOrphanSsts(Env* env, const std::string& dbname, const Options& options,
+                                const std::vector<std::string>& children,
+                                SequenceNumber* covered_end, std::string* why) {
+  std::vector<uint64_t> logs;
+  SequenceNumber max_sst_seq = 0;
+  for (const std::string& c : children) {
+    uint64_t n = 0;
+    if (ParseTableFileName(c, &n)) {
+      if (!ScanSstMaxSequence(env, options, dbname + "/" + c, &max_sst_seq, why)) return false;
+    } else if (ParseLogFileName(c, &n)) {
+      logs.push_back(n);
+    }
+  }
+  if (logs.empty()) {
+    *why = "没有 *.log，无法仅凭 WAL 重建";
+    return false;
+  }
+  std::sort(logs.begin(), logs.end());
+  SequenceNumber expected = 1;
+  for (size_t i = 0; i < logs.size(); ++i) {
+    WALReader reader(env, LogFileName(dbname, logs[i]));
+    WALScanResult r;
+    bool record_ok = true;
+    const Status rs = reader.ReadAll(
+        [&](const Slice& rec) {
+          SequenceNumber seq = 0;
+          std::vector<BatchEntry> entries;
+          std::string pwhy;
+          if (!ParseBatch(rec, &seq, &entries, &pwhy)) {
+            record_ok = false;
+            *why = "WAL batch 解析失败：" + pwhy;
+            return;
+          }
+          if (seq != expected) {
+            record_ok = false;
+            *why = "WAL sequence 不连续：期望 " + std::to_string(expected) + "，实际 " +
+                   std::to_string(seq);
+            return;
+          }
+          expected += static_cast<SequenceNumber>(entries.size());
+        },
+        &r);
+    if (!rs.ok()) {
+      *why = "读取 WAL 失败：" + rs.ToString();
+      return false;
+    }
+    if (!record_ok) return false;
+    if (r.verdict == WALScanVerdict::kTailResidue) {
+      if (i + 1 != logs.size()) {
+        *why = "非最高编号 WAL 出现尾部残骸";
+        return false;
+      }
+      break;   // 最高 log 的尾部残骸由正常恢复路径截断；此前缀必须已完整。
+    }
+    if (r.verdict != WALScanVerdict::kClean) {
+      *why = "WAL 损坏且无法证明历史完整";
+      return false;
+    }
+  }
+  if (expected == 1) {
+    *why = "没有可重放的 WAL record";
+    return false;
+  }
+  const SequenceNumber covered = expected - 1;
+  if (covered < max_sst_seq) {
+    *why = "WAL 只覆盖到 sequence " + std::to_string(covered) + "，孤儿 SST 需要 " +
+           std::to_string(max_sst_seq);
+    return false;
+  }
+  *covered_end = covered;
+  return true;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -1194,7 +1300,28 @@ Status PersistentDBImpl::RecoverAndOpen(const Options& options, const std::strin
   // M4（§3.6）：稳态元数据 = CURRENT + MANIFEST；
   // 只有"没有 CURRENT/MANIFEST、只有旧 META"时才做一次兼容读入 + 迁移（META 绝不作为稳态写入目标）。
   s = VersionSet::RecoverManifest(env, name, options, &version, &manifest_result);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    // M6.10.1：flush 与 Close/kill -9 竞态可能在首个 flush 中留下「有 *.sst、无
+    // CURRENT/MANIFEST」的目录。若目录里没有 CURRENT/META 及其 tmp，且 WAL 能证明
+    // sequence 从 1 连续覆盖所有孤儿 SST 的 max_sequence，则按空库 + WAL 重放安全重建；
+    // 否则保留原安全阀（kCorruption），避免静默丢数据。
+    const bool no_active_meta = !env->FileExists(CurrentFileName(name)) &&
+                                !env->FileExists(VersionSet::MetaFileName(name));
+    const bool no_meta_tmp = !env->FileExists(CurrentTempFileName(name)) &&
+                             !env->FileExists(VersionSet::MetaTempFileName(name));
+    if (no_active_meta && no_meta_tmp) {
+      SequenceNumber covered = 0;
+      std::string why;
+      if (WalHistoryCoversOrphanSsts(env, name, options, children, &covered, &why)) {
+        version = std::make_shared<const Version>(
+            std::vector<FileMetaData>(), /*log_number=*/0, /*min_log_number_to_keep=*/1,
+            std::max<uint64_t>(1, VersionSet::DirectoryMaxNumber(children) + 1));
+        manifest_result = VersionSet::ManifestReplayResult();
+        s = Status::OK();
+      }
+    }
+    if (!s.ok()) return s;
+  }
   stats.manifest_present = manifest_result.manifest_present;
   stats.migrated_from_meta = manifest_result.migrated_from_meta;
   stats.manifest_number = manifest_result.manifest_number;

@@ -468,6 +468,20 @@ field                := tag(varint32) ‖ value(tag 依赖)
 两者都不存在时：目录中若有 `*.sst` 或 `MANIFEST-*` ⇒ `kCorruption`（"元数据丢失但目录非空"），
 否则按空库处理。**稳态只写 MANIFEST + CURRENT，永不写 `META`。**
 
+### 11.7 元数据缺失但 WAL 完整时的安全重建（M6.10.1）
+
+- `RecoverManifest()` 的 §11.6 语义不变：`CURRENT` / `META` 都不存在且目录里有 `*.sst` / `MANIFEST-*` 时
+  返回 `kCorruption`；本节描述的是 `DB::Open` 在该错误之上追加的**可证明安全**回退。
+- 回退条件（必须全部满足）：
+  1. 没有 `CURRENT`、`META`、`CURRENT.tmp`、`META.tmp`；
+  2. 目录中至少一个 `*.log`，且所有 `*.log` 的 batch 都能逐条解析；
+  3. WAL 的 sequence 从 1 开始、跨 log 连续无洞（最高 log 的尾部残骸以截断点为界）；
+  4. WAL 覆盖的最后一个 sequence ≥ 所有孤儿 `*.sst` 的 `max_sequence`（扫描 SST 内全部 internal key 得到）。
+- 满足后：按空 Version + WAL 重放打开；未被版本引用的 `*.sst` / `MANIFEST-*` 走 §8.3⑥ 的孤儿清理；
+  `next_file_number = max(目录中所有文件族编号) + 1`；否则原 `kCorruption` 原样返回。
+- 依据：sequence 从 1 连续且覆盖全部孤儿 SST 的 `max_sequence` ⇒ 所有已持久化数据都已在 WAL 中，
+  忽略/回收孤儿 SST 不会丢数据；反之不可证明，必须拒绝，沿用安全阀。
+
 ## 12. filter block 编码（M5 定稿）
 
 ### 12.1 常量与名字空间
