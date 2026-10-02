@@ -100,6 +100,15 @@ int main(int argc, char** argv) {
   const uint64_t checked_p50 = checked.empty() ? 0 : checked[checked.size() / 2];
   const uint64_t checked_max = checked.empty() ? 0 : checked.back();
 
+  // M6.10.1 gate fix：先把当前 memtable 冻结并等待 flush 注册完成，再取放大统计；
+  // 否则 AMPL 的 space_sst_bytes 可能还没包含仍在后台 flush 的 SST，而 lsm_level_stats
+  // 已从目录看到它，导致脚本误报 AMPL/space 不一致。该步骤在计时窗口外。
+  const Status flush_status = impl->ForceFlushForTest();
+  if (!flush_status.ok()) {
+    std::fprintf(stderr, "FORCE_FLUSH_FAIL %s\n", flush_status.ToString().c_str());
+    return 1;
+  }
+
   const uint64_t fd_after = CountFds();
   const uint64_t fd_growth = fd_after > fd_before ? fd_after - fd_before : 0;
 

@@ -1,5 +1,5 @@
 == ASan clean build + full tests ==
-2026-10-02T15:50:09+08:00
+2026-10-02T16:48:12+08:00
 -- The CXX compiler identification is GNU 11.4.0
 -- Detecting CXX compiler ABI info
 -- Detecting CXX compiler ABI info - done
@@ -15,29 +15,29 @@
 -- Generating done
 -- Build files have been written to: /home/tengyujie/lsm-kv/build-asan
 ASAN_CMAKE_RC=0
-[  1%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/format.cpp.o
-[  2%] Building CXX object CMakeFiles/lsm.dir/src/sstable/format.cpp.o
-[  3%] Building CXX object CMakeFiles/fsbench_commit_latency.dir/scripts/fsbench_commit_latency.cpp.o
-[  5%] Building CXX object CMakeFiles/lsm_version.dir/src/version_edit.cpp.o
-[  5%] Building CXX object CMakeFiles/lsm_version.dir/src/version_set.cpp.o
-[  7%] Building CXX object CMakeFiles/lsm.dir/src/sstable/block.cpp.o
-[  8%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/block.cpp.o
-[  9%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/table_builder.cpp.o
+[  4%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/format.cpp.o
+[  4%] Building CXX object CMakeFiles/lsm_version.dir/src/version_edit.cpp.o
+[  4%] Building CXX object CMakeFiles/lsm_version.dir/src/version_set.cpp.o
+[  4%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/block.cpp.o
+[  7%] Building CXX object CMakeFiles/fsbench_commit_latency.dir/scripts/fsbench_commit_latency.cpp.o
+[  7%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/table_builder.cpp.o
+[  9%] Building CXX object CMakeFiles/lsm.dir/src/sstable/block.cpp.o
+[  9%] Building CXX object CMakeFiles/lsm.dir/src/sstable/format.cpp.o
 [ 10%] Building CXX object CMakeFiles/lsm.dir/src/sstable/table_builder.cpp.o
-[ 11%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/table.cpp.o
-[ 13%] Linking CXX executable bin/fsbench_commit_latency
-[ 14%] Building CXX object CMakeFiles/lsm_version.dir/src/filename.cpp.o
-[ 14%] Built target fsbench_commit_latency
-[ 15%] Building CXX object CMakeFiles/lsm_version.dir/src/util/status.cpp.o
+[ 11%] Building CXX object CMakeFiles/lsm_version.dir/src/filename.cpp.o
+[ 13%] Building CXX object CMakeFiles/lsm_version.dir/src/util/status.cpp.o
+[ 14%] Linking CXX executable bin/fsbench_commit_latency
+[ 15%] Building CXX object CMakeFiles/lsm_sstable.dir/src/sstable/table.cpp.o
+[ 15%] Built target fsbench_commit_latency
 [ 16%] Building CXX object CMakeFiles/lsm_sstable.dir/src/bloom.cpp.o
-[ 17%] Building CXX object CMakeFiles/lsm.dir/src/sstable/table.cpp.o
-[ 19%] Building CXX object CMakeFiles/lsm_version.dir/src/util/coding.cpp.o
-[ 20%] Building CXX object CMakeFiles/lsm_sstable.dir/src/util/status.cpp.o
-[ 21%] Building CXX object CMakeFiles/lsm_sstable.dir/src/util/coding.cpp.o
+[ 17%] Building CXX object CMakeFiles/lsm_version.dir/src/util/coding.cpp.o
+[ 19%] Building CXX object CMakeFiles/lsm_sstable.dir/src/util/status.cpp.o
+[ 20%] Building CXX object CMakeFiles/lsm.dir/src/sstable/table.cpp.o
+[ 21%] Building CXX object CMakeFiles/lsm.dir/src/bloom.cpp.o
 [ 22%] Building CXX object CMakeFiles/lsm_version.dir/src/util/crc32c.cpp.o
-[ 23%] Building CXX object CMakeFiles/lsm.dir/src/bloom.cpp.o
-[ 25%] Building CXX object CMakeFiles/lsm_sstable.dir/src/util/crc32c.cpp.o
-[ 26%] Building CXX object CMakeFiles/lsm.dir/src/util/status.cpp.o
+[ 23%] Building CXX object CMakeFiles/lsm.dir/src/util/status.cpp.o
+[ 25%] Building CXX object CMakeFiles/lsm_sstable.dir/src/util/coding.cpp.o
+[ 26%] Building CXX object CMakeFiles/lsm_sstable.dir/src/util/crc32c.cpp.o
 [ 27%] Building CXX object CMakeFiles/lsm.dir/src/util/coding.cpp.o
 [ 28%] Building CXX object CMakeFiles/lsm.dir/src/util/crc32c.cpp.o
 [ 29%] Building CXX object CMakeFiles/lsm.dir/src/util/arena.cpp.o
@@ -46,12 +46,12 @@ ASAN_CMAKE_RC=0
 [ 33%] Building CXX object CMakeFiles/lsm.dir/src/db.cpp.o
 [ 34%] Building CXX object CMakeFiles/lsm.dir/src/write_batch.cpp.o
 [ 35%] Building CXX object CMakeFiles/lsm.dir/src/wal.cpp.o
-[ 36%] Linking CXX static library liblsm_sstable.a
-[ 38%] Building CXX object CMakeFiles/lsm.dir/src/filename.cpp.o
-[ 38%] Built target lsm_sstable
-[ 39%] Building CXX object CMakeFiles/lsm.dir/src/db_impl.cpp.o
-[ 40%] Building CXX object CMakeFiles/lsm.dir/src/version_edit.cpp.o
-[ 41%] Building CXX object CMakeFiles/lsm.dir/src/version_set.cpp.o
+[ 36%] Building CXX object CMakeFiles/lsm.dir/src/filename.cpp.o
+[ 38%] Building CXX object CMakeFiles/lsm.dir/src/db_impl.cpp.o
+[ 39%] Building CXX object CMakeFiles/lsm.dir/src/version_edit.cpp.o
+[ 40%] Building CXX object CMakeFiles/lsm.dir/src/version_set.cpp.o
+[ 41%] Linking CXX static library liblsm_sstable.a
+[ 41%] Built target lsm_sstable
 [ 42%] Building CXX object CMakeFiles/lsm.dir/src/compaction.cpp.o
 [ 44%] Building CXX object CMakeFiles/lsm.dir/src/merging_iterator.cpp.o
 [ 45%] Building CXX object CMakeFiles/lsm.dir/src/db_iter.cpp.o
@@ -59,37 +59,37 @@ ASAN_CMAKE_RC=0
 [ 46%] Built target lsm_version
 [ 47%] Linking CXX static library liblsm.a
 [ 47%] Built target lsm
-[ 48%] Building CXX object CMakeFiles/lsm_crash_recover.dir/scripts/crash_recover.cpp.o
+[ 48%] Building CXX object CMakeFiles/lsm_tests.dir/tests/sstable_format_test.cpp.o
 [ 50%] Building CXX object CMakeFiles/lsm_crash_writer.dir/scripts/crash_writer.cpp.o
-[ 51%] Building CXX object CMakeFiles/lsm_m3_probe.dir/scripts/m3_probe.cpp.o
-[ 52%] Building CXX object CMakeFiles/lsm_tests.dir/tests/sstable_format_test.cpp.o
-[ 53%] Building CXX object CMakeFiles/lsm_damage_test.dir/scripts/lsm_damage_test.cpp.o
+[ 51%] Building CXX object CMakeFiles/lsm_damage_test.dir/scripts/lsm_damage_test.cpp.o
+[ 52%] Building CXX object CMakeFiles/lsm_crash_recover.dir/scripts/crash_recover.cpp.o
+[ 53%] Building CXX object CMakeFiles/lsm_m3_probe.dir/scripts/m3_probe.cpp.o
 [ 54%] Building CXX object CMakeFiles/lsm_compaction_crash.dir/scripts/lsm_compaction_crash.cpp.o
-[ 55%] Building CXX object CMakeFiles/lsm_ampl_probe.dir/scripts/lsm_ampl_probe.cpp.o
-[ 57%] Building CXX object CMakeFiles/lsm_batch_crash_writer.dir/scripts/batch_crash_writer.cpp.o
+[ 55%] Building CXX object CMakeFiles/lsm_batch_crash_writer.dir/scripts/batch_crash_writer.cpp.o
+[ 57%] Building CXX object CMakeFiles/lsm_ampl_probe.dir/scripts/lsm_ampl_probe.cpp.o
 [ 58%] Linking CXX executable bin/lsm_batch_crash_writer
 [ 59%] Linking CXX executable bin/lsm_crash_writer
 [ 60%] Linking CXX executable bin/lsm_damage_test
 [ 60%] Built target lsm_batch_crash_writer
-[ 60%] Built target lsm_crash_writer
 [ 61%] Building CXX object CMakeFiles/lsm_batch_crash_recover.dir/scripts/batch_crash_recover.cpp.o
+[ 61%] Built target lsm_crash_writer
 [ 63%] Building CXX object CMakeFiles/bench_lsm.dir/bench/bench_lsm.cpp.o
 [ 64%] Linking CXX executable bin/lsm_crash_recover
 [ 64%] Built target lsm_damage_test
 [ 65%] Building CXX object CMakeFiles/sync_isolation_probe.dir/scripts/sync_isolation_probe.cpp.o
 [ 65%] Built target lsm_crash_recover
 [ 66%] Building CXX object CMakeFiles/lsm_level_stats.dir/scripts/lsm_level_stats.cpp.o
-[ 67%] Linking CXX executable bin/lsm_compaction_crash
-[ 69%] Linking CXX executable bin/lsm_ampl_probe
-[ 69%] Built target lsm_compaction_crash
+[ 67%] Linking CXX executable bin/lsm_ampl_probe
+[ 69%] Linking CXX executable bin/lsm_compaction_crash
 [ 69%] Built target lsm_ampl_probe
-[ 70%] Building CXX object CMakeFiles/lsm_tests.dir/tests/sstable_table_test.cpp.o
-[ 71%] Linking CXX executable bin/lsm_batch_crash_recover
+[ 70%] Linking CXX executable bin/lsm_batch_crash_recover
+[ 70%] Built target lsm_compaction_crash
+[ 71%] Building CXX object CMakeFiles/lsm_tests.dir/tests/sstable_table_test.cpp.o
 [ 72%] Building CXX object CMakeFiles/lsm_filter_damage.dir/scripts/lsm_filter_damage.cpp.o
 [ 72%] Built target lsm_batch_crash_recover
 [ 73%] Building CXX object CMakeFiles/lsm_tests.dir/tests/util_test.cpp.o
-[ 75%] Linking CXX executable bin/lsm_m3_probe
-[ 76%] Linking CXX executable bin/lsm_level_stats
+[ 75%] Linking CXX executable bin/lsm_level_stats
+[ 76%] Linking CXX executable bin/lsm_m3_probe
 [ 76%] Built target lsm_level_stats
 [ 77%] Building CXX object CMakeFiles/lsm_tests.dir/tests/memtable_test.cpp.o
 [ 77%] Built target lsm_m3_probe
@@ -122,18 +122,18 @@ Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
 [----------] Global test environment set-up.
 [----------] 6 tests from Block
 [ RUN      ] Block.RoundTripEmptySingleMany
-[       OK ] Block.RoundTripEmptySingleMany (3 ms)
+[       OK ] Block.RoundTripEmptySingleMany (4 ms)
 [ RUN      ] Block.PrefixCompressionAndRestartGroups
-[       OK ] Block.PrefixCompressionAndRestartGroups (1 ms)
+[       OK ] Block.PrefixCompressionAndRestartGroups (0 ms)
 [ RUN      ] Block.RestartOffsetsMonotonicAndAligned
-[       OK ] Block.RestartOffsetsMonotonicAndAligned (0 ms)
+[       OK ] Block.RestartOffsetsMonotonicAndAligned (1 ms)
 [ RUN      ] Block.SeekSemantics
 [       OK ] Block.SeekSemantics (0 ms)
 [ RUN      ] Block.MalformedEntryRejectedWithoutOOB
-[       OK ] Block.MalformedEntryRejectedWithoutOOB (0 ms)
+[       OK ] Block.MalformedEntryRejectedWithoutOOB (1 ms)
 [ RUN      ] Block.IteratorBidirectional
 [       OK ] Block.IteratorBidirectional (1 ms)
-[----------] 6 tests from Block (9 ms total)
+[----------] 6 tests from Block (11 ms total)
 
 [----------] 2 tests from Footer
 [ RUN      ] Footer.RoundTrip
@@ -146,22 +146,22 @@ Running main() from /home/tengyujie/googletest/googletest/src/gtest_main.cc
 [ RUN      ] Table.EmptyAndBoundarySizes
 [       OK ] Table.EmptyAndBoundarySizes (4 ms)
 [ RUN      ] Table.CrossBlockLargeValue
-[       OK ] Table.CrossBlockLargeValue (5 ms)
+[       OK ] Table.CrossBlockLargeValue (7 ms)
 [ RUN      ] Table.LargeNumberOfBlocksIndexWarn
 WARN: sstable index_size_warn: block_count=65538 > 65536 (single-level index > ~2.5MB); two-level index is an M4 item
-[       OK ] Table.LargeNumberOfBlocksIndexWarn (763 ms)
+[       OK ] Table.LargeNumberOfBlocksIndexWarn (805 ms)
 [ RUN      ] Table.CrcDetectsSingleByteFlipInDataBlock
 FLIPS_DONE_A12=4912
-[       OK ] Table.CrcDetectsSingleByteFlipInDataBlock (1889 ms)
+[       OK ] Table.CrcDetectsSingleByteFlipInDataBlock (1885 ms)
 [ RUN      ] Table.CrcDetectsFlipInHeaderLengthAndTrailer
 FLIPS_DONE_A13=11
 [       OK ] Table.CrcDetectsFlipInHeaderLengthAndTrailer (1 ms)
 [ RUN      ] Table.CrcDetectsFlipInIndexAndFooter
 FLIPS_DONE_A14_INDEX=42
 FLIPS_DONE_A14_TOTAL=45
-[       OK ] Table.CrcDetectsFlipInIndexAndFooter (3 ms)
+[       OK ] Table.CrcDetectsFlipInIndexAndFooter (4 ms)
 [ RUN      ] Table.VerifyChecksumsOffIsActuallyOff
-[       OK ] Table.VerifyChecksumsOffIsActuallyOff (0 ms)
+[       OK ] Table.VerifyChecksumsOffIsActuallyOff (1 ms)
 [ RUN      ] Table.IndexHandleTypeMismatchRejected
 [       OK ] Table.IndexHandleTypeMismatchRejected (0 ms)
 [ RUN      ] Table.HandleSizeVsBlockLengthMismatch
@@ -172,7 +172,7 @@ FLIPS_DONE_A14_TOTAL=45
 [       OK ] Table.KeyRangeFilterDoesZeroIo (0 ms)
 [ RUN      ] Table.SeekWithSnapshotLookupKeyUsesInternalKeyComparator
 [       OK ] Table.SeekWithSnapshotLookupKeyUsesInternalKeyComparator (0 ms)
-[----------] 12 tests from Table (2672 ms total)
+[----------] 12 tests from Table (2716 ms total)
 
 [----------] 2 tests from Slice
 [ RUN      ] Slice.CompareAndStartsWith
@@ -205,54 +205,54 @@ FLIPS_DONE_A14_TOTAL=45
 [ RUN      ] CRC32C.KnownVectors
 [       OK ] CRC32C.KnownVectors (0 ms)
 [ RUN      ] CRC32C.SingleBitFlipDetected
-[       OK ] CRC32C.SingleBitFlipDetected (62 ms)
-[----------] 2 tests from CRC32C (62 ms total)
+[       OK ] CRC32C.SingleBitFlipDetected (65 ms)
+[----------] 2 tests from CRC32C (65 ms total)
 
 [----------] 2 tests from Arena
 [ RUN      ] Arena.AlignmentAndUsage
 [       OK ] Arena.AlignmentAndUsage (2 ms)
 [ RUN      ] Arena.Reset
-[       OK ] Arena.Reset (2 ms)
+[       OK ] Arena.Reset (3 ms)
 [----------] 2 tests from Arena (5 ms total)
 
 [----------] 2 tests from Env
 [ RUN      ] Env.TimeMonotonic
 [       OK ] Env.TimeMonotonic (1 ms)
 [ RUN      ] Env.FileRoundTrip
-[       OK ] Env.FileRoundTrip (21 ms)
-[----------] 2 tests from Env (23 ms total)
+[       OK ] Env.FileRoundTrip (4 ms)
+[----------] 2 tests from Env (6 ms total)
 
 [----------] 4 tests from InternalKey
 [ RUN      ] InternalKey.BuildParseRoundTrip
-[       OK ] InternalKey.BuildParseRoundTrip (16 ms)
+[       OK ] InternalKey.BuildParseRoundTrip (6 ms)
 [ RUN      ] InternalKey.ParseMalformed
 [       OK ] InternalKey.ParseMalformed (0 ms)
 [ RUN      ] InternalKey.CompareOrder
-[       OK ] InternalKey.CompareOrder (41 ms)
+[       OK ] InternalKey.CompareOrder (22 ms)
 [ RUN      ] InternalKey.LookupKeySemantics
 [       OK ] InternalKey.LookupKeySemantics (0 ms)
-[----------] 4 tests from InternalKey (58 ms total)
+[----------] 4 tests from InternalKey (29 ms total)
 
 [----------] 1 test from MemTableKeyComparator
 [ RUN      ] MemTableKeyComparator.TotalOrder
-[       OK ] MemTableKeyComparator.TotalOrder (249 ms)
-[----------] 1 test from MemTableKeyComparator (249 ms total)
+[       OK ] MemTableKeyComparator.TotalOrder (246 ms)
+[----------] 1 test from MemTableKeyComparator (247 ms total)
 
 [----------] 4 tests from Skiplist
 [ RUN      ] Skiplist.InsertContainsWithStdMultimap
-[       OK ] Skiplist.InsertContainsWithStdMultimap (2309 ms)
+[       OK ] Skiplist.InsertContainsWithStdMultimap (2134 ms)
 [ RUN      ] Skiplist.RandomLayerDistribution
 [   INFO   ] Skiplist.RandomLayerDistribution: node_count=100000 mean_height=1.33456 P(h>=2)=0.2502 P(h>=3)=0.06272 max_height=9
-[       OK ] Skiplist.RandomLayerDistribution (362 ms)
+[       OK ] Skiplist.RandomLayerDistribution (301 ms)
 [ RUN      ] Skiplist.IteratorForwardBackward
-[       OK ] Skiplist.IteratorForwardBackward (90 ms)
+[       OK ] Skiplist.IteratorForwardBackward (95 ms)
 [ RUN      ] Skiplist.DuplicateKeys
 [       OK ] Skiplist.DuplicateKeys (0 ms)
-[----------] 4 tests from Skiplist (2763 ms total)
+[----------] 4 tests from Skiplist (2532 ms total)
 
 [----------] 14 tests from MemTable
 [ RUN      ] MemTable.PutGetRoundTrip
-[       OK ] MemTable.PutGetRoundTrip (23 ms)
+[       OK ] MemTable.PutGetRoundTrip (20 ms)
 [ RUN      ] MemTable.OverwriteNewestWins
 [       OK ] MemTable.OverwriteNewestWins (0 ms)
 [ RUN      ] MemTable.DeleteThenNotFound
@@ -279,176 +279,176 @@ FLIPS_DONE_A14_TOTAL=45
 [       OK ] MemTable.CustomComparatorEqualityIsHonored (0 ms)
 [ RUN      ] MemTable.MalformedInputDoesNotReadOutOfBounds
 [       OK ] MemTable.MalformedInputDoesNotReadOutOfBounds (0 ms)
-[----------] 14 tests from MemTable (32 ms total)
+[----------] 14 tests from MemTable (29 ms total)
 
 [----------] 6 tests from DB
 [ RUN      ] DB.PutBlocksUntilFlush
-[       OK ] DB.PutBlocksUntilFlush (70 ms)
+[       OK ] DB.PutBlocksUntilFlush (66 ms)
 [ RUN      ] DB.OpenMemoryMode
 [       OK ] DB.OpenMemoryMode (0 ms)
 [ RUN      ] DB.OpenPersistentMode
-[       OK ] DB.OpenPersistentMode (14 ms)
+[       OK ] DB.OpenPersistentMode (12 ms)
 [ RUN      ] DB.OpenRejectsInvalidOptions
 [       OK ] DB.OpenRejectsInvalidOptions (0 ms)
 [ RUN      ] DB.PutGetDeleteRoundTrip
-[       OK ] DB.PutGetDeleteRoundTrip (1 ms)
+[       OK ] DB.PutGetDeleteRoundTrip (0 ms)
 [ RUN      ] DB.PutAfterFreezeReturnsFrozen
 [       OK ] DB.PutAfterFreezeReturnsFrozen (0 ms)
-[----------] 6 tests from DB (87 ms total)
+[----------] 6 tests from DB (81 ms total)
 
 [----------] 4 tests from Stress
 [ RUN      ] Stress.OneMillionKeysReconcile
-[   INFO   ] Stress.OneMillionKeysReconcile: n=1000000 write_ms=43404 reconcile_ms=4430 ApproximateMemoryUsage=155998029 bytes
-[       OK ] Stress.OneMillionKeysReconcile (50381 ms)
+[   INFO   ] Stress.OneMillionKeysReconcile: n=1000000 write_ms=46697 reconcile_ms=5147 ApproximateMemoryUsage=155998029 bytes
+[       OK ] Stress.OneMillionKeysReconcile (54361 ms)
 [ RUN      ] Stress.DeleteThirtyPercentReconcile
-[   INFO   ] Stress.DeleteThirtyPercentReconcile: entries=390000 visible=210000 deleted=90000 elapsed_ms=22441 memtable_bytes=61318518
-[       OK ] Stress.DeleteThirtyPercentReconcile (22980 ms)
+[   INFO   ] Stress.DeleteThirtyPercentReconcile: entries=390000 visible=210000 deleted=90000 elapsed_ms=24235 memtable_bytes=61318518
+[       OK ] Stress.DeleteThirtyPercentReconcile (25723 ms)
 [ RUN      ] Stress.SameKey100kTimes
-[   INFO   ] Stress.SameKey100kTimes: versions=100000 elapsed_ms=327 memtable_bytes=14389159
-[       OK ] Stress.SameKey100kTimes (330 ms)
+[   INFO   ] Stress.SameKey100kTimes: versions=100000 elapsed_ms=1171 memtable_bytes=14389159
+[       OK ] Stress.SameKey100kTimes (1176 ms)
 [ RUN      ] Stress.AlignmentUnderSanitizers
 [   INFO   ] Stress.AlignmentUnderSanitizers: build=asan
 [   INFO   ] Stress.AlignmentUnderSanitizers: allocations=2000 alignof(max_align_t)=16
-[       OK ] Stress.AlignmentUnderSanitizers (20 ms)
-[----------] 4 tests from Stress (73713 ms total)
+[       OK ] Stress.AlignmentUnderSanitizers (55 ms)
+[----------] 4 tests from Stress (81317 ms total)
 
 [----------] 10 tests from WAL
 [ RUN      ] WAL.WriteReadRoundTrip
-[       OK ] WAL.WriteReadRoundTrip (1 ms)
+[       OK ] WAL.WriteReadRoundTrip (6 ms)
 [ RUN      ] WAL.LargeRecordCrossBlockSplit
-[       OK ] WAL.LargeRecordCrossBlockSplit (5 ms)
+[       OK ] WAL.LargeRecordCrossBlockSplit (16 ms)
 [ RUN      ] WAL.BlockTailPadding
-[       OK ] WAL.BlockTailPadding (10 ms)
+[       OK ] WAL.BlockTailPadding (25 ms)
 [ RUN      ] WAL.CrcDetectsSingleByteFlip
-[       OK ] WAL.CrcDetectsSingleByteFlip (86 ms)
+[       OK ] WAL.CrcDetectsSingleByteFlip (264 ms)
 [ RUN      ] WAL.RejectsIllegalTypeAndLength
-[       OK ] WAL.RejectsIllegalTypeAndLength (2 ms)
+[       OK ] WAL.RejectsIllegalTypeAndLength (11 ms)
 [ RUN      ] WAL.TruncatedTailIsCut
-[       OK ] WAL.TruncatedTailIsCut (281 ms)
+[       OK ] WAL.TruncatedTailIsCut (1052 ms)
 [ RUN      ] WAL.MiddleCorruptionRejected
-[       OK ] WAL.MiddleCorruptionRejected (1 ms)
+[       OK ] WAL.MiddleCorruptionRejected (8 ms)
 [ RUN      ] WAL.TailCorruptionWithNoValidRecordAfterIsCut
-[       OK ] WAL.TailCorruptionWithNoValidRecordAfterIsCut (1 ms)
+[       OK ] WAL.TailCorruptionWithNoValidRecordAfterIsCut (7 ms)
 [ RUN      ] WAL.ShortWriteIsRetriedThenFails
-[       OK ] WAL.ShortWriteIsRetriedThenFails (1 ms)
+[       OK ] WAL.ShortWriteIsRetriedThenFails (7 ms)
 [ RUN      ] WAL.FsyncFailurePropagates
 [       OK ] WAL.FsyncFailurePropagates (0 ms)
-[----------] 10 tests from WAL (394 ms total)
+[----------] 10 tests from WAL (1403 ms total)
 
 [----------] 11 tests from Recovery
 [ RUN      ] Recovery.AckedDataVisibleAfterManifestReplay
-[       OK ] Recovery.AckedDataVisibleAfterManifestReplay (17 ms)
+[       OK ] Recovery.AckedDataVisibleAfterManifestReplay (55 ms)
 [ RUN      ] Recovery.ReplayPutDeleteAndBatches
-[       OK ] Recovery.ReplayPutDeleteAndBatches (7 ms)
+[       OK ] Recovery.ReplayPutDeleteAndBatches (17 ms)
 [ RUN      ] Recovery.AllLogsAreReplayed
-[       OK ] Recovery.AllLogsAreReplayed (5 ms)
+[       OK ] Recovery.AllLogsAreReplayed (12 ms)
 [ RUN      ] Recovery.SequenceRestoredAboveMaxReplayed
-[       OK ] Recovery.SequenceRestoredAboveMaxReplayed (8 ms)
+[       OK ] Recovery.SequenceRestoredAboveMaxReplayed (24 ms)
 [ RUN      ] Recovery.IdempotentAcrossRepeatedOpens
-[       OK ] Recovery.IdempotentAcrossRepeatedOpens (6 ms)
+[       OK ] Recovery.IdempotentAcrossRepeatedOpens (14 ms)
 [ RUN      ] Recovery.TornTailDoesNotResurrectOlderValue
-[       OK ] Recovery.TornTailDoesNotResurrectOlderValue (6 ms)
+[       OK ] Recovery.TornTailDoesNotResurrectOlderValue (15 ms)
 [ RUN      ] Recovery.EmptyWalAndMissingDir
-[       OK ] Recovery.EmptyWalAndMissingDir (4 ms)
+[       OK ] Recovery.EmptyWalAndMissingDir (14 ms)
 [ RUN      ] Recovery.MalformedBatchPayloadIsCorruption
-[       OK ] Recovery.MalformedBatchPayloadIsCorruption (4 ms)
+[       OK ] Recovery.MalformedBatchPayloadIsCorruption (6 ms)
 [ RUN      ] Recovery.NonHighestLogTailCorruptionRejected
-[       OK ] Recovery.NonHighestLogTailCorruptionRejected (2 ms)
+[       OK ] Recovery.NonHighestLogTailCorruptionRejected (5 ms)
 [ RUN      ] Recovery.SameKeyManyVersionsReplaysLatest
-[       OK ] Recovery.SameKeyManyVersionsReplaysLatest (65 ms)
+[       OK ] Recovery.SameKeyManyVersionsReplaysLatest (185 ms)
 [ RUN      ] Recovery.StatsAreReadableAndReportTruncationAndSkips
 [WARN] recovery: skipped 1 record(s) with non-increasing sequence
-[       OK ] Recovery.StatsAreReadableAndReportTruncationAndSkips (11 ms)
-[----------] 11 tests from Recovery (142 ms total)
+[       OK ] Recovery.StatsAreReadableAndReportTruncationAndSkips (31 ms)
+[----------] 11 tests from Recovery (385 ms total)
 
 [----------] 2 tests from CrashSim
 [ RUN      ] CrashSim.UnsyncedSuffixLostNoTornValue
-[       OK ] CrashSim.UnsyncedSuffixLostNoTornValue (12 ms)
+[       OK ] CrashSim.UnsyncedSuffixLostNoTornValue (47 ms)
 [ RUN      ] CrashSim.RepeatedCrashRecoverLoop50
-[       OK ] CrashSim.RepeatedCrashRecoverLoop50 (74 ms)
-[----------] 2 tests from CrashSim (87 ms total)
+[       OK ] CrashSim.RepeatedCrashRecoverLoop50 (322 ms)
+[----------] 2 tests from CrashSim (370 ms total)
 
 [----------] 3 tests from Sync
 [ RUN      ] Sync.SyncCoversAllPriorWrites
-[       OK ] Sync.SyncCoversAllPriorWrites (3 ms)
+[       OK ] Sync.SyncCoversAllPriorWrites (13 ms)
 [ RUN      ] Sync.CloseIsDurable
-[       OK ] Sync.CloseIsDurable (5 ms)
+[       OK ] Sync.CloseIsDurable (14 ms)
 [ RUN      ] Sync.PerLogBoundaryAfterRotation
-[       OK ] Sync.PerLogBoundaryAfterRotation (1 ms)
-[----------] 3 tests from Sync (10 ms total)
+[       OK ] Sync.PerLogBoundaryAfterRotation (4 ms)
+[----------] 3 tests from Sync (33 ms total)
 
 [----------] 4 tests from Close
 [ RUN      ] Close.RejectsNewWriters
-[       OK ] Close.RejectsNewWriters (44 ms)
+[       OK ] Close.RejectsNewWriters (68 ms)
 [ RUN      ] Close.WaitsForDrainedQueue
-[       OK ] Close.WaitsForDrainedQueue (24 ms)
+[       OK ] Close.WaitsForDrainedQueue (118 ms)
 [ RUN      ] Close.AbandonsImmutablesWithCounter
-[       OK ] Close.AbandonsImmutablesWithCounter (16 ms)
+[       OK ] Close.AbandonsImmutablesWithCounter (42 ms)
 [ RUN      ] Close.DrainsBackgroundThread
-[       OK ] Close.DrainsBackgroundThread (5 ms)
-[----------] 4 tests from Close (91 ms total)
+[       OK ] Close.DrainsBackgroundThread (25 ms)
+[----------] 4 tests from Close (255 ms total)
 
 [----------] 8 tests from GroupCommit
 [ RUN      ] GroupCommit.WindowNotOpenedEarly
-[       OK ] GroupCommit.WindowNotOpenedEarly (1 ms)
+[       OK ] GroupCommit.WindowNotOpenedEarly (3 ms)
 [ RUN      ] GroupCommit.NoLostWakeup
-[       OK ] GroupCommit.NoLostWakeup (11 ms)
+[       OK ] GroupCommit.NoLostWakeup (38 ms)
 [ RUN      ] GroupCommit.FailurePropagatesToAllWaiters
-[       OK ] GroupCommit.FailurePropagatesToAllWaiters (8 ms)
+[       OK ] GroupCommit.FailurePropagatesToAllWaiters (17 ms)
 [ RUN      ] GroupCommit.BatchingReducesFsyncCount
 [   INFO   ] GroupCommit.BatchingReducesFsyncCount: writers=32 fsync_calls=32 ratio=1.000
-[       OK ] GroupCommit.BatchingReducesFsyncCount (11 ms)
+[       OK ] GroupCommit.BatchingReducesFsyncCount (31 ms)
 [ RUN      ] GroupCommit.NWritersOneFsyncDeterministic
-[       OK ] GroupCommit.NWritersOneFsyncDeterministic (54 ms)
+[       OK ] GroupCommit.NWritersOneFsyncDeterministic (119 ms)
 [ RUN      ] GroupCommit.DurableSeqOnlyAdvancesOnSync
-[       OK ] GroupCommit.DurableSeqOnlyAdvancesOnSync (0 ms)
+[       OK ] GroupCommit.DurableSeqOnlyAdvancesOnSync (2 ms)
 [ RUN      ] GroupCommit.MixedSyncPropagates
-[       OK ] GroupCommit.MixedSyncPropagates (43 ms)
+[       OK ] GroupCommit.MixedSyncPropagates (99 ms)
 [ RUN      ] GroupCommit.SyncDoesNotClaimInFlightBatch
-[       OK ] GroupCommit.SyncDoesNotClaimInFlightBatch (1 ms)
-[----------] 8 tests from GroupCommit (132 ms total)
+[       OK ] GroupCommit.SyncDoesNotClaimInFlightBatch (3 ms)
+[----------] 8 tests from GroupCommit (318 ms total)
 
 [----------] 2 tests from Locks
 [ RUN      ] Locks.ZeroIoWhileHoldingDbMutexOnCompactionPath
-[       OK ] Locks.ZeroIoWhileHoldingDbMutexOnCompactionPath (16 ms)
+[       OK ] Locks.ZeroIoWhileHoldingDbMutexOnCompactionPath (48 ms)
 [ RUN      ] Locks.ZeroIoWhileHoldingDbMutex
-[       OK ] Locks.ZeroIoWhileHoldingDbMutex (105 ms)
-[----------] 2 tests from Locks (122 ms total)
+[       OK ] Locks.ZeroIoWhileHoldingDbMutex (357 ms)
+[----------] 2 tests from Locks (406 ms total)
 
 [----------] 9 tests from Flush
 [ RUN      ] Flush.AutoFlushOnFullBufferNeverFrozen
-[       OK ] Flush.AutoFlushOnFullBufferNeverFrozen (22 ms)
+[       OK ] Flush.AutoFlushOnFullBufferNeverFrozen (40 ms)
 [ RUN      ] Flush.SingleEntryLargerThanWriteBufferAccepted
 [       OK ] Flush.SingleEntryLargerThanWriteBufferAccepted (2 ms)
 [ RUN      ] Flush.OrderDurableRenameSyncDirRegister
-[       OK ] Flush.OrderDurableRenameSyncDirRegister (20 ms)
+[       OK ] Flush.OrderDurableRenameSyncDirRegister (22 ms)
 [ RUN      ] Flush.NoIoWhileHoldingDbMutex
-[       OK ] Flush.NoIoWhileHoldingDbMutex (21 ms)
+[       OK ] Flush.NoIoWhileHoldingDbMutex (72 ms)
 [ RUN      ] Flush.FailureIsFailStopButReadable
-[       OK ] Flush.FailureIsFailStopButReadable (5 ms)
+[       OK ] Flush.FailureIsFailStopButReadable (23 ms)
 [ RUN      ] Flush.ImmutableStallReleasesOnAllConditions
-[       OK ] Flush.ImmutableStallReleasesOnAllConditions (6 ms)
+[       OK ] Flush.ImmutableStallReleasesOnAllConditions (26 ms)
 [ RUN      ] Flush.TombstoneCountPreserved
-[       OK ] Flush.TombstoneCountPreserved (62 ms)
+[       OK ] Flush.TombstoneCountPreserved (176 ms)
 [ RUN      ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal
-[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (4 ms)
+[       OK ] Flush.FirstFlushCloseWindowRecoversFromCompleteWal (16 ms)
 [ RUN      ] Flush.StatsCountedNotSilent
 [WARN] recovery: skipped 1 record(s) with non-increasing sequence
-[       OK ] Flush.StatsCountedNotSilent (59 ms)
-[----------] 9 tests from Flush (204 ms total)
+[       OK ] Flush.StatsCountedNotSilent (174 ms)
+[----------] 9 tests from Flush (558 ms total)
 
 [----------] 5 tests from Read
 [ RUN      ] Read.L0NewestFirst
-[       OK ] Read.L0NewestFirst (3 ms)
+[       OK ] Read.L0NewestFirst (11 ms)
 [ RUN      ] Read.CoverageMemTableOverSSTable
-[       OK ] Read.CoverageMemTableOverSSTable (38 ms)
+[       OK ] Read.CoverageMemTableOverSSTable (177 ms)
 [ RUN      ] Read.TombstoneShadowsSSTableOldValue
-[       OK ] Read.TombstoneShadowsSSTableOldValue (45 ms)
+[       OK ] Read.TombstoneShadowsSSTableOldValue (155 ms)
 [ RUN      ] Read.NewerSSTableTombstoneShadowsOlderFile
-[       OK ] Read.NewerSSTableTombstoneShadowsOlderFile (113 ms)
+[       OK ] Read.NewerSSTableTombstoneShadowsOlderFile (349 ms)
 [ RUN      ] Read.NewestWinsAcrossThreeFiles
-[       OK ] Read.NewestWinsAcrossThreeFiles (117 ms)
-[----------] 5 tests from Read (318 ms total)
+[       OK ] Read.NewestWinsAcrossThreeFiles (386 ms)
+[----------] 5 tests from Read (1082 ms total)
 
 [----------] 4 tests from Iter
 [ RUN      ] Iter.MergingIteratorOrder
@@ -456,74 +456,74 @@ FLIPS_DONE_A14_TOTAL=45
 [ RUN      ] Iter.DBIterVisibilityAndTombstoneSkip
 [       OK ] Iter.DBIterVisibilityAndTombstoneSkip (0 ms)
 [ RUN      ] Iter.DBIterStableAcrossFlush
-[       OK ] Iter.DBIterStableAcrossFlush (202 ms)
+[       OK ] Iter.DBIterStableAcrossFlush (783 ms)
 [ RUN      ] Iter.UserIteratorUnchangedForMemoryMode
-[       OK ] Iter.UserIteratorUnchangedForMemoryMode (3 ms)
-[----------] 4 tests from Iter (206 ms total)
+[       OK ] Iter.UserIteratorUnchangedForMemoryMode (15 ms)
+[----------] 4 tests from Iter (800 ms total)
 
 [----------] 10 tests from Recover
 [ RUN      ] Recover.SSTableOnly
-[       OK ] Recover.SSTableOnly (21 ms)
+[       OK ] Recover.SSTableOnly (84 ms)
 [ RUN      ] Recover.SSTablePlusWalTail
-[       OK ] Recover.SSTablePlusWalTail (10 ms)
+[       OK ] Recover.SSTablePlusWalTail (38 ms)
 [ RUN      ] Recover.LastSequenceUniqueSource
-[       OK ] Recover.LastSequenceUniqueSource (11 ms)
+[       OK ] Recover.LastSequenceUniqueSource (48 ms)
 [ RUN      ] Recover.MetaMaxSequenceVerifiedAgainstFullScan
-[       OK ] Recover.MetaMaxSequenceVerifiedAgainstFullScan (9 ms)
+[       OK ] Recover.MetaMaxSequenceVerifiedAgainstFullScan (33 ms)
 [ RUN      ] Recover.MetaCorruptRefused
-[       OK ] Recover.MetaCorruptRefused (20 ms)
+[       OK ] Recover.MetaCorruptRefused (68 ms)
 [ RUN      ] Recover.OrphanHandledPerInvariant27
-[       OK ] Recover.OrphanHandledPerInvariant27 (11 ms)
+[       OK ] Recover.OrphanHandledPerInvariant27 (45 ms)
 [ RUN      ] Recover.MetaMissingWithSstRefused
-[       OK ] Recover.MetaMissingWithSstRefused (11 ms)
+[       OK ] Recover.MetaMissingWithSstRefused (42 ms)
 [ RUN      ] Recover.ComparatorNameMismatchRefused
-[       OK ] Recover.ComparatorNameMismatchRefused (8 ms)
+[       OK ] Recover.ComparatorNameMismatchRefused (31 ms)
 [ RUN      ] Recover.LogOrderIsNumericAscending
-[       OK ] Recover.LogOrderIsNumericAscending (1 ms)
+[       OK ] Recover.LogOrderIsNumericAscending (4 ms)
 [ RUN      ] Recover.TruncationRulesUnchangedFromM2
-[       OK ] Recover.TruncationRulesUnchangedFromM2 (1 ms)
-[----------] 10 tests from Recover (108 ms total)
+[       OK ] Recover.TruncationRulesUnchangedFromM2 (4 ms)
+[----------] 10 tests from Recover (403 ms total)
 
 [----------] 4 tests from WalReclaim
 [ RUN      ] WalReclaim.WatermarkCriterion
-[       OK ] WalReclaim.WatermarkCriterion (12 ms)
+[       OK ] WalReclaim.WatermarkCriterion (49 ms)
 [ RUN      ] WalReclaim.RecoveredMemtableKeepsOldestLog
-[       OK ] WalReclaim.RecoveredMemtableKeepsOldestLog (2 ms)
+[       OK ] WalReclaim.RecoveredMemtableKeepsOldestLog (9 ms)
 [ RUN      ] WalReclaim.DeleteOnlyAfterMetaDurable
-[       OK ] WalReclaim.DeleteOnlyAfterMetaDurable (51 ms)
+[       OK ] WalReclaim.DeleteOnlyAfterMetaDurable (162 ms)
 [ RUN      ] WalReclaim.DisabledByOption
-[       OK ] WalReclaim.DisabledByOption (231 ms)
-[----------] 4 tests from WalReclaim (297 ms total)
+[       OK ] WalReclaim.DisabledByOption (359 ms)
+[----------] 4 tests from WalReclaim (581 ms total)
 
 [----------] 1 test from Rotation
 [ RUN      ] Rotation.BeforeSequenceAssignAndAtomicOnFailure
-[       OK ] Rotation.BeforeSequenceAssignAndAtomicOnFailure (3 ms)
-[----------] 1 test from Rotation (4 ms total)
+[       OK ] Rotation.BeforeSequenceAssignAndAtomicOnFailure (5 ms)
+[----------] 1 test from Rotation (5 ms total)
 
 [----------] 1 test from Options
 [ RUN      ] Options.InvalidRejectedWithoutFailStop
-[       OK ] Options.InvalidRejectedWithoutFailStop (330 ms)
-[----------] 1 test from Options (330 ms total)
+[       OK ] Options.InvalidRejectedWithoutFailStop (496 ms)
+[----------] 1 test from Options (496 ms total)
 
 [----------] 3 tests from CrashFlush
 [ RUN      ] CrashFlush.AfterSSTableWrittenThenPowerLoss
-[       OK ] CrashFlush.AfterSSTableWrittenThenPowerLoss (21 ms)
+[       OK ] CrashFlush.AfterSSTableWrittenThenPowerLoss (32 ms)
 [ RUN      ] CrashFlush.BeforeRenameThenPowerLoss
-[       OK ] CrashFlush.BeforeRenameThenPowerLoss (21 ms)
+[       OK ] CrashFlush.BeforeRenameThenPowerLoss (35 ms)
 [ RUN      ] CrashFlush.BeforeRegisterThenPowerLoss
-[       OK ] CrashFlush.BeforeRegisterThenPowerLoss (24 ms)
-[----------] 3 tests from CrashFlush (67 ms total)
+[       OK ] CrashFlush.BeforeRegisterThenPowerLoss (37 ms)
+[----------] 3 tests from CrashFlush (106 ms total)
 
 [----------] 4 tests from VersionEdit
 [ RUN      ] VersionEdit.CrcIndependentlyRecomputed
 [       OK ] VersionEdit.CrcIndependentlyRecomputed (0 ms)
 [ RUN      ] VersionEdit.RoundTripEmptyAndFull
-[       OK ] VersionEdit.RoundTripEmptyAndFull (1 ms)
+[       OK ] VersionEdit.RoundTripEmptyAndFull (3 ms)
 [ RUN      ] VersionEdit.OptionalFieldsAbsent
 [       OK ] VersionEdit.OptionalFieldsAbsent (0 ms)
 [ RUN      ] VersionEdit.MalformedRejected
 [       OK ] VersionEdit.MalformedRejected (0 ms)
-[----------] 4 tests from VersionEdit (2 ms total)
+[----------] 4 tests from VersionEdit (4 ms total)
 
 [----------] 5 tests from Manifest
 [ RUN      ] Manifest.RecordBytesMatchHandBuilt
@@ -535,8 +535,8 @@ FLIPS_DONE_A14_TOTAL=45
 [ RUN      ] Manifest.MiddleCorruptionRejected
 [       OK ] Manifest.MiddleCorruptionRejected (0 ms)
 [ RUN      ] Manifest.RollWritesSnapshotAndKeepsNumberingMonotonic
-[       OK ] Manifest.RollWritesSnapshotAndKeepsNumberingMonotonic (143 ms)
-[----------] 5 tests from Manifest (144 ms total)
+[       OK ] Manifest.RollWritesSnapshotAndKeepsNumberingMonotonic (274 ms)
+[----------] 5 tests from Manifest (277 ms total)
 
 [----------] 4 tests from Current
 [ RUN      ] Current.InjectedRenameFailureKeepsOldCurrent
@@ -551,15 +551,15 @@ FLIPS_DONE_A14_TOTAL=45
 
 [----------] 1 test from Migration
 [ RUN      ] Migration.MetaToManifestOneShot
-[       OK ] Migration.MetaToManifestOneShot (27 ms)
-[----------] 1 test from Migration (27 ms total)
+[       OK ] Migration.MetaToManifestOneShot (83 ms)
+[----------] 1 test from Migration (83 ms total)
 
 [----------] 2 tests from Install
 [ RUN      ] Install.RebaseOnConcurrentFlushKeepsI37
 [       OK ] Install.RebaseOnConcurrentFlushKeepsI37 (7 ms)
 [ RUN      ] Install.FailureKeepsCurrentRecoverable
 [       OK ] Install.FailureKeepsCurrentRecoverable (0 ms)
-[----------] 2 tests from Install (7 ms total)
+[----------] 2 tests from Install (8 ms total)
 
 [----------] 1 test from Level0
 [ RUN      ] Level0.FileCountThresholdTriggers
@@ -600,20 +600,20 @@ FLIPS_DONE_A14_TOTAL=45
 
 [----------] 1 test from CompactionDb
 [ RUN      ] CompactionDb.EndToEndMovesL0ToL1AndKeepsData
-[       OK ] CompactionDb.EndToEndMovesL0ToL1AndKeepsData (77 ms)
-[----------] 1 test from CompactionDb (77 ms total)
+[       OK ] CompactionDb.EndToEndMovesL0ToL1AndKeepsData (173 ms)
+[----------] 1 test from CompactionDb (173 ms total)
 
 [----------] 1 test from ReadLevels
 [ RUN      ] ReadLevels.NewestWinsAndRangeFilterNotCounted
-[       OK ] ReadLevels.NewestWinsAndRangeFilterNotCounted (25 ms)
-[----------] 1 test from ReadLevels (25 ms total)
+[       OK ] ReadLevels.NewestWinsAndRangeFilterNotCounted (37 ms)
+[----------] 1 test from ReadLevels (38 ms total)
 
 [----------] 2 tests from Delete
 [ RUN      ] Delete.DeferredUntilRefsZero
-[       OK ] Delete.DeferredUntilRefsZero (13 ms)
+[       OK ] Delete.DeferredUntilRefsZero (29 ms)
 [ RUN      ] Delete.NoUnlinkInsideInstallCriticalSection
-[       OK ] Delete.NoUnlinkInsideInstallCriticalSection (17 ms)
-[----------] 2 tests from Delete (30 ms total)
+[       OK ] Delete.NoUnlinkInsideInstallCriticalSection (34 ms)
+[----------] 2 tests from Delete (64 ms total)
 
 [----------] 1 test from LevelLayout
 [ RUN      ] LevelLayout.OverlapRejectedOnInstall
@@ -622,52 +622,52 @@ FLIPS_DONE_A14_TOTAL=45
 
 [----------] 1 test from Snapshot
 [ RUN      ] Snapshot.VisibleVersionSurvivesCompactionAndSmallestUpdates
-[       OK ] Snapshot.VisibleVersionSurvivesCompactionAndSmallestUpdates (10 ms)
-[----------] 1 test from Snapshot (10 ms total)
+[       OK ] Snapshot.VisibleVersionSurvivesCompactionAndSmallestUpdates (25 ms)
+[----------] 1 test from Snapshot (25 ms total)
 
 [----------] 2 tests from CompactionFail
 [ RUN      ] CompactionFail.OutputWriteFailureKeepsOldVersion
-[       OK ] CompactionFail.OutputWriteFailureKeepsOldVersion (31 ms)
+[       OK ] CompactionFail.OutputWriteFailureKeepsOldVersion (53 ms)
 [ RUN      ] CompactionFail.OutputRenameFailureKeepsOldVersion
-[       OK ] CompactionFail.OutputRenameFailureKeepsOldVersion (37 ms)
-[----------] 2 tests from CompactionFail (68 ms total)
+[       OK ] CompactionFail.OutputRenameFailureKeepsOldVersion (52 ms)
+[----------] 2 tests from CompactionFail (105 ms total)
 
 [----------] 1 test from Scheduling
 [ RUN      ] Scheduling.FlushTakesPriorityOverCompaction
-[       OK ] Scheduling.FlushTakesPriorityOverCompaction (39 ms)
-[----------] 1 test from Scheduling (39 ms total)
+[       OK ] Scheduling.FlushTakesPriorityOverCompaction (72 ms)
+[----------] 1 test from Scheduling (73 ms total)
 
 [----------] 5 tests from Merge
 [ RUN      ] Merge.StdMapReconciliation
-[       OK ] Merge.StdMapReconciliation (47 ms)
+[       OK ] Merge.StdMapReconciliation (116 ms)
 [ RUN      ] Merge.InternalKeyOrderContract
-[       OK ] Merge.InternalKeyOrderContract (22 ms)
+[       OK ] Merge.InternalKeyOrderContract (32 ms)
 [ RUN      ] Merge.ConcurrentIteratorVsBackgroundCompaction
-[       OK ] Merge.ConcurrentIteratorVsBackgroundCompaction (48 ms)
+[       OK ] Merge.ConcurrentIteratorVsBackgroundCompaction (36 ms)
 [ RUN      ] Merge.MixedMemTablesAndFileTombstoneVisibility
 [       OK ] Merge.MixedMemTablesAndFileTombstoneVisibility (0 ms)
 [ RUN      ] Merge.SkipAcrossChildrenWithVolatileChildKeyView
 [       OK ] Merge.SkipAcrossChildrenWithVolatileChildKeyView (0 ms)
-[----------] 5 tests from Merge (118 ms total)
+[----------] 5 tests from Merge (187 ms total)
 
 [----------] 1 test from Shutdown
 [ RUN      ] Shutdown.JoinsBothThreadsAndDrainsQueue
-[       OK ] Shutdown.JoinsBothThreadsAndDrainsQueue (10 ms)
-[----------] 1 test from Shutdown (11 ms total)
+[       OK ] Shutdown.JoinsBothThreadsAndDrainsQueue (22 ms)
+[----------] 1 test from Shutdown (23 ms total)
 
 [----------] 1 test from Orphan
 [ RUN      ] Orphan.CompactionOutputCleanedAndCounted
-[       OK ] Orphan.CompactionOutputCleanedAndCounted (24 ms)
-[----------] 1 test from Orphan (24 ms total)
+[       OK ] Orphan.CompactionOutputCleanedAndCounted (30 ms)
+[----------] 1 test from Orphan (31 ms total)
 
 [----------] 1 test from Amplification
 [ RUN      ] Amplification.RowReproducibleAndSelfConsistent
-[       OK ] Amplification.RowReproducibleAndSelfConsistent (51 ms)
-[----------] 1 test from Amplification (51 ms total)
+[       OK ] Amplification.RowReproducibleAndSelfConsistent (67 ms)
+[----------] 1 test from Amplification (67 ms total)
 
 [----------] 12 tests from Filter
 [ RUN      ] Filter.BloomEncodingRoundTrip
-[       OK ] Filter.BloomEncodingRoundTrip (10 ms)
+[       OK ] Filter.BloomEncodingRoundTrip (14 ms)
 [ RUN      ] Filter.FalsePositiveRateMeasured
 M5_FILTER_FALSE_NEGATIVE 0
 M5_FILTER_FPR_PPM 8310
@@ -676,19 +676,19 @@ M5_FILTER_FPR_STRUCTURED_PPM 14930 (even_keys=100000 odd_probes=100000)
 M5_FILTER_FPR_STRUCTURED_BUCKET_PPM 214743 (bucket_keys=37 buckets=2000)
 FILTER_FPR_STRUCTURED_MEASURED_PPM 14930
 FILTER_FPR_STRUCTURED_BUCKET_MEASURED_PPM 214743
-[       OK ] Filter.FalsePositiveRateMeasured (323 ms)
+[       OK ] Filter.FalsePositiveRateMeasured (391 ms)
 [ RUN      ] Filter.NoFalseNegativeOnSSTable
-[       OK ] Filter.NoFalseNegativeOnSSTable (3 ms)
+[       OK ] Filter.NoFalseNegativeOnSSTable (7 ms)
 [ RUN      ] Filter.MisalignedOffsetInjectionDetected
-[       OK ] Filter.MisalignedOffsetInjectionDetected (56 ms)
+[       OK ] Filter.MisalignedOffsetInjectionDetected (102 ms)
 [ RUN      ] Filter.NegationOnlySkipsDataBlocks
-[       OK ] Filter.NegationOnlySkipsDataBlocks (8 ms)
+[       OK ] Filter.NegationOnlySkipsDataBlocks (13 ms)
 [ RUN      ] Filter.MetaIndexRegistrationAndFormatVersion
 [       OK ] Filter.MetaIndexRegistrationAndFormatVersion (0 ms)
 [ RUN      ] Filter.OldFileWithoutFilterDegrades
-[       OK ] Filter.OldFileWithoutFilterDegrades (10 ms)
+[       OK ] Filter.OldFileWithoutFilterDegrades (18 ms)
 [ RUN      ] Filter.CorruptFilterDegradesButReadsCorrect
-[       OK ] Filter.CorruptFilterDegradesButReadsCorrect (0 ms)
+[       OK ] Filter.CorruptFilterDegradesButReadsCorrect (1 ms)
 [ RUN      ] Filter.FilterDamageScanNoSilentWrongValue
 M5_FILTER_DAMAGE_CASES 2471
 M5_FILTER_SILENT_FALSE_NEGATIVE 0
@@ -696,7 +696,7 @@ M5_FILTER_SILENT_WRONG_VALUE 0
 M5_FILTER_DAMAGE_DETECTED 2386
 M5_FILTER_DAMAGE_FILTER_DEGRADED 85
 [FILTER_DAMAGE_OK]
-[       OK ] Filter.FilterDamageScanNoSilentWrongValue (2782 ms)
+[       OK ] Filter.FilterDamageScanNoSilentWrongValue (3882 ms)
 [ RUN      ] Filter.FilterCrcAlwaysVerified
 [       OK ] Filter.FilterCrcAlwaysVerified (0 ms)
 [ RUN      ] Filter.BlockReadReductionAtLeastThreeTimes
@@ -708,33 +708,33 @@ M5_FILTER_QUERIES 2000
 M5_FILTER_BLOCKS_SKIPPED 1982
 M5_FILTER_ON_CHECKED 2000 POSITIVE 18 UNAVAILABLE 0 POSITIVE_PPM 9000
 [FILTER_OK]
-[       OK ] Filter.BlockReadReductionAtLeastThreeTimes (20935 ms)
+[       OK ] Filter.BlockReadReductionAtLeastThreeTimes (26804 ms)
 [ RUN      ] Filter.MultiThreadedGetNoRace
-[       OK ] Filter.MultiThreadedGetNoRace (497 ms)
-[----------] 12 tests from Filter (24630 ms total)
+[       OK ] Filter.MultiThreadedGetNoRace (541 ms)
+[----------] 12 tests from Filter (31781 ms total)
 
 [----------] 3 tests from WriteBatch
 [ RUN      ] WriteBatch.EncodingRoundTrip
 M5_BATCH_ROUNDTRIP_ENTRIES 9004
 M5_BATCH_ENTRY_BYTES 153000
 M5_BATCH_EMPTY_REJECTED 1
-[       OK ] WriteBatch.EncodingRoundTrip (43 ms)
+[       OK ] WriteBatch.EncodingRoundTrip (40 ms)
 [ RUN      ] WriteBatch.OverLimitRejectedBeforeAnyWrite
 M5_BATCH_OVERLIMIT_REJECTED 1
 M5_BATCH_OVERLIMIT_BYTES 67108883
-[       OK ] WriteBatch.OverLimitRejectedBeforeAnyWrite (535 ms)
+[       OK ] WriteBatch.OverLimitRejectedBeforeAnyWrite (502 ms)
 [ RUN      ] WriteBatch.OwnershipReuseAndMalformedRep
 M5_BATCH_REUSE_OK 1
 M5_BATCH_MALFORMED_CORRUPTION 6
-[       OK ] WriteBatch.OwnershipReuseAndMalformedRep (1 ms)
-[----------] 3 tests from WriteBatch (582 ms total)
+[       OK ] WriteBatch.OwnershipReuseAndMalformedRep (3 ms)
+[----------] 3 tests from WriteBatch (547 ms total)
 
 [----------] 5 tests from Batch
 [ RUN      ] Batch.CapacityBoundUpperBoundMeasured
 M5_BATCH_MEMTABLE_DELTA 86984
 M5_BATCH_MEMTABLE_BOUND 87484
 M5_BATCH_CAPACITY_SLACK_OK 1
-[       OK ] Batch.CapacityBoundUpperBoundMeasured (5 ms)
+[       OK ] Batch.CapacityBoundUpperBoundMeasured (6 ms)
 [ RUN      ] Batch.AtomicVisibilityUnderAppendAndSyncFailure
 M5_BATCH_APPEND_FAIL_INVISIBLE 1
 M5_BATCH_FSYNC_FAIL_VISIBLE 0
@@ -742,14 +742,14 @@ M5_BATCH_CRASH_CASES 8
 M5_BATCH_CRASH_HALF_VISIBLE 0
 M5_BATCH_CAPACITY_BOUNDARY_VISIBLE 1
 M5_BATCH_PARTIAL_VISIBLE 0
-[       OK ] Batch.AtomicVisibilityUnderAppendAndSyncFailure (89 ms)
+[       OK ] Batch.AtomicVisibilityUnderAppendAndSyncFailure (95 ms)
 [ RUN      ] Batch.GroupCommitOneFsyncForConcurrentBatches
 M5_BATCH_CONCURRENT_WRITERS 32
 M5_BATCH_CONCURRENT_ENTRIES 128
 M5_BATCH_GROUP_FSYNCS 1
 M5_BATCH_LOST_WAKEUPS 0
 M5_BATCH_DURABLE_COVERED 1
-[       OK ] Batch.GroupCommitOneFsyncForConcurrentBatches (35 ms)
+[       OK ] Batch.GroupCommitOneFsyncForConcurrentBatches (38 ms)
 [ RUN      ] Batch.WalRecordTruncationNeverExposesHalfBatch
 M5_BATCH_TRUNCATE_CASES 8
 M5_BATCH_HALF_VISIBLE 0
@@ -761,18 +761,18 @@ M5_BATCH_RECOVERY_ENTRIES 10
 M5_BATCH_SEQ_CONTIGUOUS 1
 M5_BATCH_LAST_SEQ_COVERS 1
 M5_BATCH_ONE_RECORD_PER_BATCH 1
-[       OK ] Batch.RecoverySequenceAndOneRecordPerBatch (6 ms)
-[----------] 5 tests from Batch (158 ms total)
+[       OK ] Batch.RecoverySequenceAndOneRecordPerBatch (3 ms)
+[----------] 5 tests from Batch (167 ms total)
 
 [----------] 2 tests from SyncIsolation
 [ RUN      ] SyncIsolation.AsyncWriteIsNotBlockedByExplicitSync
 [       OK ] SyncIsolation.AsyncWriteIsNotBlockedByExplicitSync (2004 ms)
 [ RUN      ] SyncIsolation.CommitQueueReachableDuringRotationFsync
-[       OK ] SyncIsolation.CommitQueueReachableDuringRotationFsync (10 ms)
-[----------] 2 tests from SyncIsolation (2015 ms total)
+[       OK ] SyncIsolation.CommitQueueReachableDuringRotationFsync (12 ms)
+[----------] 2 tests from SyncIsolation (2017 ms total)
 
 [----------] Global test environment tear-down
-[==========] 208 tests from 57 test suites ran. (110249 ms total)
+[==========] 208 tests from 57 test suites ran. (129956 ms total)
 [  PASSED  ] 208 tests.
 ASAN_TEST_RC=0
-ASAN_DONE 2026-10-02T15:55:20+08:00
+ASAN_DONE 2026-10-02T16:53:56+08:00

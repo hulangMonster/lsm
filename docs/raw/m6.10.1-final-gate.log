@@ -1,0 +1,80 @@
+== lsm_gate --rounds 100 --no-asan --require-m3 --require-m5 ==
+2026-10-02T16:30:41+08:00
+== lsm_gate: rounds=100 asan=0 tsan=0 require_m3=1 require_m5=1 log=/tmp/lsm_gate_wghURX/gate.log ==
+=== [gate] 干净重建 + 0 warning + 全量用例 （要求标记 /\[  PASSED  \] [1-9][0-9]* tests/）===
+--- [PASS] 干净重建 + 0 warning + 全量用例
+=== [gate] 崩溃对账（kill -9 x 100，sync 模式） （要求标记 /MISSING_TOTAL 0 MISMATCH_TOTAL 0@@ROUNDS_OK [1-9][0-9]*/）===
+--- [PASS] 崩溃对账（kill -9 x 100，sync 模式）
+=== [gate] 逐字节截断扫描（B03） （要求标记 /TAIL_OK [1-9][0-9]* TAIL_FAIL 0/）===
+--- [PASS] 逐字节截断扫描（B03）
+=== [gate] 中间损坏拒绝启动（B04） （要求标记 /MIDDLE_OPEN_CORRUPTION [1-9]/）===
+--- [PASS] 中间损坏拒绝启动（B04）
+=== [gate] M3-B01 flush 崩溃对账（kill -9 x 100） （要求标记 /SST_FILES_TOTAL [1-9][0-9]*@@LOGS_DELETED_TOTAL [1-9][0-9]*@@MISSING_TOTAL 0@@\[FLUSH_CRASH_OK\]/）===
+--- [PASS] M3-B01 flush 崩溃对账（kill -9 x 100）
+=== [gate] M3-B03 落盘重启（records_replayed == 0） （要求标记 /RECORDS_REPLAYED 0@@\[FLUSH_RESTART_OK\]/）===
+--- [PASS] M3-B03 落盘重启（records_replayed == 0）
+=== [gate] M3-B04 SSTable 损坏扫描（零静默错值） （要求标记 /SST_DAMAGE_CASES [1-9][0-9]*@@SILENT_WRONG 0/）===
+--- [PASS] M3-B04 SSTable 损坏扫描（零静默错值）
+=== [gate] M3-B05 句柄计数不增长 （要求标记 /FD_GROWTH [0-9]+/）===
+--- [PASS] M3-B05 句柄计数不增长
+=== [gate] M4-B11 MANIFEST/VersionEdit A 组 + 零依赖 （要求标记 /M4_TESTS_RAN [1-9][0-9]*@@M4_TESTS_FAILED 0@@LSM_VERSION_FORBIDDEN 0@@\[MANIFEST_OK\]/）===
+--- [PASS] M4-B11 MANIFEST/VersionEdit A 组 + 零依赖
+=== [gate] M4-B03 两种 pick 策略对照 （要求标记 /M4-B03 STRATEGY_TABLE@@\[COMPACTION_STRATEGY_OK\]@@\[COMPACTION_STRESS_OK\]/）===
+--- [PASS] M4-B03 两种 pick 策略对照
+=== [gate] M4-B05 句柄上限（fd 不增长） （要求标记 /B05_OK 1@@\[COMPACTION_STRESS_OK\]/）===
+--- [PASS] M4-B05 句柄上限（fd 不增长）
+=== [gate] M4-B06 读放大改善（p50<=3 max<=12） （要求标记 /READ_FILES_CHECKED_P50 [0-3]@@READ_FILES_CHECKED_MAX ([0-9]|1[0-2])@@B06_OK 1@@\[COMPACTION_STRESS_OK\]/）===
+--- [PASS] M4-B06 读放大改善（p50<=3 max<=12）
+=== [gate] M4-B07 前台 P99 与单轮 P50 量级分离 （要求标记 /B07_OK 1@@ROUND_SAMPLES [1-9][0-9]*@@\[COMPACTION_STRESS_OK\]/）===
+--- [PASS] M4-B07 前台 P99 与单轮 P50 量级分离
+=== [gate] M4-B08 存活 Version 数有界（计数存在） （要求标记 /LIVE_VERSIONS_MAX [0-9]+@@\[COMPACTION_STRESS_OK\]/）===
+--- [PASS] M4-B08 存活 Version 数有界（计数存在）
+=== [gate] M4-B09 MANIFEST 体积/重建计数 （要求标记 /MANIFEST_BYTES [0-9]+@@MANIFEST_ROLLS [0-9]+@@\[COMPACTION_STRESS_OK\]/）===
+--- [PASS] M4-B09 MANIFEST 体积/重建计数
+=== [gate] M4-B10 块缓存 NOT_APPLICABLE （要求标记 /M4-B10 NOT_APPLICABLE@@\[COMPACTION_STRESS_OK\]/）===
+--- [PASS] M4-B10 块缓存 NOT_APPLICABLE
+=== [gate] M4-B01 compaction 中途 kill -9 对账 （要求标记 /COMPACTION_ROUNDS_TOTAL [1-9][0-9]*@@SST_FILES_TOTAL [1-9][0-9]*@@MISSING_TOTAL 0@@MISMATCH_TOTAL 0@@ROUNDS_OK [1-9][0-9]*@@\[COMPACTION_CRASH_OK\]/）===
+--- [PASS] M4-B01 compaction 中途 kill -9 对账
+=== [gate] M4-B02 四注入点 raise(SIGKILL) 对账 （要求标记 /INJECT_POINTS_OK 4@@MISSING_TOTAL 0@@REF_MISSING_TOTAL 0@@OPEN_CORRUPTION_TOTAL 0@@\[COMPACTION_INJECT_OK\]/）===
+--- [PASS] M4-B02 四注入点 raise(SIGKILL) 对账
+=== [gate] M5-B11 filter 单元 + 块读下降 + 零假阴性 + 依赖纪律 （要求标记 /M5_TESTS_FAILED 0@@M5_FILTER_RAN [1-9][0-9]*@@M5_FILTER_FALSE_NEGATIVE 0@@M5_FILTER_SILENT_FALSE_NEGATIVE 0@@M5_FILTER_BLOCK_READS_WITHOUT [1-9][0-9]*@@M5_FILTER_BLOCKS_SKIPPED [1-9][0-9]*@@M5_FILTER_DAMAGE_CASES [1-9][0-9]*@@M5_FILTER_DAMAGE_FILTER_DEGRADED [1-9][0-9]*@@LSM_SSTABLE_FORBIDDEN 0@@\[FILTER_OK\]@@\[FILTER_DAMAGE_OK\]/）===
+--- [PASS] M5-B11 filter 单元 + 块读下降 + 零假阴性 + 依赖纪律
+=== [gate] M5-B12 WriteBatch 单元 + 整批原子 + WAL 一次写 + 依赖纪律 （要求标记 /M5_BATCH_TESTS_FAILED 0@@M5_BATCH_TESTS_RAN [1-9][0-9]*@@M5_BATCH_PARTIAL_VISIBLE 0@@M5_BATCH_HALF_VISIBLE 0@@M5_BATCH_CRASH_HALF_VISIBLE 0@@M5_BATCH_LOST_WAKEUPS 0@@M5_BATCH_ONE_RECORD_PER_BATCH 1@@M5_BATCH_TRUNCATE_CASES [1-9][0-9]*@@M5_BATCH_CONCURRENT_WRITERS [1-9][0-9]*@@M5_BATCH_GROUP_FSYNCS [1-9][0-9]*@@M5_BATCH_RECOVERY_RECORDS [1-9][0-9]*@@LSM_BATCH_FORBIDDEN 0@@\[BATCH_OK\]/）===
+--- [PASS] M5-B12 WriteBatch 单元 + 整批原子 + WAL 一次写 + 依赖纪律
+=== [gate] M5-B01 批崩溃对账（kill -9 批写入中途） （要求标记 /BATCH_KILL9_MISSING 0@@BATCH_MISMATCH 0@@BATCH_HALF_VISIBLE 0@@BATCH_KILL9_ROUNDS [1-9][0-9]*@@BATCH_ACKED [1-9][0-9]*@@BATCHES_SEEN [1-9][0-9]*@@\[BATCH_CRASH_OK\]/）===
+--- [PASS] M5-B01 批崩溃对账（kill -9 批写入中途）
+=== [gate] M5-C 基准（四类负载 × 三类对照 + AMPL/LEVEL/FRONT 追加列，硬门禁只在 LSM 腿） （要求标记 /BENCH_CELLS_TOTAL [1-9][0-9]*@@BENCH_LSM_CELLS_TOTAL [1-9][0-9]*@@BENCH_MISSING_TOTAL 0@@BENCH_MISMATCH_TOTAL 0@@BENCH_REPRO_OK 1@@BENCH_REPRO_LSM_CELLS [1-9][0-9]*@@BENCH_AMPL_OK 1@@BENCH_AMPL_MISSING 0@@BENCH_SPACE_FILTER_BYTES [1-9][0-9]*@@BENCH_SPACE_SST_DATA_BYTES [0-9]+@@^AMPL round_id=ALL .*space_filter_bytes=[0-9]+ space_sst_data_bytes=[0-9]+@@^LEVEL round_id=ALL .*total_sst_files=[0-9]+@@^FRONT round_id=ALL .*p99_us=[0-9]+@@\[BENCH_LSM_OK\]/）===
+--- [PASS] M5-C 基准（四类负载 × 三类对照 + AMPL/LEVEL/FRONT 追加列，硬门禁只在 LSM 腿）
+=== [gate] M5-D 基准失败注入自测（missing!=0 ⇒ rc=1） （要求标记 /BENCH_INJECT_MISSING_RC 1@@\[BENCH_SELFTEST_OK\]/）===
+--- [PASS] M5-D 基准失败注入自测（missing!=0 ⇒ rc=1）
+=== [gate] M5-E filter 磁盘损坏扫描（零静默假阴性） （要求标记 /FILTER_DAMAGE_CASES [1-9][0-9]*@@FILTER_SILENT_FALSE_NEGATIVE 0@@FILTER_SILENT_WRONG_VALUE 0@@FILTER_MISALIGN_DETECTED 1@@\[FILTER_DAMAGE_OK\]/）===
+--- [PASS] M5-E filter 磁盘损坏扫描（零静默假阴性）
+
+==== lsm_gate 汇总 ====
+PASS  干净重建 + 0 warning + 全量用例
+PASS  崩溃对账（kill -9 x 100，sync 模式）
+PASS  逐字节截断扫描（B03）
+PASS  中间损坏拒绝启动（B04）
+PASS  M3-B01 flush 崩溃对账（kill -9 x 100）
+PASS  M3-B03 落盘重启（records_replayed == 0）
+PASS  M3-B04 SSTable 损坏扫描（零静默错值）
+PASS  M3-B05 句柄计数不增长
+PASS  M4-B11 MANIFEST/VersionEdit A 组 + 零依赖
+PASS  M4-B03 两种 pick 策略对照
+PASS  M4-B05 句柄上限（fd 不增长）
+PASS  M4-B06 读放大改善（p50<=3 max<=12）
+PASS  M4-B07 前台 P99 与单轮 P50 量级分离
+PASS  M4-B08 存活 Version 数有界（计数存在）
+PASS  M4-B09 MANIFEST 体积/重建计数
+PASS  M4-B10 块缓存 NOT_APPLICABLE
+PASS  M4-B01 compaction 中途 kill -9 对账
+PASS  M4-B02 四注入点 raise(SIGKILL) 对账
+PASS  M5-B11 filter 单元 + 块读下降 + 零假阴性 + 依赖纪律
+PASS  M5-B12 WriteBatch 单元 + 整批原子 + WAL 一次写 + 依赖纪律
+PASS  M5-B01 批崩溃对账（kill -9 批写入中途）
+PASS  M5-C 基准（四类负载 × 三类对照 + AMPL/LEVEL/FRONT 追加列，硬门禁只在 LSM 腿）
+PASS  M5-D 基准失败注入自测（missing!=0 ⇒ rc=1）
+PASS  M5-E filter 磁盘损坏扫描（零静默假阴性）
+[OK] 全部门禁通过
+GATE_RC=0
+GATE_DONE 2026-10-02T16:36:40+08:00

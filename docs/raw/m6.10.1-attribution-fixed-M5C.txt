@@ -1,0 +1,39 @@
+== fixed (measurement condition) M5-C: same gate command ==
+2026-10-02T16:47:32+08:00
+MACHINE nproc=8 load1=0.42 load5=1.20 load15=1.69 fs=ext4 mount=/ kernel=6.8.0-138-generic
+PARAMS dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 repeats=2 warmup=1000 filter=on bloom_bits=10 seed=0x5EED2025 out=/tmp/fixed_bench_out.txt write_buffer_size=16777216 repro_tol=0.25,0.50
+AMPL_PARAMS ampl_keys=20000 ampl_rounds=1 ampl_strategy=round_robin ampl_write_buffer_size=262144 ampl_source=build/bin/lsm_ampl_probe space_source=build/bin/lsm_level_stats
+BUILD rev=d62d8b3e6c43c94ac4e67e4e2ba6d7f39e7ef46b dirty=1 build_type=Release cxx=g++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+FSYNC_BASELINE median_ms=3.438 source=scripts/fsbench_commit_latency.cpp
+CELL name=seq_write engine=lsm dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=27027.904 LATENCY=28 P99=218 p999_us=563 min_us=7 max_us=43137 latency_unit=op verify=lsm missing=0 mismatch=0 durability=none raw1_us=28 raw2_us=28 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=seq_write engine=raw_file dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=314960.630 LATENCY=3 P99=14 p999_us=84 min_us=0 max_us=295 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=3 raw2_us=3 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=seq_write engine=std_map dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=1329433.661 LATENCY=1 P99=2 p999_us=13 min_us=0 max_us=188 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=1 raw2_us=1 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=rand_write engine=lsm dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=24382.691 LATENCY=32 P99=236 p999_us=468 min_us=4 max_us=40723 latency_unit=op verify=lsm missing=0 mismatch=0 durability=none raw1_us=33 raw2_us=32 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=rand_write engine=raw_pwrite dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=237329.568 LATENCY=3 P99=14 p999_us=191 min_us=0 max_us=961 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=3 raw2_us=3 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=rand_write engine=std_map dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=1290738.948 LATENCY=0 P99=1 p999_us=18 min_us=0 max_us=353 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=0 raw2_us=0 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=rand_read engine=lsm dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=42707.575 LATENCY=20 P99=156 p999_us=361 min_us=2 max_us=2144 latency_unit=op verify=lsm missing=0 mismatch=0 durability=none raw1_us=20 raw2_us=20 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=rand_read engine=raw_pwrite dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=300729.268 LATENCY=3 P99=5 p999_us=143 min_us=0 max_us=1135 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=3 raw2_us=3 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=rand_read engine=std_map dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=2985965.960 LATENCY=0 P99=1 p999_us=1 min_us=0 max_us=2303 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=0 raw2_us=0 raw3_us=0 repro_ok=0 notes=NONE
+CELL name=seq_read engine=lsm dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=44587.421 LATENCY=18 P99=151 p999_us=338 min_us=5 max_us=1570 latency_unit=op verify=lsm missing=0 mismatch=0 durability=none raw1_us=18 raw2_us=18 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=seq_read engine=raw_file dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=389211.069 LATENCY=2 P99=4 p999_us=91 min_us=0 max_us=521 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=2 raw2_us=2 raw3_us=0 repro_ok=1 notes=NONE
+CELL name=seq_read engine=std_map dataset=20000 value_size=100 key_dist=seq batch=1 pipeline=1 sync=0 filter=1 repeat=2 THROUGHPUT=5885815.185 LATENCY=0 P99=1 p999_us=1 min_us=0 max_us=54 latency_unit=op verify=na missing=na mismatch=na durability=none raw1_us=0 raw2_us=0 raw3_us=0 repro_ok=1 notes=NONE
+AMPL round_id=ALL user_logical_bytes=400000 entry_bytes=720000 flush_write_bytes=512088 compact_write_bytes=357383 write_amp_total=2.173678 write_amp_excl_compact=1.280220 read_files_checked=38390 read_index_blocks_read=11 read_data_blocks_read=38390 read_bytes=154740000 read_get_count=40000 read_amp_files_per_get=0.959750 space_sst_bytes=512088 space_manifest_bytes=1495 space_current_bytes=2 space_log_bytes=0 space_tmp_bytes=44675 space_amp=1.395650 space_amp_sst_only=1.280220 dropped_old_versions=0 dropped_tombstones=0 compaction_rounds=8 compaction_round_p50_us=13213 compaction_round_max_us=15550 live_versions_max=6 read_filter_checked=38390 read_filter_negative=0 read_filter_positive=38390 read_filter_unavailable=0 read_data_blocks_skipped_by_filter=0 space_filter_bytes=26166 space_sst_data_bytes=485922
+LEVEL round_id=ALL l0_files=4 l0_bytes=154705 l1_files=8 l1_bytes=357383 l2_files=0 l2_bytes=0 l3_files=0 l3_bytes=0 l4_files=0 l4_bytes=0 l5_files=0 l5_bytes=0 l6_files=0 l6_bytes=0 total_sst_files=12 total_sst_bytes=512088 l0_score=1.000000 l1_score=0.034083 l2_score=0.000000 l3_score=0.000000 l4_score=0.000000 l5_score=0.000000 l6_score=0.000000
+FRONT round_id=ALL ops=60000 get_ops=40000 p50_us=81 p99_us=357 p999_us=1709 max_us=2
+SPACE round_id=ALL SPACE_SST_FILES 12 SPACE_SST_BYTES 512088 SPACE_FILTER_BYTES 26166 SPACE_SST_DATA_BYTES 485922 SPACE_FILTER_FILES_OK 12 SPACE_FILTER_FILES_ABSENT 0 SPACE_FILTER_FILES_CORRUPT 0
+BENCH_CELLS_TOTAL 12
+BENCH_CELL_ROWS_TOTAL 12
+BENCH_LSM_CELLS_TOTAL 4
+BENCH_MISSING_TOTAL 0
+BENCH_MISMATCH_TOTAL 0
+BENCH_UNRELIABLE_CELLS 0
+BENCH_REPRO_OK 1
+BENCH_REPRO_LSM_CELLS 4
+BENCH_AMPL_OK 1
+BENCH_AMPL_MISSING 0
+BENCH_AMPL_MISMATCH 0
+BENCH_SPACE_SST_BYTES 512088
+BENCH_SPACE_FILTER_BYTES 26166
+BENCH_SPACE_SST_DATA_BYTES 485922
+[BENCH_LSM_OK]
+FIXED_M5C_RC=0

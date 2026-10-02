@@ -345,9 +345,15 @@ CellOutcome RunLsmCell(const Params& p, Load load, const Dataset& d) {
     db->Sync();
   }
 
+  // 写负载的第一次 measured repeat 若只预热 p.warmup 个 key，会包含大量首次插入，
+  // 而第二次 measured repeat 全是覆盖写 ⇒ 两轮不可比、BENCH_REPRO_OK 误报 0。
+  // 写负载至少预热一整轮 calls 个 key，使两次 measured repeat 都从“全 key 已存在”
+  // 的同形态出发；读负载保持原 warmup 语义。
+  const uint64_t effective_warmup =
+      is_write ? std::max<uint64_t>(p.warmup, static_cast<uint64_t>(calls)) : p.warmup;
   for (int r = 0; r < p.repeats; ++r) {
     // 预热（§6.4）：窗口外丢弃。
-    for (uint64_t w = 0; w < p.warmup; ++w) {
+    for (uint64_t w = 0; w < effective_warmup; ++w) {
       const size_t idx = static_cast<size_t>(w % calls);
       LsmCall(db, p, load, d, idx);
     }
