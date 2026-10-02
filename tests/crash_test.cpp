@@ -732,4 +732,136 @@ TEST(GroupCommit, SyncDoesNotClaimInFlightBatch) {
   db->Close();
   delete db;
 }
+
+// M6.10.5 (1)：A27 只断言了「未 fsync 的后缀**可以**丢」（prefix ∈ [kSynced, kSynced+kUnsynced]），
+// 但从未断言它**真的丢了** —— 如果 SimulateCrash() 退化成 no-op，A27 依然会绿（空绿）。
+// 本用例把「注入确实生效」本身变成判据，分三层：
+//   ① 前置：场景必须成立（文件里真的存在一段未 fsync 的后缀）；
+//   ② 介质层（正向标记）：掉电后当前 WAL 的字节数必须**回落到该文件的 fsync 水位**；
+//   ③ 恢复层：能正常启动（不 Corruption），恢复出的前缀**恰好**等于已 fsync 的条数 ——
+//      未 fsync 的 key 一条都不得"复活"到 durable 点之上（I11：sync=true 才是 durable-before-ack），
+//      也不得出现半条值（CheckedPrefix 返回 -1 即判失败）。
+// tear=0 是刻意的：把「回滚是否生效」与「撕裂尾如何截断」两件事分开验证。
+//
+// 边界（必须写明，不许外推）：MemEnv 没有目录项语义（见 tests/memenv.h 的注释：
+// "RenameFile 一次赋值即永久，SimulateCrash 不碰 dirs_"），所以本用例覆盖的是**文件数据**层面的
+// 掉电语义；dirent/rename 的掉电顺序仍无法在 MemEnv 建模（docs/m3-design.md §12.5 / P7）。
+TEST(CrashSim, UnsyncedWalTailIsActuallyDiscarded) {
+  MemEnv env;
+  env.SetSeed(0x5EED2026ull);
+  env.SetTearProbability(0.0);   // 干净回滚：未 fsync 的后缀整段丢失，不掺撕裂
+  const std::string log = std::string(kDBName) + "/000001.log";
+  const int kSynced = 40;
+  const int kUnsynced = 60;
+  uint64_t synced_bytes = 0;
+  uint64_t full_bytes = 0;
+  {
+    WALWriter w(&env, log);
+    ASSERT_TRUE(w.Open(false).ok());
+    for (int i = 1; i <= kSynced; ++i) {
+      ASSERT_TRUE(w.Append(Slice(Batch(i, Key(i), Val(i)))).ok());
+    }
+    ASSERT_TRUE(w.Sync().ok());
+    synced_bytes = env.SyncedSize(log);
+    for (int i = kSynced + 1; i <= kSynced + kUnsynced; ++i) {
+      ASSERT_TRUE(w.Append(Slice(Batch(i, Key(i), Val(i)))).ok());
+    }
+    // 注意：**不** Sync。这些就是"已 ack 但未 durable"的部分。
+  }
+  full_bytes = env.Contents(log).size();
+
+  // ① 前置：场景本身必须成立。
+  ASSERT_GT(synced_bytes, 0u);
+  ASSERT_GT(full_bytes, synced_bytes)
+      << "前置条件不成立：未 fsync 的后缀并没有真的写进文件（后面全是空绿）";
+
+  env.SimulateCrash();
+
+  // ② 介质层正向标记：未 fsync 的后缀真的被丢掉了。
+  EXPECT_EQ(env.Contents(log).size(), synced_bytes)
+      << "SimulateCrash 必须把文件回滚到 fsync 水位，否则本用例证明不了任何事";
+  EXPECT_EQ(env.SyncedSize(log), synced_bytes);
+
+  // ③ 恢复层：不 Corruption、前缀恰好 = 已 fsync 的条数、被丢的 key 不得复活。
+  Options options;
+  options.env = &env;
+  DB* db = nullptr;
+  const Status s = DB::Open(options, kDBName, &db);
+  ASSERT_TRUE(s.ok()) << "掉电后必须能启动（尾部丢失要能安全截断）：" << s.ToString();
+  const int recovered = CheckedPrefix(db, kSynced + kUnsynced);
+  EXPECT_EQ(recovered, kSynced)
+      << "已 fsync 的 " << kSynced << " 条必须一条不少，未 fsync 的 " << kUnsynced
+      << " 条必须一条不多";
+  // 显式「丢失计数」正向标记：tear=0 是干净回滚 ⇒ 未 fsync 的 kUnsynced 条必须**全部**消失。
+  //   少丢 ⇒ 注入没生效（空绿）；多丢 ⇒ 把已 durable 的也截掉了（违反 I11，等于静默截断到更早）。
+  if (recovered >= 0) {
+    const int lost = (kSynced + kUnsynced) - recovered;
+    EXPECT_EQ(lost, kUnsynced)
+        << "干净回滚下的丢失计数必须恰好等于未 fsync 的条数（实际 lost=" << lost << "）";
+  }
+  for (int i = kSynced + 1; i <= kSynced + kUnsynced; ++i) {
+    std::string got;
+    EXPECT_TRUE(db->Get(Key(i), &got).IsNotFound())
+        << Key(i) << " 未 fsync 却在掉电后存活（等于谎报 durable）";
+  }
+  db->Close();
+  delete db;
+}
+
+// M6.10.5 (1) 之二：跨 (seed, tear) 的**聚合**正向标记。
+// 单看某一个 seed 可能恰好"什么都没丢"（那一条就一直绿着），所以这里要求：
+//   * 每个组合都不得出现半条值（CheckedPrefix != -1）、已 fsync 前缀一条不少；
+//   * **至少有一个组合真的丢了未 fsync 的记录** —— 否则说明注入压根没生效。
+TEST(CrashSim, CrashInjectionEffectiveAcrossSeeds) {
+  const uint64_t seeds[] = {0x5EED2026ull, 0x1ull, 0xDEADBEEFull};
+  const double tears[] = {0.0, 0.5, 1.0};
+  const int kSynced = 40;
+  const int kUnsynced = 60;
+  int lost_some = 0;
+  int lost_total = 0;
+  int combos = 0;
+  for (uint64_t seed : seeds) {
+    for (double tear : tears) {
+      MemEnv env;
+      env.SetSeed(seed);
+      env.SetTearProbability(tear);
+      const std::string log = std::string(kDBName) + "/000001.log";
+      {
+        WALWriter w(&env, log);
+        ASSERT_TRUE(w.Open(false).ok()) << "seed=" << seed << " tear=" << tear;
+        for (int i = 1; i <= kSynced; ++i) {
+          ASSERT_TRUE(w.Append(Slice(Batch(i, Key(i), Val(i)))).ok());
+        }
+        ASSERT_TRUE(w.Sync().ok());
+        for (int i = kSynced + 1; i <= kSynced + kUnsynced; ++i) {
+          ASSERT_TRUE(w.Append(Slice(Batch(i, Key(i), Val(i)))).ok());
+        }
+      }
+      env.SimulateCrash();
+
+      Options options;
+      options.env = &env;
+      DB* db = nullptr;
+      const Status s = DB::Open(options, kDBName, &db);
+      ASSERT_TRUE(s.ok()) << "崩溃后必须能启动：seed=" << seed << " tear=" << tear << " "
+                         << s.ToString();
+      const int prefix = CheckedPrefix(db, kSynced + kUnsynced);
+      EXPECT_NE(prefix, -1) << "出现半条值 / 值错乱：seed=" << seed << " tear=" << tear;
+      EXPECT_GE(prefix, kSynced) << "已 fsync 的前缀丢失：seed=" << seed << " tear=" << tear;
+      EXPECT_LE(prefix, kSynced + kUnsynced);
+      if (prefix >= 0 && prefix < kSynced + kUnsynced) {
+        ++lost_some;
+        lost_total += (kSynced + kUnsynced) - prefix;
+      }
+      ++combos;
+      db->Close();
+      delete db;
+    }
+  }
+  EXPECT_EQ(combos, 9);
+  EXPECT_GT(lost_some, 0)
+      << "9 个 (seed, tear) 组合里一次都没丢过未 fsync 的记录 ⇒ 注入没生效，用例是空绿";
+  EXPECT_GT(lost_total, 0) << "聚合丢失计数必须 > 0（与上面的逐组合计数同口径）";
+}
+
 }  // namespace lsm
